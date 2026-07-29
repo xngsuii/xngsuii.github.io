@@ -1,0 +1,39 @@
+/*
+  Firestore 보안 규칙
+  ------------------------------------------------------------
+  Firebase 콘솔 > Firestore Database > 규칙(Rules) 탭에
+  아래 내용을 그대로 붙여넣고 "게시(Publish)"를 누르세요.
+
+  · 읽기: 누구나 가능 (사이트 방문자가 내용을 봐야 하므로)
+  · 쓰기: 관리자 계정으로 로그인했을 때만 가능
+
+  이 검사는 서버에서 이뤄지므로, 브라우저 코드를 조작해도
+  편집이 통과되지 않습니다.
+*/
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null
+          && request.auth.uid == 'SOWckrcnF2VCZBOAU7sZdcYjV2g1';
+    }
+
+    match /site/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+
+      match /{subcollection=**} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+    }
+
+    // 그 외 경로는 전부 차단
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
