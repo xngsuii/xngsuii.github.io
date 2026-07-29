@@ -895,6 +895,7 @@ function renderLogList(p){
   const input = document.getElementById('logSearchInput');
   const field = document.getElementById('logSearchField');
   const clear = document.getElementById('logSearchClear');
+  if(!input || !field || !clear) return;   // 옛 HTML이면 건너뜀
   const rerender = ()=>{ pdLogPage=1; const p=getCurrentPost(); if(p) renderLogList(p); };
   input.addEventListener('input', ()=>{ logSearchTerm = input.value; rerender(); });
   field.addEventListener('change', ()=>{ logSearchField = field.value; rerender(); });
@@ -907,27 +908,34 @@ let currentLogViewId = null;
 (function initLogToolbar(){
   const editor = document.getElementById('logContent');
   const toolbar = document.querySelector('.rt-toolbar-log');
+  // 캐시 등으로 HTML이 옛 버전이면 요소가 없을 수 있습니다.
+  // 여기서 예외가 나면 이후 스크립트가 통째로 멈추므로 조용히 건너뜁니다.
+  if(!editor || !toolbar) return;
   // 버튼을 눌러도 본문 선택이 풀리지 않도록
   toolbar.querySelectorAll('button').forEach(b=> b.addEventListener('mousedown', e=> e.preventDefault()));
   toolbar.querySelectorAll('button[data-cmd]').forEach(btn=>{
     btn.addEventListener('click', ()=>{ editor.focus(); document.execCommand(btn.dataset.cmd, false, null); });
   });
-  document.getElementById('logSubColorBtn').addEventListener('click', ()=>{
+  const subBtn = document.getElementById('logSubColorBtn');
+  if(subBtn) subBtn.addEventListener('click', ()=>{
     editor.focus();
     document.execCommand('foreColor', false, document.getElementById('logSubColor').value);
   });
-  document.getElementById('logHighlightBtn').addEventListener('click', ()=>{
+  const hlBtn = document.getElementById('logHighlightBtn');
+  if(hlBtn) hlBtn.addEventListener('click', ()=>{
     editor.focus();
     const c = document.getElementById('logHighlightColor').value;
     if(!document.execCommand('hiliteColor', false, c)){
       document.execCommand('backColor', false, c);
     }
   });
-  document.getElementById('logDividerBtn').addEventListener('click', ()=>{
+  const divBtn = document.getElementById('logDividerBtn');
+  if(divBtn) divBtn.addEventListener('click', ()=>{
     editor.focus();
     document.execCommand('insertHTML', false, '<hr><br>');
   });
-  document.getElementById('logTextColor').addEventListener('input', (e)=>{
+  const textColor = document.getElementById('logTextColor');
+  if(textColor) textColor.addEventListener('input', (e)=>{
     editor.focus();
     document.execCommand('foreColor', false, e.target.value);
   });
@@ -1178,7 +1186,9 @@ function renderGallery(p){
   const folder = getFolder(p, currentGalleryFolderId);
   if(!folder || folder.images.length===0){
     grid.innerHTML='<div class="empty-note">등록된 이미지가 없어요.</div>';
-    hint.style.display='none'; hintUp.style.display='none'; return;
+    if(hint) hint.style.display='none';
+    if(hintUp) hintUp.style.display='none';
+    return;
   }
 
   const perPage=GALLERY_PER_PAGE;
@@ -1244,8 +1254,8 @@ function renderGallery(p){
   });
 
   // 아래/위로 넘길 페이지가 남아있을 때만 각 방향 힌트를 표시
-  hint.style.display = (totalPages>1 && galleryPage<totalPages) ? 'block' : 'none';
-  hintUp.style.display = (totalPages>1 && galleryPage>1) ? 'block' : 'none';
+  if(hint) hint.style.display = (totalPages>1 && galleryPage<totalPages) ? 'block' : 'none';
+  if(hintUp) hintUp.style.display = (totalPages>1 && galleryPage>1) ? 'block' : 'none';
 }
 function updateGallerySelectCount(){
   const info=document.getElementById('gallerySelectInfo');

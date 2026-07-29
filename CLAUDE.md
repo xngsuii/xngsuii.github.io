@@ -50,6 +50,10 @@ The user may refer to the two UI states by their badge labels:
 - **LOCKED** = 보기 모드 (view mode) — visitor state, nothing editable
 - **UNLOCKED** = 편집 모드 (edit mode) — admin signed in, `body.logged-in` is set and `[data-editonly]` controls appear
 
+## Cache busting
+
+`index.html` references its assets with a version query — `css/style.css?v=N`, `js/main.js?v=N`, `js/firebase-store.js?v=N` (and `firebase-store.js` imports `./firebase-config.js?v=N`). **Bump every one of those `N`s together whenever you change a CSS or JS file.** GitHub Pages serves the HTML with a short cache but assets with a long one, so without a bump a returning visitor gets new HTML with stale JS — and since `main.js` wires up elements at top level, a mismatch used to kill the whole script. The top-level init blocks now bail out politely when their elements are missing, but that only degrades gracefully; it does not make the page correct. The version bump is the actual fix.
+
 ## Workflow notes
 
 - **Do not commit without testing first, and confirm with the user before committing.** Since there's no automated test suite, "testing" means actually loading the page (local server or the live site) and exercising the change in a browser — check the console for errors and confirm the save indicator behaves correctly for anything touching storage.
