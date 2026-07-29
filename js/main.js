@@ -733,15 +733,18 @@ function renderKeywords(rowId, obj){
 }
 function bindRichTextToolbars(){
   document.querySelectorAll('.rt-toolbar').forEach(tb=>{
-    if(tb.classList.contains('rt-toolbar-arc')) return; // 아카이브 에디터 툴바는 별도 로직으로 바인딩됨
+    // 아카이브·LOG 에디터 툴바는 각자 전용 로직으로 바인딩됨
+    if(tb.classList.contains('rt-toolbar-arc')) return;
+    if(tb.classList.contains('rt-toolbar-log')) return;
     const targetEl = document.getElementById(tb.dataset.target); // 본문 영역 (B/I/색상 적용 대상)
     const metaEl = document.getElementById(tb.dataset.metaTarget); // 라벨 컨테이너 (+ 버튼 대상)
+    if(!targetEl) return;  // 대상이 없는 툴바는 건너뜀
     tb.querySelectorAll('button[data-cmd]').forEach(btn=>{
       btn.onmousedown = (e)=> e.preventDefault();
       btn.onclick = ()=>{ targetEl.focus(); document.execCommand(btn.dataset.cmd, false, null); };
     });
     const colorInput = tb.querySelector('.rt-color');
-    colorInput.oninput = (e)=>{ targetEl.focus(); document.execCommand('foreColor', false, e.target.value); };
+    if(colorInput) colorInput.oninput = (e)=>{ targetEl.focus(); document.execCommand('foreColor', false, e.target.value); };
     const addRowBtn = tb.querySelector('.rt-add-row');
     if(addRowBtn){
       addRowBtn.onmousedown = (e)=> e.preventDefault();
@@ -757,13 +760,101 @@ function bindRichTextToolbars(){
   });
 }
 
+/* ------------------------------------------------------------
+   LOG 본문 서식 처리
+   ------------------------------------------------------------
+   본문은 HTML로 저장합니다. 예전에 일반 텍스트로 저장된 글도
+   그대로 읽을 수 있게 변환해서 다룹니다.
+   ------------------------------------------------------------ */
+const LOG_SUB_COLOR_DEFAULT   = '#c1440e';  // 게시글 추가 버튼 글자색
+const LOG_PAREN_COLOR_DEFAULT = '#6b675e';  // 타임라인 내용 글자색
+const LOG_HIGHLIGHT_DEFAULT   = '#f8ddbf';  // 형광펜 (연한 오렌지톤)
+
+function looksLikeHtml(s){ return /<[a-z][\s\S]*>/i.test(s||''); }
+
+/* 구버전(일반 텍스트) 본문을 HTML로 */
+function logContentToHtml(content){
+  if(!content) return '';
+  if(looksLikeHtml(content)) return content;
+  return escapeHtml(content).replace(/\n/g,'<br>');
+}
+
+function htmlToPlainText(html){
+  const d = document.createElement('div');
+  d.innerHTML = logContentToHtml(html);
+  return d.innerText || '';
+}
+
+/* "따옴표" → 보조색, (괄호) → 괄호색, **별표** → 볼드.
+   HTML 문자열을 정규식으로 건드리면 태그·속성이 깨지므로
+   글자 노드만 골라서 바꿉니다. */
+function applyAutoFormat(root, subColor, parenColor){
+  const RE = /\*\*([^*\n]+)\*\*|"([^"\n]*)"|\(([^)\n]*)\)/g;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  const targets = [];
+  let n;
+  while((n = walker.nextNode())){
+    if(n.nodeValue && RE.test(n.nodeValue)) targets.push(n);
+    RE.lastIndex = 0;
+  }
+  targets.forEach(node=>{
+    const frag = document.createDocumentFragment();
+    let last = 0, m;
+    RE.lastIndex = 0;
+    while((m = RE.exec(node.nodeValue))){
+      if(m.index > last) frag.appendChild(document.createTextNode(node.nodeValue.slice(last, m.index)));
+      if(m[1] !== undefined){                       // **볼드** — 기호는 제거
+        const b = document.createElement('b'); b.textContent = m[1];
+        frag.appendChild(b);
+      }else if(m[2] !== undefined){                 // "보조색" — 따옴표 유지
+        const s = document.createElement('span');
+        s.style.color = subColor; s.textContent = `"${m[2]}"`;
+        frag.appendChild(s);
+      }else{                                        // (괄호색) — 괄호 유지
+        const s = document.createElement('span');
+        s.style.color = parenColor; s.textContent = `(${m[3]})`;
+        frag.appendChild(s);
+      }
+      last = m.index + m[0].length;
+    }
+    if(last < node.nodeValue.length) frag.appendChild(document.createTextNode(node.nodeValue.slice(last)));
+    node.parentNode.replaceChild(frag, node);
+  });
+}
+
+/* 저장된 본문을 화면에 그릴 때 쓰는 렌더러 */
+function renderLogContentInto(el, entry){
+  el.innerHTML = logContentToHtml(entry.content);
+  applyAutoFormat(el,
+    entry.subColor   || LOG_SUB_COLOR_DEFAULT,
+    entry.parenColor || LOG_PAREN_COLOR_DEFAULT);
+}
+
 /* --- Log (작성 시각 자동, 15개씩 페이지네이션, 행 크기/폰트는 완전 고정) --- */
 let pdLogPage = 1;
+let logSearchTerm = '';
+let logSearchField = 'title';
+
+/* 검색은 보기 모드(LOCKED)에서만 적용합니다 */
+function filterLogItems(items){
+  const q = logSearchTerm.trim().toLowerCase();
+  if(isLoggedIn || !q) return items;
+  return items.filter(entry=>{
+    if(logSearchField==='title')   return (entry.title||'').toLowerCase().includes(q);
+    if(logSearchField==='date')    return (entry.date||'').toLowerCase().includes(q);
+    // 내용은 서식 태그를 걷어내고 글자만 비교
+    const plain = htmlToPlainText(entry.content||'');
+    return plain.toLowerCase().includes(q);
+  });
+}
+
 function renderLogList(p){
   const wrap=document.getElementById('logList');
   const perPage=15;
-  const items = p.log.slice().reverse();
-  if(items.length===0){ wrap.innerHTML='<div class="empty-note">등록된 게시글이 없어요.</div>'; return; }
+  const all = p.log.slice().reverse();
+  const items = filterLogItems(all);
+  if(all.length===0){ wrap.innerHTML='<div class="empty-note">등록된 게시글이 없어요.</div>'; return; }
+  if(items.length===0){ wrap.innerHTML='<div class="empty-note">검색 결과가 없어요.</div>'; return; }
   const totalPages = Math.max(1, Math.ceil(items.length/perPage));
   if(pdLogPage>totalPages) pdLogPage=totalPages;
   if(pdLogPage<1) pdLogPage=1;
@@ -799,25 +890,79 @@ function renderLogList(p){
     });
   });
 }
+/* 검색창 동작 */
+(function initLogSearch(){
+  const input = document.getElementById('logSearchInput');
+  const field = document.getElementById('logSearchField');
+  const clear = document.getElementById('logSearchClear');
+  const rerender = ()=>{ pdLogPage=1; const p=getCurrentPost(); if(p) renderLogList(p); };
+  input.addEventListener('input', ()=>{ logSearchTerm = input.value; rerender(); });
+  field.addEventListener('change', ()=>{ logSearchField = field.value; rerender(); });
+  clear.addEventListener('click', ()=>{ input.value=''; logSearchTerm=''; rerender(); });
+})();
+
 let editingLogId = null;
 let currentLogViewId = null;
+/* 편집 툴바 */
+(function initLogToolbar(){
+  const editor = document.getElementById('logContent');
+  const toolbar = document.querySelector('.rt-toolbar-log');
+  // 버튼을 눌러도 본문 선택이 풀리지 않도록
+  toolbar.querySelectorAll('button').forEach(b=> b.addEventListener('mousedown', e=> e.preventDefault()));
+  toolbar.querySelectorAll('button[data-cmd]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ editor.focus(); document.execCommand(btn.dataset.cmd, false, null); });
+  });
+  document.getElementById('logSubColorBtn').addEventListener('click', ()=>{
+    editor.focus();
+    document.execCommand('foreColor', false, document.getElementById('logSubColor').value);
+  });
+  document.getElementById('logHighlightBtn').addEventListener('click', ()=>{
+    editor.focus();
+    const c = document.getElementById('logHighlightColor').value;
+    if(!document.execCommand('hiliteColor', false, c)){
+      document.execCommand('backColor', false, c);
+    }
+  });
+  document.getElementById('logDividerBtn').addEventListener('click', ()=>{
+    editor.focus();
+    document.execCommand('insertHTML', false, '<hr><br>');
+  });
+  document.getElementById('logTextColor').addEventListener('input', (e)=>{
+    editor.focus();
+    document.execCommand('foreColor', false, e.target.value);
+  });
+})();
+
+function fillLogEditor(entry){
+  document.getElementById('logTitle').value = entry ? entry.title : '';
+  document.getElementById('logContent').innerHTML = entry ? logContentToHtml(entry.content) : '';
+  document.getElementById('logSubColor').value       = (entry && entry.subColor)       || LOG_SUB_COLOR_DEFAULT;
+  document.getElementById('logParenColor').value     = (entry && entry.parenColor)     || LOG_PAREN_COLOR_DEFAULT;
+  document.getElementById('logHighlightColor').value = (entry && entry.highlightColor) || LOG_HIGHLIGHT_DEFAULT;
+  document.getElementById('logTextColor').value  = '#1a1a1a';
+}
+
 document.getElementById('addLogBtn').addEventListener('click', ()=>{
   if(!isLoggedIn) return;
   editingLogId = null;
   document.getElementById('logWriteHeading').innerText='게시글 작성';
   document.getElementById('logWriteHint').innerText='작성 시각이 자동으로 기록됩니다.';
-  document.getElementById('logTitle').value=''; document.getElementById('logContent').value='';
+  fillLogEditor(null);
   openModal('modalLogWrite');
 });
 document.getElementById('saveLogBtn').addEventListener('click', async ()=>{
   const title=document.getElementById('logTitle').value.trim();
   if(!title){ alert('제목을 입력해주세요.'); return; }
   const p=getCurrentPost();
+  const content        = document.getElementById('logContent').innerHTML;
+  const subColor       = document.getElementById('logSubColor').value;
+  const parenColor     = document.getElementById('logParenColor').value;
+  const highlightColor = document.getElementById('logHighlightColor').value;
   if(editingLogId){
     const entry = p.log.find(x=>x.id===editingLogId);
-    if(entry){ entry.title=title; entry.content=document.getElementById('logContent').value; }
+    if(entry){ entry.title=title; entry.content=content; entry.subColor=subColor; entry.parenColor=parenColor; entry.highlightColor=highlightColor; }
   }else{
-    p.log.push({ id:Date.now(), title, date:nowStamp(), content:document.getElementById('logContent').value });
+    p.log.push({ id:Date.now(), title, date:nowStamp(), content, subColor, parenColor, highlightColor });
   }
   await storageSet('pairPosts', state.pairPosts);
   pdLogPage=1;
@@ -827,7 +972,7 @@ function openLogView(entry){
   currentLogViewId = entry.id;
   document.getElementById('logViewTitle').innerText=entry.title;
   document.getElementById('logViewDate').innerText=entry.date||'';
-  document.getElementById('logViewContent').innerText=entry.content;
+  renderLogContentInto(document.getElementById('logViewContent'), entry);
   openModal('modalLogView');
 }
 const logKebabBtn = document.getElementById('logKebabBtn');
@@ -845,8 +990,7 @@ document.getElementById('logEditBtn').addEventListener('click', ()=>{
   editingLogId = entry.id;
   document.getElementById('logWriteHeading').innerText='게시글 수정';
   document.getElementById('logWriteHint').innerText=`작성일: ${entry.date||''}`;
-  document.getElementById('logTitle').value = entry.title;
-  document.getElementById('logContent').value = entry.content;
+  fillLogEditor(entry);
   closeModal('modalLogView');
   openModal('modalLogWrite');
 });
@@ -963,31 +1107,59 @@ let galleryPage = 1;
 let draggedGalleryKey = null;
 let draggedGalleryEl = null;
 let galleryTransitioning = false;
+/* 페이지 전환: HOME 페이지와 동일하게 두 페이지가 "동시에" 세로로 밀립니다.
+   (사라진 뒤 나타나는 2단계 방식은 끊겨 보여서 한 번에 움직이도록 함) */
+const GALLERY_EASE = 'cubic-bezier(.4,0,.2,1)';
+const GALLERY_SLIDE_MS = 450;
+const GALLERY_PER_PAGE = 15;
+function galleryTotalPages(folder){
+  return Math.max(1, Math.ceil(folder.images.length / GALLERY_PER_PAGE));
+}
 function animateGalleryPageChange(direction, applyChange){
   if(galleryTransitioning) return;
   galleryTransitioning = true;
   const grid = document.getElementById('galleryGrid');
-  grid.style.transition = 'transform .18s ease, opacity .18s ease';
-  grid.style.transform = `translateX(${direction*-26}px)`;
-  grid.style.opacity = '0';
+  const wrap = document.getElementById('galleryGridWrap');
+
+  // 나가는 페이지를 복제해 같은 자리에 겹쳐 둡니다
+  const gridRect = grid.getBoundingClientRect();
+  const wrapRect = wrap.getBoundingClientRect();
+  const ghost = grid.cloneNode(true);
+  ghost.removeAttribute('id');
+  ghost.className = 'gallery-grid gallery-grid-ghost';
+  ghost.style.left  = (gridRect.left - wrapRect.left) + 'px';
+  ghost.style.top   = (gridRect.top  - wrapRect.top)  + 'px';
+  ghost.style.width = gridRect.width + 'px';
+  wrap.appendChild(ghost);
+
+  applyChange();  // 새 페이지를 실제 그리드에 렌더
+
+  const dist = Math.max(120, wrap.clientHeight || gridRect.height || 320);
+  grid.style.transition  = 'none';
+  grid.style.transform   = `translateY(${direction*dist}px)`;
+  ghost.style.transition = 'none';
+  ghost.style.transform  = 'translateY(0)';
+  void wrap.offsetWidth;  // 강제 리플로우로 트랜지션 재적용
+
+  const tr = `transform ${GALLERY_SLIDE_MS}ms ${GALLERY_EASE}`;
+  grid.style.transition  = tr;
+  ghost.style.transition = tr;
+  grid.style.transform   = 'translateY(0)';
+  ghost.style.transform  = `translateY(${direction*-dist}px)`;
+
   setTimeout(()=>{
-    applyChange();
-    grid.style.transition = 'none';
-    grid.style.transform = `translateX(${direction*26}px)`;
-    grid.style.opacity = '0';
-    void grid.offsetWidth; // 강제 리플로우로 트랜지션 재적용
-    grid.style.transition = 'transform .26s cubic-bezier(.22,.61,.36,1), opacity .26s ease';
-    grid.style.transform = 'translateX(0)';
-    grid.style.opacity = '1';
-    setTimeout(()=>{ galleryTransitioning = false; }, 270);
-  }, 170);
+    ghost.remove();
+    grid.style.transition = '';
+    grid.style.transform  = '';
+    galleryTransitioning = false;
+  }, GALLERY_SLIDE_MS);
 }
 const galleryGridWrapEl = document.getElementById('galleryGridWrap');
 galleryGridWrapEl.addEventListener('wheel', (e)=>{
   if(galleryTransitioning) return;
   const p = getCurrentPost(); if(!p) return;
   const folder = getFolder(p, currentGalleryFolderId); if(!folder) return;
-  const totalPages = Math.max(1, Math.ceil(folder.images.length/20));
+  const totalPages = galleryTotalPages(folder);
   if(totalPages<=1) return;
   if(e.deltaY>0 && galleryPage<totalPages){
     animateGalleryPageChange(1, ()=>{ galleryPage++; renderGallery(p); });
@@ -1002,11 +1174,15 @@ function renderGallery(p){
 
   const grid=document.getElementById('galleryGrid'); grid.innerHTML='';
   const hint = document.getElementById('galleryScrollHint');
+  const hintUp = document.getElementById('galleryScrollHintUp');
   const folder = getFolder(p, currentGalleryFolderId);
-  if(!folder || folder.images.length===0){ grid.innerHTML='<div class="empty-note">등록된 이미지가 없어요.</div>'; hint.style.display='none'; return; }
+  if(!folder || folder.images.length===0){
+    grid.innerHTML='<div class="empty-note">등록된 이미지가 없어요.</div>';
+    hint.style.display='none'; hintUp.style.display='none'; return;
+  }
 
-  const perPage=20;
-  const totalPages=Math.max(1, Math.ceil(folder.images.length/perPage));
+  const perPage=GALLERY_PER_PAGE;
+  const totalPages=galleryTotalPages(folder);
   if(galleryPage>totalPages) galleryPage=totalPages;
   if(galleryPage<1) galleryPage=1;
   const start=(galleryPage-1)*perPage;
@@ -1031,12 +1207,17 @@ function renderGallery(p){
         el.addEventListener('dragend', async ()=>{
           el.classList.remove('dragging');
           if(draggedGalleryEl){
-            // 같은 폴더 내에서 순서가 바뀌었으면 반영
+            /* 화면에는 현재 페이지 몫만 그려져 있습니다.
+               전체 배열을 DOM 순서로 덮어쓰면 다른 페이지 이미지가 사라지므로,
+               현재 페이지가 차지하는 구간만 잘라서 그 안에서만 순서를 바꿉니다. */
             const domKeys = Array.from(grid.querySelectorAll('.gallery-thumb')).map(x=>x.dataset.key);
             const stillSameFolder = domKeys.every(k=> k.split('::')[0]===folder.id);
-            if(stillSameFolder){
-              const newImages = domKeys.map(k=> folder.images[Number(k.split('::')[1])]);
-              folder.images = newImages;
+            const pageIdx = domKeys.map(k=> Number(k.split('::')[1]));
+            const sameSet = pageIdx.length === pageImages.length
+              && pageIdx.every(i=> i>=start && i<start+pageImages.length);
+            if(stillSameFolder && sameSet){
+              const reordered = pageIdx.map(i=> folder.images[i]);
+              folder.images.splice(start, reordered.length, ...reordered);
               await storageSet('pairPosts', state.pairPosts);
             }
           }
@@ -1062,11 +1243,9 @@ function renderGallery(p){
     });
   });
 
-  if(totalPages>1 && galleryPage<totalPages){
-    hint.style.display='block';
-  }else{
-    hint.style.display='none';
-  }
+  // 아래/위로 넘길 페이지가 남아있을 때만 각 방향 힌트를 표시
+  hint.style.display = (totalPages>1 && galleryPage<totalPages) ? 'block' : 'none';
+  hintUp.style.display = (totalPages>1 && galleryPage>1) ? 'block' : 'none';
 }
 function updateGallerySelectCount(){
   const info=document.getElementById('gallerySelectInfo');
@@ -1116,7 +1295,9 @@ document.getElementById('lightbox').addEventListener('click', (e)=>{ if(e.target
 document.getElementById('lbPrev').addEventListener('click', (e)=>{ e.stopPropagation(); stepGalleryLightbox(-1); });
 document.getElementById('lbNext').addEventListener('click', (e)=>{ e.stopPropagation(); stepGalleryLightbox(1); });
 
-/* --- Timeline (원형 마커 + 연결선 + 볼드 타이틀 구조) --- */
+/* --- Timeline (원형 마커 + 연결선 + 볼드 타이틀 구조)
+   편집 모드(UNLOCKED)에서는 프로필 칸처럼 목록에서 바로 수정합니다.
+   별도 입력 모달 없이 추가 버튼이 즉시 항목을 만들어요. --- */
 function renderTimeline(p){
   const wrap=document.getElementById('timelineList'); wrap.innerHTML='';
   if(p.timeline.length===0){ wrap.innerHTML='<div class="empty-note">등록된 타임라인이 없어요.</div>'; return; }
@@ -1125,27 +1306,59 @@ function renderTimeline(p){
     el.innerHTML = `
       <div class="tl-marker"><div class="tl-dot"></div><div class="tl-line"></div></div>
       <div class="tl-body">
-        <div class="tl-title">${escapeHtml(t.title||'(제목 없음)')}</div>
-        <div class="tl-content">${escapeHtml(t.text)}</div>
-      </div>`;
+        <div class="tl-title" data-tlfield="title" contenteditable="false"></div>
+        <div class="tl-content" data-tlfield="text" contenteditable="false"></div>
+      </div>
+      <button class="tl-del" data-editonly title="삭제">✕</button>`;
     if(i===p.timeline.length-1) el.classList.add('last');
+
+    const titleEl = el.querySelector('[data-tlfield="title"]');
+    const textEl  = el.querySelector('[data-tlfield="text"]');
+    titleEl.innerText = t.title || '';
+    textEl.innerText  = t.text || '';
+
+    [titleEl, textEl].forEach(node=>{
+      node.contentEditable = isLoggedIn ? 'true' : 'false';
+      node.addEventListener('blur', async ()=>{
+        if(!isLoggedIn) return;
+        const field = node.dataset.tlfield;
+        const val = node.innerText;
+        if(t[field] === val) return;
+        t[field] = val;
+        await storageSet('pairPosts', state.pairPosts);
+      });
+      // 줄바꿈 대신 편집 종료 (타이틀만)
+      if(node === titleEl){
+        node.addEventListener('keydown', (e)=>{
+          if(e.key==='Enter'){ e.preventDefault(); node.blur(); }
+        });
+      }
+    });
+
+    el.querySelector('.tl-del').addEventListener('click', async ()=>{
+      if(!isLoggedIn) return;
+      if(!confirm('이 타임라인을 삭제할까요?')) return;
+      p.timeline.splice(i,1);
+      await storageSet('pairPosts', state.pairPosts);
+      renderTimeline(p);
+    });
+
     wrap.appendChild(el);
   });
 }
-document.getElementById('addTimelineBtn').addEventListener('click', ()=>{
+document.getElementById('addTimelineBtn').addEventListener('click', async ()=>{
   if(!isLoggedIn) return;
-  document.getElementById('tlTitle').value='';
-  document.getElementById('tlText').value='';
-  openModal('modalTimelineWrite');
-});
-document.getElementById('saveTlBtn').addEventListener('click', async ()=>{
-  const p=getCurrentPost();
-  p.timeline.push({
-    title: document.getElementById('tlTitle').value.trim(),
-    text: document.getElementById('tlText').value
-  });
+  const p=getCurrentPost(); if(!p) return;
+  p.timeline.push({ title:'새 타임라인', text:'내용을 입력하세요' });
   await storageSet('pairPosts', state.pairPosts);
-  renderTimeline(p); closeModal('modalTimelineWrite');
+  renderTimeline(p);
+  // 새로 만든 항목의 타이틀에 바로 커서를 둡니다
+  const items = document.getElementById('timelineList').querySelectorAll('.tl-item');
+  const last = items[items.length-1];
+  if(last){
+    const t = last.querySelector('[data-tlfield="title"]');
+    if(t){ t.focus(); document.getSelection().selectAllChildren(t); }
+  }
 });
 
 /* ============================================================

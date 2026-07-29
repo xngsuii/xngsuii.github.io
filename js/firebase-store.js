@@ -293,6 +293,10 @@ function scheduleFlush() {
 
 async function flush() {
   if (!isAdmin || dirty.size === 0) return;
+  /* 불러오기가 성공적으로 끝나기 전에는 절대 쓰지 않습니다.
+     메모리가 비어 있는 상태로 저장이 나가면, 아래 삭제 로직이
+     서버의 멀쩡한 문서를 "사라진 항목"으로 보고 지워버립니다. */
+  if (!loaded) { console.warn('불러오기 전이라 저장을 보류합니다.'); return; }
   const keys = [...dirty]; dirty.clear();
 
   const pending = new Map();               // 새로 저장해야 할 이미지/첨부

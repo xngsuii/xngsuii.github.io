@@ -155,6 +155,8 @@
   .modal-overlay.open{display:flex;}
   .modal{background:var(--bg);border-radius:0;border:1px solid var(--border);max-width:520px;width:100%;max-height:88vh;overflow-y:auto;padding:24px;position:relative;}
   .modal.wide{max-width:900px;}
+  /* 로그인 창은 입력 항목이 두 개뿐이라 좁게 */
+  .modal.login-modal{max-width:416px;}
   .modal.wide.pd-modal{width:720px;max-width:96vw;max-height:96vh;}
   .modal.wide.arc-modal{max-width:580px;}
   .modal h3{margin:0 0 16px;font-family:var(--mono);font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
@@ -165,8 +167,9 @@
   .pd-modal-body{padding:0 28px 28px;}
   .form-row{margin-bottom:12px;}
   .form-row label{display:block;font-size:11.5px;font-weight:700;color:var(--text-muted);margin-bottom:5px;}
-  .form-row input[type=text],.form-row input[type=url],.form-row input[type=date],.form-row input[type=password],.form-row textarea,.form-row select{
-    width:100%;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;font-size:12.5px;outline:none;color:var(--text);}
+  .form-row input[type=text],.form-row input[type=url],.form-row input[type=date],.form-row input[type=password],.form-row input[type=email],.form-row textarea,.form-row select{
+    width:100%;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;font-size:12.5px;outline:none;color:var(--text);
+    background:var(--bg);font-family:inherit;}
   .form-row textarea{resize:vertical;min-height:60px;}
   .form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
   .login-error{font-size:11.5px;color:#e0483f;margin-top:-4px;margin-bottom:10px;display:none;}
@@ -186,12 +189,20 @@
   .pd-tab-pane.active{display:block;}
   .pd-tab-pane-log.active{display:flex;flex-direction:column;height:100%;}
   .log-pane-toolbar{display:flex;justify-content:flex-end;margin-bottom:10px;flex:none;}
+  /* 게시글 검색 (보기 모드 전용) */
+  .log-search{display:flex;gap:6px;margin-bottom:10px;flex:none;}
+  body.logged-in .log-search{display:none;}
+  .log-search select,.log-search input{border:1px solid var(--border);border-radius:0;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:10.5px;padding:5px 7px;outline:none;}
+  .log-search select{flex:none;}
+  .log-search input{flex:1;min-width:0;}
+  .log-search button{border:1px solid var(--border);background:var(--bg);color:var(--text-muted);font-size:10px;padding:0 8px;flex:none;}
+  .log-search button:hover{background:var(--surface-2);color:var(--text);}
   .pd-tab-pane-log .log-list{flex:1;min-height:0;display:flex;flex-direction:column;}
   .log-table-scroll{flex:1;min-height:0;overflow-y:auto;}
   .log-table-scroll table{width:100%;}
   .pd-info-grid{display:grid;grid-template-columns:1fr 260px;gap:20px;align-items:start;}
   .pd-section{margin-bottom:22px;}
-  .pd-section h4{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin:0 0 10px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+  .pd-section h4{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin:0 0 24px;padding-bottom:8px;border-bottom:1px solid var(--border);}
   .pd-profile-tag{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--accent);margin:14px 0 8px;text-transform:uppercase;}
   .pd-profile-tag:first-of-type{margin-top:0;}
 
@@ -249,15 +260,40 @@
   .rt-toolbar button{width:24px;height:24px;border:1px solid var(--border);background:var(--bg);border-radius:0;font-size:11px;}
   .rt-toolbar button:hover{background:var(--surface-2);}
   .rt-color{width:24px;height:24px;padding:0;border:1px solid var(--border);border-radius:0;background:var(--bg);cursor:pointer;}
+  /* LOG 편집 툴바: 네 개의 컬러 메뉴를 하나의 사각형으로 묶고
+     표처럼 세로선으로 나눔 (칩은 위, 이름은 아래) */
+  .rt-colorbar{display:flex;align-items:stretch;border:1px solid var(--border);background:var(--bg);overflow:hidden;}
+  /* 칸 자체에는 여백을 두지 않아 세로 구분선이 위아래로 완전히 이어지게 함.
+     .form-row label 규칙(display:block; margin-bottom:5px)이 더 우선하므로
+     선택자를 한 단계 더 붙여 확실히 덮어씀 — 그 margin이 구분선을 끊던 원인. */
+  .rt-colorbar .rt-colorcell{display:flex;flex-direction:column;align-items:stretch;gap:0;
+    padding:0;margin:0;border-right:1px solid var(--border);cursor:pointer;min-width:42px;}
+  .rt-colorbar .rt-colorcell:last-child{border-right:none;}
+  .rt-colorbar .rt-colorcell:hover{background:var(--surface-2);}
+  /* 컬러 칩: 칸 위쪽 절반을 여백 없이 꽉 채워 테두리에 맞닿게 */
+  .rt-colorbar .rt-colorcell input[type=color]{width:100%;height:14px;padding:0;border:none;border-radius:0;
+    background:none;cursor:pointer;display:block;flex:none;}
+  .rt-colorbar .rt-colorcell input[type=color]::-webkit-color-swatch-wrapper{padding:0;}
+  .rt-colorbar .rt-colorcell input[type=color]::-webkit-color-swatch{border:none;}
+  .rt-colorbar .rt-colorcell span{font-family:var(--mono);font-size:8.5px;font-weight:700;color:var(--text-muted);
+    line-height:1;letter-spacing:.02em;text-align:center;padding:0 5px;margin:0;flex:1;min-height:14px;
+    display:flex;align-items:center;justify-content:center;}
+  /* 본문 구분선 */
+  .log-editor hr,.arc-view-content hr{border:none;border-top:1px solid var(--border);margin:12px 0;}
+  .rt-toolbar-log{margin-bottom:0;border:1px solid var(--border);border-bottom:none;padding:5px 6px;background:var(--surface);}
+  .log-editor{min-height:160px;border:1px solid var(--border);padding:10px;overflow-y:auto;max-height:320px;}
+  body.logged-in .log-editor{border:1px solid var(--border);}
+  .log-autofmt-hint{font-size:9.5px;color:var(--text-muted);margin-top:6px;line-height:1.5;}
   .profile-view-text{font-size:12.5px;line-height:1.4;color:var(--text);outline:none;min-height:60px;}
   body.logged-in .profile-view-text{border:1px solid var(--border);border-radius:0;padding:8px;}
   .pd-profile-divider{height:1px;background:#f0b89a;margin:8px 0 10px;}
-  .speech-bubble{position:relative;border:1px solid var(--border);background:#f8ddbf;padding:10px 16px;font-size:11.5px;line-height:1.5;outline:none;min-height:1.5em;}
-  .speech-bubble:empty:before{content:'대사를 입력하세요...';color:var(--text-muted);}
+  /* 말풍선: 인덱스 탭(INFO/GALLERY/LOG)과 동일한 오렌지 #EF3921 + 흰 글자 */
+  .speech-bubble{position:relative;border:1px solid var(--border);background:var(--page-bg);color:#fff;padding:10px 16px;font-size:11.5px;line-height:1.5;outline:none;min-height:1.5em;}
+  .speech-bubble:empty:before{content:'대사를 입력하세요...';color:rgba(255,255,255,.75);}
   .speech-bubble.char-bubble{text-align:left;margin:14px 0 4px;}
-  .speech-bubble.char-bubble::before{content:'';position:absolute;top:-5px;left:22px;width:8px;height:8px;background:#f8ddbf;border-left:1px solid var(--border);border-top:1px solid var(--border);transform:rotate(45deg);}
+  .speech-bubble.char-bubble::before{content:'';position:absolute;top:-5px;left:22px;width:8px;height:8px;background:var(--page-bg);border-left:1px solid var(--border);border-top:1px solid var(--border);transform:rotate(45deg);}
   .speech-bubble.persona-bubble{text-align:right;margin:4px 0 32px;}
-  .speech-bubble.persona-bubble::before{content:'';position:absolute;bottom:-5px;right:22px;width:8px;height:8px;background:#f8ddbf;border-right:1px solid var(--border);border-bottom:1px solid var(--border);transform:rotate(45deg);}
+  .speech-bubble.persona-bubble::before{content:'';position:absolute;bottom:-5px;right:22px;width:8px;height:8px;background:var(--page-bg);border-right:1px solid var(--border);border-bottom:1px solid var(--border);transform:rotate(45deg);}
   body.logged-in .speech-bubble{border-style:solid;}
   .meta-row{display:flex;align-items:baseline;gap:8px;padding:2px 0;font-size:11px;line-height:1.4;}
   .meta-row.dragging-meta{opacity:.4;}
@@ -294,9 +330,20 @@
   .gallery-folder-add{font-family:var(--mono);font-size:10.5px;font-weight:700;border:1px dashed var(--accent);background:var(--bg);color:var(--accent);padding:5px 10px;}
   .gallery-select-info{font-family:var(--mono);font-size:10.5px;color:var(--text-muted);margin-bottom:8px;}
   .pd-tab-pane-gallery.active{display:flex;flex-direction:column;height:100%;position:relative;}
-  .gallery-grid-wrap{flex:1;min-height:0;display:flex;flex-direction:column;padding-bottom:44px;position:relative;overflow:hidden;}
-  .gallery-scroll-hint{position:absolute;left:50%;bottom:6px;transform:translateX(-50%);color:var(--accent);font-size:26px;font-weight:900;line-height:1;-webkit-text-stroke:1.5px var(--accent);text-shadow:0 1px 0 var(--accent),0 2px 4px rgba(0,0,0,.25);animation:gallery-bounce 1.4s infinite;pointer-events:none;}
+  /* 위/아래 힌트 화살표가 썸네일을 가리지 않도록 여백을 확보하고,
+     남는 공간을 위아래로 똑같이 나눠 화살표-썸네일 간격을 대칭으로 맞춤.
+     (한 페이지 15장 = 5열 3행이 이 안에 들어가도록 맞춤) */
+  .gallery-grid-wrap{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;
+    padding-top:38px;padding-bottom:38px;position:relative;overflow:hidden;}
+  /* 페이지 전환 시 밀려나가는 이전 페이지 */
+  .gallery-grid-ghost{position:absolute;pointer-events:none;z-index:2;}
+  /* 위/아래 힌트는 가장자리에서 같은 거리(4px)에 둬야
+     썸네일과의 간격이 위아래 대칭으로 맞습니다. */
+  .gallery-scroll-hint{position:absolute;left:50%;bottom:4px;transform:translateX(-50%);color:var(--accent);font-size:26px;font-weight:900;line-height:1;-webkit-text-stroke:1.5px var(--accent);text-shadow:0 1px 0 var(--accent),0 2px 4px rgba(0,0,0,.25);animation:gallery-bounce 1.4s infinite;pointer-events:none;z-index:4;}
   @keyframes gallery-bounce{0%,100%{transform:translate(-50%,0);}50%{transform:translate(-50%,4px);}}
+  /* 위쪽 페이지가 있을 때 상단에 뜨는 힌트 */
+  .gallery-scroll-hint.up{top:4px;bottom:auto;animation:gallery-bounce-up 1.4s infinite;}
+  @keyframes gallery-bounce-up{0%,100%{transform:translate(-50%,0);}50%{transform:translate(-50%,-4px);}}
   .gallery-grid{will-change:transform,opacity;}
   .gallery-fab-row{position:absolute;bottom:8px;right:2px;display:flex;align-items:center;justify-content:flex-end;gap:10px;}
   .gallery-fab[data-editonly]{display:none;}
@@ -332,7 +379,15 @@
   .log-pg-btn:hover{background:var(--surface-2);}
   .log-pg-btn.active{background:var(--text);color:var(--bg);}
   .log-pg-btn:disabled{opacity:.35;cursor:default;}
-  .tl-item{display:flex;gap:10px;}
+  .tl-item{display:flex;gap:10px;position:relative;}
+  /* 편집 모드에서만 보이는 삭제 버튼 + 수정 가능 표시 (보기 모드 디자인은 그대로) */
+  .tl-del{position:absolute;top:0;right:0;border:none;background:none;color:var(--text-muted);font-size:10px;padding:0 2px;align-items:center;justify-content:center;}
+  .tl-del:hover{color:var(--accent);}
+  body.logged-in .tl-body{padding-right:16px;}
+  body.logged-in .tl-title[contenteditable="true"]:hover,
+  body.logged-in .tl-content[contenteditable="true"]:hover{background:var(--surface);}
+  body.logged-in .tl-title[contenteditable="true"]:focus,
+  body.logged-in .tl-content[contenteditable="true"]:focus{background:var(--surface);outline:1px solid var(--accent);}
   .tl-marker{display:flex;flex-direction:column;align-items:center;width:10px;flex:none;}
   .tl-dot{width:6px;height:6px;border-radius:50%;flex:none;background:var(--accent);border:1px solid var(--accent);margin-top:5px;}
   .tl-line{flex:1;width:1px;background:#f0b89a;margin-top:4px;min-height:22px;}

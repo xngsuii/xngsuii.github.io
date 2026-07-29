@@ -1,0 +1,56 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project
+
+A single-page personal "home" site (Korean: 갠홈) — a static HTML/CSS/JS app with no build step, deployed via GitHub Pages at `https://xngsuii.github.io/`. Data (profile, cards, pair posts, archive, images) lives in Firestore instead of localStorage, so edits persist across reloads, browsers, and devices; only the admin account (Firebase Authentication) can write.
+
+There is no package.json, no bundler, and no test runner — the site is plain files served as-is.
+
+## Commands
+
+There is no build/lint/test tooling in this repo. To preview locally:
+
+```
+py -m http.server 8790
+```
+
+then open `http://localhost:8790/`. Serve over HTTP (not `file://`) — the app loads `js/firebase-store.js` as an ES module and needs a real origin for Firebase Auth persistence and CORS.
+
+There are no automated tests. Verify changes by loading the page in a browser and checking the browser console for errors — do this before committing (see Workflow notes below).
+
+## Architecture
+
+**File layout** — everything is hand-split from what used to be one monolithic HTML file:
+- `index.html` — markup only
+- `css/style.css` — all styles
+- `js/main.js` — UI logic and rendering (view switching, cards, pair posts, archive, image adjuster widget, rich-text editing)
+- `js/firebase-store.js` — the persistence layer (see below)
+- `js/firebase-config.js` — Firebase project config + `ADMIN_UID` (safe to be public; not a secret — see Security model)
+- `firestore.rules` — Firestore security rules (read: public, write: admin UID only); must be pasted into the Firebase console manually, this repo file is not auto-deployed
+
+**Storage adapter contract** — `main.js` never talks to Firestore directly. It only calls `storageGet(key, fallback)` / `storageSet(key, value)` (defined in `main.js`, thin wrappers around `window.SiteStore`). All Firestore-specific behavior (chunking, image extraction, debouncing) lives entirely in `firebase-store.js` behind that same `get`/`set` shape. When adding a new piece of persisted state, add its key to `SCALAR_KEYS` (single doc field) or `LIST_KEYS` (one Firestore doc per array item, keyed by `item.id`) in `firebase-store.js` — don't invent a new storage path in `main.js`.
+
+**Why data is split across documents** — Firestore caps documents at 1 MiB. `cards`, `pairPosts`, and `archive` are arrays that could grow large, so each array item is stored as its own document under `site/main/<key>/<id>` instead of one big array field. Small scalar fields (`profile`, `siteName`, `homeIntro`, `homeBanner`, `archiveSeqCounter`) live together in the single `site/main` doc.
+
+**Image/blob handling** — Images are still authored as data URLs in `main.js` (via `fileToDataUrl`, which now actually calls `SiteStore.compressImage` — resizes to a max dimension and re-encodes as JPEG/PNG under a target size). Before any save, `firebase-store.js` walks the value (including `data:` URLs embedded inside rich-text HTML fields) and pulls each one out into `site/main/blobs/<sha256>`, replacing it in place with a `blob://<hash>` reference; large blobs are split into `parts` sub-documents to stay under the size cap. On load, references are inflated back into real data URLs before `main.js` ever sees the data — the UI layer is unaware this happens. Same-hash images are automatically deduplicated. Unreferenced blobs are garbage-collected after a full load completes (only when logged in as admin, and only if there are no unsaved local changes — see `collectGarbage`).
+
+**Write batching** — `main.js` calls `storageSet` very frequently (e.g. on every `input` blur). `firebase-store.js` debounces actual Firestore writes (~1.2s), diffs against the last-saved JSON per document so unchanged items aren't rewritten, and only marks a change as "saved" after the write actually succeeds (a failed write keeps the key `dirty` and retries automatically) — this was a deliberate fix for a bug where failures were recorded as successes and silently dropped edits.
+
+**Save-state visibility** — `SiteStore.onSaveState(cb)` fires `'saving' | 'saved' | 'error'`; `main.js` renders this as a fixed indicator (bottom-right) via `initSaveIndicator()`. Don't reintroduce silent failure here — if you touch the flush/retry logic in `firebase-store.js`, make sure errors still propagate to this indicator rather than only `console.error`.
+
+**Auth model** — Firebase Authentication (email/password), not the old hardcoded `CREDENTIALS` object (removed). `window.SiteStore.isAdmin` is true only when the signed-in user's UID matches `ADMIN_UID` from `firebase-config.js`; the client-side check is a convenience, the Firestore security rules in `firestore.rules` are the actual enforcement point. `js/main.js`'s login modal collects an email (not a username) — see `loginErrorMessage()` for the mapping from Firebase auth error codes to Korean UI messages if you need to add a new one (e.g. new failure codes from console changes like unauthorized domain).
+
+**GitHub Pages deployment** — this repo must be named exactly `xngsuii.github.io` to serve from the domain root (user site, not project site); renaming it changes the site URL, and Firebase's authorized-domains list (console → Authentication → Settings) must contain whatever domain the site is actually served from or login will fail with `auth/unauthorized-domain`.
+
+## Terminology
+
+The user may refer to the two UI states by their badge labels:
+- **LOCKED** = 보기 모드 (view mode) — visitor state, nothing editable
+- **UNLOCKED** = 편집 모드 (edit mode) — admin signed in, `body.logged-in` is set and `[data-editonly]` controls appear
+
+## Workflow notes
+
+- **Do not commit without testing first, and confirm with the user before committing.** Since there's no automated test suite, "testing" means actually loading the page (local server or the live site) and exercising the change in a browser — check the console for errors and confirm the save indicator behaves correctly for anything touching storage.
+- **When a change touches color** (CSS colors, inline styles, color pickers, theme variables in `:root`), always print the affected HTML color codes (hex/rgba) in the response, not just describe the color.
