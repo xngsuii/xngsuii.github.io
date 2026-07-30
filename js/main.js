@@ -2269,7 +2269,9 @@ function renderArchive(){
   const titleEl=document.getElementById('archiveTitle');
   if(titleEl) titleEl.innerText = 'Archive · ' + (ARCHIVE_CAT_LABEL[currentArchiveCategory] || currentArchiveCategory);
   const isGallery = currentArchiveCategory==='nai';
-  const perPage = isGallery ? 8 : 15;   // PROMPT 는 4열 x 2행
+  // PROMPT 는 4열 x 2행(모바일은 2열 x 4행)으로 8개 고정,
+  // OOC/ETC 는 데스크톱 15줄 / 모바일 10줄
+  const perPage = isGallery ? 8 : (isMobileWidth() ? 10 : 15);
   const catItems = state.archive.filter(x=>(x.category||'ooc')===currentArchiveCategory);
   if(catItems.length===0){ wrap.innerHTML='<div class="empty-note">아직 백업된 항목이 없어요.</div>'; return; }
   const found = filterArchiveItems(catItems);
@@ -2484,6 +2486,10 @@ function initTouchDrag(){
     active = true;
     if(navigator.vibrate) navigator.vibrate(15);   // 안드로이드만 반응, iOS 는 무시
     document.body.classList.add('touch-dragging');
+    /* 길게 누르는 사이 브라우저가 이미 글자를 선택했을 수 있습니다.
+       CSS 의 user-select:none 은 새 선택만 막으므로 여기서 한 번 지웁니다. */
+    const sel = window.getSelection && window.getSelection();
+    if(sel && sel.rangeCount) sel.removeAllRanges();
 
     const r = visual.getBoundingClientRect();
     offX = startX - r.left;

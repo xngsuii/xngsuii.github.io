@@ -559,12 +559,12 @@
     body{align-items:stretch;justify-content:stretch;min-height:0;}
     .app-window{flex-direction:column;width:100%;max-width:100%;aspect-ratio:auto;
       height:100vh;height:100dvh;max-height:none;border:none;box-shadow:none;}
-    .punch-margin{flex-direction:row;width:auto;height:22px;flex:none;padding:0 18px;}
+    .punch-margin{flex-direction:row;width:auto;height:33px;flex:none;padding:0 18px;}
     .punch-margin.left{border-right:none;border-bottom:1px solid var(--border);}
     .punch-margin.right{border-left:none;border-top:1px solid var(--border);
-      height:calc(22px + env(safe-area-inset-bottom));
+      height:calc(33px + env(safe-area-inset-bottom));
       padding-bottom:env(safe-area-inset-bottom);}
-    .punch-hole{width:10px;height:10px;}
+    .punch-hole{width:14px;height:14px;}
     .app-shell{flex-direction:column;min-height:0;position:relative;}
     .main{min-height:0;overscroll-behavior:contain;}
     /* 가로 스크롤은 어떤 경우에도 생기지 않게 */
@@ -634,14 +634,14 @@
     .log-table td{padding:12px 4px;}
     .archive-search{margin:0 14px 14px;}
 
-    /* 검색 컨트롤 4개는 한 줄에 안 들어가므로 두 줄로 접습니다:
-       [날짜][제목▾] / [검색어][✕] */
-    .log-search{flex-wrap:wrap;row-gap:6px;}
-    .log-search input[type=text]{flex:1 1 200px;}
-    .archive-search input[type=text]{flex:1 1 200px;}
-    .log-search select,.log-search input{font-size:16px;padding:8px 8px;}
-    .log-search input[type=date]{width:auto;flex:1 1 130px;}
-    .log-search button{min-width:40px;font-size:13px;}
+    /* 검색 컨트롤 4개를 한 줄에 유지합니다.
+       [게시일][제목▾][검색어][✕] — 검색어 칸만 남는 폭을 전부 가져갑니다. */
+    .log-search{flex-wrap:nowrap;gap:4px;}
+    .log-search select,.log-search input{font-size:12px;padding:7px 5px;}
+    .log-search input[type=date]{flex:none;width:98px;padding-right:2px;}
+    .log-search select{flex:none;padding-right:2px;}
+    .log-search input[type=text],.archive-search input[type=text]{flex:1 1 auto;min-width:0;width:auto;}
+    .log-search button{flex:none;min-width:32px;padding:0 6px;font-size:12px;}
 
     /* ---------- 모달 공통 ---------- */
     .modal{max-width:100%;max-height:calc(100dvh - 24px);padding:20px 16px;
@@ -670,6 +670,10 @@
        계산이 어긋나도 잘리지는 않게 .modal 의 overflow-y:auto 는 살려둡니다. */
     .modal.wide.pd-modal{width:100%;max-width:100%;max-height:calc(100dvh - 70px);}
     .pd-modal-body{padding:0 14px 8px;}
+    /* 제목/부제목은 <input> 이라 브라우저마다 기본 좌우 여백이 다릅니다
+       (크롬 2px, 사파리 0px). 둘의 시작점이 어긋나 보이는 것을 막고
+       아래 본문(여백 14px)과도 왼쪽 끝이 맞도록 0 으로 통일합니다. */
+    .pd-title-input,.pd-subtitle-input{padding-left:0;padding-right:0;text-indent:0;}
     .pd-title-input{font-size:18px;margin:14px 0 0;}
     /* GALLERY/LOG 탭이 height:100% 기반 flex 라 높이를 auto 로 풀면 무너집니다.
        모달의 나머지 요소(탭 40 + 배너 113 + 제목 62 + 여백 32)를 뺀 값으로 고정. */
@@ -677,15 +681,42 @@
       overscroll-behavior:contain;}
     .pd-info-grid{grid-template-columns:1fr;gap:0;}
     .pd-section h4{margin-bottom:18px;}
-    /* 프로필 사진과 정보를 세로로 쌓습니다. 페르소나는 order 를 유지해
-       (글 → 사진) 좌우 반전된 느낌이 세로에서도 남게 합니다. */
-    .pd-profile,.pd-profile.persona-layout{grid-template-columns:1fr;gap:12px;margin-bottom:22px;}
-    /* 전체폭이면 3:4 비율 때문에 세로 480px 짜리 사진이 되어버립니다 */
-    .pd-profile-img{width:150px;justify-self:center;}
-    .pd-name-input{width:100%;}
-    .pd-relationship{flex-direction:column;gap:10px;margin-bottom:20px;}
-    .rel-icon{transform:rotate(90deg);align-self:center;}
-    .speech-bubble.persona-bubble{margin-bottom:24px;}
+
+    /* 캐릭터와 페르소나를 좌우로 나란히 놓습니다.
+       DOM 순서가 [프로필A][말풍선A][말풍선B][프로필B] 라 순서만으로는 안 되므로
+       .pd-section 을 2열 격자로 만들고 각자 칸을 지정합니다(마크업 수정 없음).
+         1행: 캐릭터 프로필 | 페르소나 프로필
+         2행: 캐릭터 말풍선 | 페르소나 말풍선 */
+    .pd-section{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start;}
+    .pd-section h4{grid-column:1/-1;}
+    .pd-profile.char-layout{grid-column:1;grid-row:2;}
+    .pd-profile.persona-layout{grid-column:2;grid-row:2;}
+    .speech-bubble.char-bubble{grid-column:1;grid-row:3;}
+    .speech-bubble.persona-bubble{grid-column:2;grid-row:3;}
+
+    /* 두 카드 모두 사진이 위로 오게 합니다.
+       페르소나는 마크업이 [정보][사진] 순서라 order:0 으로는 정보가 위로 갑니다.
+       -1 로 내려 사진을 앞으로 끌어옵니다. */
+    .pd-profile,.pd-profile.persona-layout{grid-template-columns:1fr;gap:10px;margin:0;}
+    .pd-profile.persona-layout .pd-profile-img{order:-1;}
+    /* 전체폭이면 3:4 비율 때문에 세로로 너무 길어집니다 */
+    .pd-profile-img{width:100%;max-width:150px;justify-self:center;}
+    .pd-name-input{width:100%;font-size:14px;}
+
+    /* 말풍선: 왼쪽은 꼬리가 좌상단, 오른쪽은 우상단.
+       기본 규칙이 .speech-bubble.char-bubble 처럼 두 겹이라 여백을 되돌리려면
+       같은 굵기로 지정해야 합니다 (안 그러면 위아래로 10px 어긋납니다). */
+    .speech-bubble{padding:9px 12px;font-size:11px;}
+    .speech-bubble.char-bubble,
+    .speech-bubble.persona-bubble{margin:0;text-align:left;}
+    .speech-bubble.persona-bubble::before{top:-5px;bottom:auto;right:22px;left:auto;
+      border:none;border-left:1px solid var(--border);border-top:1px solid var(--border);}
+
+    /* Relationship 은 데스크톱과 같이 가로로 나란히 */
+    .pd-relationship{flex-direction:row;gap:8px;margin:18px 0 20px;}
+    .rel-box{padding:10px 8px;}
+    .rel-text{font-size:11px;}
+    .rel-icon{transform:none;font-size:14px;}
 
     /* ---------- 갤러리 ----------
        5열 15장 -> 3열 9장 (JS 의 galleryPerPage() 와 짝을 맞춥니다) */
@@ -711,10 +742,11 @@
       scrollbar-width:none;-ms-overflow-style:none;}
     .gallery-folder-bar::-webkit-scrollbar{display:none;height:0;}
     .gallery-folder-tab,.gallery-folder-add{flex:none;white-space:nowrap;}
-    .gallery-folder-tab{padding:13px 12px;font-size:11px;}
-    body.logged-in .gallery-folder-tab{padding:13px 8px 13px 12px;}
-    .gallery-folder-add{padding:13px 12px;}
-    .gallery-folder-rename{padding:4px 6px;font-size:12px;}
+    /* 데스크톱과 같은 비율(위아래 5px)로 되돌립니다 — 칸이 세로로 길어 보였습니다 */
+    .gallery-folder-tab{padding:5px 10px;font-size:10.5px;}
+    body.logged-in .gallery-folder-tab{padding:5px 6px 5px 10px;}
+    .gallery-folder-add{padding:5px 10px;font-size:10.5px;}
+    .gallery-folder-rename{padding:2px 4px;font-size:11px;}
 
     /* ---------- LOG / 타임라인 ---------- */
     .log-entry{padding:13px 12px;}
@@ -739,34 +771,23 @@
     .btn-primary,.btn-ghost{min-height:40px;padding:9px 13px;}
     .add-card-mini{width:34px;height:34px;font-size:16px;}
 
-    /* ---------- iOS 입력창 확대 방지 ----------
-       Safari 는 16px 미만 입력창에 포커스하면 화면을 강제로 확대합니다. */
+    /* ---------- 글자 크기 ----------
+       처음엔 iOS 의 입력창 강제 확대를 막으려고 전부 16px 로 올렸는데
+       읽기 불편할 만큼 커져서 되돌렸습니다. 데스크톱(12.5px)보다 아주 조금만
+       키워 손가락으로 찍기 편한 정도로 맞춥니다.
+       대신 아이폰에서 입력칸을 누르면 화면이 잠깐 확대됩니다 — 손가락 두 개로
+       오므리면 돌아옵니다. 확대를 막으려면 글자를 16px 로 되돌리거나 화면
+       확대 자체를 꺼야 하는데, 둘 다 이보다 불편합니다. */
     .form-row input[type=text],.form-row input[type=url],.form-row input[type=date],
     .form-row input[type=password],.form-row input[type=email],
     .form-row textarea,.form-row select,
     .log-editor,.arc-editor,#arcCodeInput,
-    .profile-name,.profile-bio,.pd-input{font-size:16px;}
-    .profile-bio{height:52px;}
+    .profile-name,.pd-input{font-size:13px;}
+    .profile-bio{font-size:12px;height:46px;}
     .form-row input[type=text],.form-row input[type=password],
-    .form-row input[type=email],.form-row select{padding:10px;}
-    /* 읽는 글자는 12.5px 로는 폰에서 너무 작습니다 */
-    .profile-view-text,.arc-view-content{font-size:14px;line-height:1.6;}
+    .form-row input[type=email],.form-row select{padding:9px 10px;}
+    .profile-view-text,.arc-view-content{font-size:12.5px;line-height:1.55;}
     .arc-view-content,.log-editor,.arc-editor{overflow-wrap:anywhere;}
-
-    /* 본문에 직접 타이핑하는 칸들(정보행, 말풍선, 관계, 타임라인, 카드 글귀)은
-       보기 모드에서는 원래 크기를 유지하고, 편집 모드에서만 16px 로 올립니다.
-       방문자 화면 디자인은 그대로 두면서 관리자가 폰에서 글을 고칠 때만
-       iOS 의 강제 확대를 피하기 위함입니다. */
-    body.logged-in .pd-subtitle-input,
-    body.logged-in .meta-label,body.logged-in .meta-value,
-    body.logged-in .kw-text,
-    body.logged-in .speech-bubble,
-    body.logged-in .rel-label,body.logged-in .rel-text,
-    body.logged-in .tl-title,body.logged-in .tl-content,
-    body.logged-in .home-intro,
-    body.logged-in .profile-view-text,
-    body.logged-in .dream-card .dc-genre,body.logged-in .dream-card .dc-catch,
-    body.logged-in .dream-card .dc-desc{font-size:16px;}
 
     /* ---------- 라이트박스 ---------- */
     .lightbox{gap:0;}
@@ -802,7 +823,23 @@
     .pd-title-input{font-size:16px;margin-top:8px;}
   }
 
-  /* 드래그(길게 눌러 끌기) 중에는 화면이 같이 스크롤되지 않게 JS 가 body 에 붙입니다 */
-  body.touch-dragging{overflow:hidden;touch-action:none;}
+  /* 길게 눌러 드래그할 때 글자가 같이 선택되는(파랗게 잡히는) 문제 —
+     터치 기기에서 길게 누르면 브라우저가 먼저 텍스트 선택을 시작해버립니다.
+     아래는 글자를 선택할 일이 없는 순수 UI 라서 기기를 가리지 않고 꺼둡니다.
+     (썸네일, 화살표, 각종 탭/버튼, 정보행의 :: 손잡이) */
+  .gallery-thumb,.gallery-thumb *,.gallery-scroll-hint,
+  .gallery-folder-tab,.gallery-folder-add,.pd-index-tab,
+  .nav-item,.nav-sub-item,.meta-drag,.gallery-check,.post-check{
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
+  /* 카드는 편집 모드에서만 드래그 대상이 되므로 그때만 끕니다.
+     보기 모드에서는 카드 글귀를 복사할 수 있어야 합니다. */
+  body.logged-in .dream-card{
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
+  /* 글을 고치는 칸은 당연히 선택할 수 있어야 합니다 */
+  body.logged-in .dream-card [contenteditable="true"]{
+    -webkit-user-select:text;user-select:text;-webkit-touch-callout:default;}
+  /* 드래그 중에는 화면이 같이 스크롤되거나 글자가 잡히지 않게 JS 가 body 에 붙입니다 */
+  body.touch-dragging{overflow:hidden;touch-action:none;
+    -webkit-user-select:none;user-select:none;}
   .touch-drag-ghost{position:fixed;z-index:900;pointer-events:none;opacity:.85;
     box-shadow:0 8px 24px rgba(0,0,0,.35);transform-origin:center;}
