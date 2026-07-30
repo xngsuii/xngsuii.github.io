@@ -22,7 +22,7 @@ import {
   getFirestore, doc, getDoc, setDoc, deleteDoc,
   collection, getDocs, writeBatch
 } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
-import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=2';
+import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=3';
 
 const app  = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -71,7 +71,13 @@ const BLOB_REF  = /^blob:\/\/([a-f0-9]{32})$/;
    긴 변 기준으로 줄이고 화질을 낮춰가며 목표 크기에 맞춥니다.
    GIF는 움직임이 사라지므로 건드리지 않습니다.
    ------------------------------------------------------------ */
-export async function compressImage(file, maxDim = 1600, targetChars = 600000) {
+/* maxDim / targetChars 를 올리면 저장 용량이 늘어나는 대신 선명해집니다.
+   큰 데이터는 아래 writeBlob 이 조각내어 저장하므로 문서 크기 제한에는 걸리지 않습니다.
+   원본이 가장 크게 표시되는 곳은 페어 상세 배너(718px)와 아카이브 라이트박스이므로
+   1800px면 충분합니다. 썸네일 계단 현상은 해상도가 아니라 축소 방식 문제였고
+   main.js 의 downscaleThumb 이 담당하므로, 여기서 원본을 더 키울 이유는 없습니다.
+   화질이 뭉개지지 않도록 최저 품질은 0.6으로 둡니다. */
+export async function compressImage(file, maxDim = 1800, targetChars = 900000) {
   const raw = () => new Promise((res, rej) => {
     const r = new FileReader();
     r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file);
@@ -107,10 +113,10 @@ export async function compressImage(file, maxDim = 1600, targetChars = 600000) {
   let cw = w, ch = h, out = '';
   for (let round = 0; round < 4; round++) {
     const canvas = draw(cw, ch, true);
-    let q = 0.85;
+    let q = 0.92;
     out = canvas.toDataURL('image/jpeg', q);
-    while (out.length > targetChars && q > 0.4) {
-      q -= 0.1;
+    while (out.length > targetChars && q > 0.6) {
+      q -= 0.06;
       out = canvas.toDataURL('image/jpeg', q);
     }
     if (out.length <= targetChars) break;

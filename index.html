@@ -9,7 +9,7 @@
      css/js를 고칠 때마다 이 숫자를 함께 올려주세요.
      올리지 않으면 브라우저가 옛 파일을 계속 써서
      새 HTML과 짝이 맞지 않아 화면이 깨질 수 있습니다. -->
-<link rel="stylesheet" href="css/style.css?v=2" />
+<link rel="stylesheet" href="css/style.css?v=3" />
 </head>
 <body>
 <div class="app-window">
@@ -231,6 +231,7 @@
           <div class="gallery-grid-wrap" id="galleryGridWrap">
             <div class="gallery-scroll-hint up" id="galleryScrollHintUp" style="display:none;">︽</div>
             <div class="gallery-grid" id="galleryGrid"></div>
+            <div class="gallery-empty-msg" id="galleryEmptyMsg" style="display:none;">등록된 이미지가 없어요.</div>
             <div class="gallery-scroll-hint" id="galleryScrollHint" style="display:none;">︾</div>
           </div>
           <div class="gallery-fab-row">
@@ -391,7 +392,7 @@
 </div>
 
 
-<script src="js/main.js?v=2"></script>
-<script type="module" src="js/firebase-store.js?v=2"></script>
+<script src="js/main.js?v=3"></script>
+<script type="module" src="js/firebase-store.js?v=3"></script>
 </body>
 </html>

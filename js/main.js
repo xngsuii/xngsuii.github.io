@@ -206,6 +206,82 @@ function renderAll(){
 }
 
 /* ============================================================
+   THUMBNAIL DOWNSCALE CACHE
+   원본은 830~1800px인데 갤러리 썸네일 박스는 124px, 프로필은 144px이다.
+   브라우저는 이런 큰 배율(5~7배)의 축소를 한 번에 처리하면서 단순 필터를 써
+   계단 현상이 생긴다. 캔버스에서 2배씩 나눠 줄이면 픽셀이 평균화되어 매끄럽다.
+   표시용으로만 쓰고 저장값(state)은 항상 원본을 유지한다.
+   ============================================================ */
+const thumbCache = new Map();   // src(원본 문자열 참조) -> Map(bucket -> 축소본)
+const THUMB_BUCKET = 64;        // 캐시 항목이 무한정 늘지 않도록 목표 크기를 64px 단위로 묶는다
+
+function thumbRemember(src, bucket, val){
+  if(thumbCache.size > 300) thumbCache.clear();   // 오래 보다가 무한정 쌓이는 것 방지
+  let slot = thumbCache.get(src);
+  if(!slot){ slot = new Map(); thumbCache.set(src, slot); }
+  slot.set(bucket, val);   // null(=원본 사용)도 기억해야 확대/드래그 중 매번 다시 디코딩하지 않는다
+  return val;
+}
+
+function downscaleThumb(src, wantPx){
+  // 실제 필요한 픽셀 = 표시 폭 × 화면 배율, 여기에 창 크기 변화 대비 25% 여유
+  const need = wantPx * (window.devicePixelRatio||1) * 1.25;
+  const bucket = Math.max(THUMB_BUCKET, Math.ceil(need/THUMB_BUCKET)*THUMB_BUCKET);
+  const per = thumbCache.get(src);
+  if(per && per.has(bucket)) return Promise.resolve(per.get(bucket));
+  return new Promise(resolve=>{
+    const img = new Image();
+    img.onload = ()=>{
+      let w = img.naturalWidth, h = img.naturalHeight;
+      // 축소 폭이 크지 않으면 원본이 더 낫다
+      if(Math.min(w,h) <= bucket*1.25){ resolve(thumbRemember(src, bucket, null)); return; }
+      let cur = img;
+      const step = (tw,th)=>{
+        const cv = document.createElement('canvas');
+        cv.width = tw; cv.height = th;
+        const cx = cv.getContext('2d');
+        cx.imageSmoothingEnabled = true;
+        cx.imageSmoothingQuality = 'high';
+        cx.drawImage(cur, 0, 0, tw, th);
+        cur = cv; w = tw; h = th;
+      };
+      while(Math.min(w,h)/2 >= bucket) step(Math.round(w/2), Math.round(h/2));
+      const ratio = bucket/Math.min(w,h);
+      if(ratio < 1) step(Math.max(1,Math.round(w*ratio)), Math.max(1,Math.round(h*ratio)));
+      let out;
+      try{ out = cur.toDataURL('image/jpeg', 0.9); }catch(e){ resolve(thumbRemember(src, bucket, null)); return; }
+      resolve(thumbRemember(src, bucket, out));
+    };
+    img.onerror = ()=> resolve(null);
+    img.src = src;
+  });
+}
+
+/* 원본을 먼저 깔고, 축소본이 준비되면 교체한다(첫 렌더만 비동기, 이후 캐시 즉시 반영)
+   boxPx를 생략하면 요소의 실제 폭을 재서 쓴다. 숨은 화면(다른 뷰/닫힌 모달)에서는
+   폭이 0이라 판단할 수 없으므로 폭이 잡히는 시점까지만 짧게 다시 시도한다. */
+let thumbToken = 0;
+function applyThumbBg(el, src, boxPx){
+  if(!src) return;
+  const px = boxPx || el.clientWidth;
+  if(!px){
+    el._thumbTries = (el._thumbTries||0) + 1;
+    if(el._thumbTries <= 20) setTimeout(()=>{ if(el.isConnected) applyThumbBg(el, src); }, 32);
+    return;
+  }
+  el._thumbTries = 0;
+  // dataset이 아니라 JS 속성 — data URL을 DOM 속성에 쓰면 안 된다
+  el._thumbFor = src;
+  const token = el._thumbToken = ++thumbToken;
+  downscaleThumb(src, px).then(url=>{
+    if(!url || !el.isConnected) return;
+    // 그 사이 다시 렌더/확대된 경우(늦게 도착한 이전 요청) 무시
+    if(el._thumbFor !== src || el._thumbToken !== token) return;
+    el.style.backgroundImage = `url('${url}')`;
+  });
+}
+
+/* ============================================================
    REUSABLE ADJUSTABLE IMAGE COMPONENT
    ============================================================ */
 function createAdjustable(container, getObj, setObj, opts={}){
@@ -214,10 +290,27 @@ function createAdjustable(container, getObj, setObj, opts={}){
   const changeBtn = container.querySelector('.adj-change');
   let dragging=false, startX,startY,startPX,startPY, panelEl=null;
 
+  // 모달 안의 박스는 닫혀 있을 때 clientWidth가 0이라 어느 크기의 축소본이 필요한지 알 수 없다.
+  // 폭이 잡히는 프레임까지만 짧게 다시 시도한다.
+  // requestAnimationFrame은 탭이 백그라운드면 아예 실행되지 않으므로 setTimeout을 쓴다
+  let thumbRetries = 0;
+  function retryThumbWhenSized(){
+    if(thumbRetries > 20) return;
+    thumbRetries++;
+    setTimeout(()=>{
+      if(container.clientWidth) paint();
+      else retryThumbWhenSized();
+    }, 32);
+  }
+
   function paint(){
     const o = getObj() || blankImg();
     if(o.src){
       layer.style.backgroundImage = `url(${o.src})`;
+      // background-size가 컨테이너 기준 %라서 축소본으로 바꿔도 확대/위치 값은 그대로 유효하다
+      const needPx = (container.clientWidth||0) * ((o.scale||100)/100);
+      if(needPx){ thumbRetries = 0; applyThumbBg(layer, o.src, needPx); }
+      else retryThumbWhenSized();
       layer.style.backgroundSize = (o.scale||100)+'% auto';
       layer.style.backgroundPosition = (o.x!=null?o.x:50)+'% '+(o.y!=null?o.y:50)+'%';
       if(emptyBtn) emptyBtn.style.display='none';
@@ -572,6 +665,10 @@ function renderPairPosts(){
       }
     });
     grid.appendChild(el);
+    // 목록 썸네일도 표시용 축소본으로 (박스는 250px 안팎, 원본은 800px대).
+    // 붙인 뒤에 호출해야 실제 폭을 잴 수 있다.
+    const thumbSrc = p.headerImage && p.headerImage.src;
+    if(thumbSrc) applyThumbBg(el.querySelector('.post-thumb'), thumbSrc);
   });
 }
 
@@ -583,6 +680,13 @@ function openPairDetail(id){
   const p=getCurrentPost();
   fillPairDetail(p);
   openModal('modalPairDetail');
+  // 모달이 열려 레이아웃이 잡힌 뒤 한 번 더 그린다 — 숨겨진 상태에서는 컨테이너 폭이 0이라
+  // 어느 크기의 축소본을 쓸지 판단할 수 없다 (rAF는 백그라운드 탭에서 실행되지 않아 setTimeout 사용)
+  setTimeout(()=>{
+    if(pdCharImgAdj) pdCharImgAdj.paint();
+    if(pdPersonaImgAdj) pdPersonaImgAdj.paint();
+    if(pdHeaderImgAdj) pdHeaderImgAdj.paint();
+  });
 }
 
 let pdCharImgAdj=null, pdPersonaImgAdj=null, pdHeaderImgAdj=null;
@@ -1150,6 +1254,8 @@ function animateGalleryPageChange(direction, applyChange){
   void wrap.offsetWidth;  // 강제 리플로우로 트랜지션 재적용
 
   const tr = `transform ${GALLERY_SLIDE_MS}ms ${GALLERY_EASE}`;
+  grid.style.willChange  = 'transform';
+  ghost.style.willChange = 'transform';
   grid.style.transition  = tr;
   ghost.style.transition = tr;
   grid.style.transform   = 'translateY(0)';
@@ -1159,6 +1265,7 @@ function animateGalleryPageChange(direction, applyChange){
     ghost.remove();
     grid.style.transition = '';
     grid.style.transform  = '';
+    grid.style.willChange = '';   // 레이어를 풀어 이미지 선명도 회복
     galleryTransitioning = false;
   }, GALLERY_SLIDE_MS);
 }
@@ -1183,13 +1290,27 @@ function renderGallery(p){
   const grid=document.getElementById('galleryGrid'); grid.innerHTML='';
   const hint = document.getElementById('galleryScrollHint');
   const hintUp = document.getElementById('galleryScrollHintUp');
+  const emptyMsg = document.getElementById('galleryEmptyMsg');
   const folder = getFolder(p, currentGalleryFolderId);
+
+  /* 이미지 수와 무관하게 격자 크기를 일정하게 유지하는 빈 자리.
+     덕분에 첫 이미지는 항상 좌상단 같은 위치에서 시작합니다. */
+  const fillSlots = (count)=>{
+    for(let i=0;i<count;i++){
+      const slot=document.createElement('div');
+      slot.className='gallery-slot';
+      grid.appendChild(slot);
+    }
+  };
+
   if(!folder || folder.images.length===0){
-    grid.innerHTML='<div class="empty-note">등록된 이미지가 없어요.</div>';
-    if(hint) hint.style.display='none';
-    if(hintUp) hintUp.style.display='none';
+    fillSlots(GALLERY_PER_PAGE);
+    if(emptyMsg) emptyMsg.style.display='block';
+    setGalleryHint(hint, false);
+    setGalleryHint(hintUp, false);
     return;
   }
+  if(emptyMsg) emptyMsg.style.display='none';
 
   const perPage=GALLERY_PER_PAGE;
   const totalPages=galleryTotalPages(folder);
@@ -1202,6 +1323,7 @@ function renderGallery(p){
     const idx = start+i;
     const key = folder.id+'::'+idx;
     const el=document.createElement('div'); el.className='gallery-thumb'; el.style.backgroundImage=`url('${src}')`;
+    applyThumbBg(el, src, 128);   // 실측 박스 123.6px
     el.dataset.key = key;
     if(gallerySelectMode){
       const checked = gallerySelectedIdx.has(key);
@@ -1253,9 +1375,17 @@ function renderGallery(p){
     });
   });
 
-  // 아래/위로 넘길 페이지가 남아있을 때만 각 방향 힌트를 표시
-  if(hint) hint.style.display = (totalPages>1 && galleryPage<totalPages) ? 'block' : 'none';
-  if(hintUp) hintUp.style.display = (totalPages>1 && galleryPage>1) ? 'block' : 'none';
+  // 마지막 페이지처럼 이미지가 덜 찬 경우에도 격자 높이를 유지
+  fillSlots(perPage - pageImages.length);
+
+  // 화살표는 항상 두고, 넘길 페이지가 없는 방향만 비활성(회색·애니메이션 없음)으로
+  setGalleryHint(hint,   totalPages>1 && galleryPage<totalPages);
+  setGalleryHint(hintUp, totalPages>1 && galleryPage>1);
+}
+function setGalleryHint(el, active){
+  if(!el) return;
+  el.style.display='block';
+  el.classList.toggle('disabled', !active);
 }
 function updateGallerySelectCount(){
   const info=document.getElementById('gallerySelectInfo');
@@ -1487,6 +1617,7 @@ function renderArcLightbox(){
     const t=document.createElement('div');
     t.className='arc-lb-thumb'+(i===arcLbIndex?' active':'');
     t.style.backgroundImage=`url('${src}')`;
+    applyThumbBg(t, src, 64);   // .arc-lb-thumb 는 64x64 고정
     t.addEventListener('click', ()=>{ arcLbIndex=i; renderArcLightbox(); });
     thumbs.appendChild(t);
   });
@@ -1700,6 +1831,9 @@ function renderArchive(){
     wrap.innerHTML = `<div class="arc-nai-grid">${cells}</div>${totalPages>1?`<div class="log-pagination">${pag}</div>`:''}`;
     wrap.querySelectorAll('.arc-nai-thumb[data-abs]').forEach(el=>{
       el.addEventListener('click', ()=> openArcView(items[Number(el.dataset.abs)]));
+      // 6열 격자라 칸이 100px 안팎인데 원본은 800px대다 — 표시용 축소본으로 교체
+      const src = extractFirstImage(items[Number(el.dataset.abs)].content);
+      if(src) applyThumbBg(el, src);
     });
   }else{
     let rows='';
