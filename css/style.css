@@ -97,15 +97,20 @@
   .home-intro:empty:before{content:'소개글을 입력하세요...';color:var(--text-muted);}
   .to-cards-btn{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);width:36px;height:36px;border-radius:0;border:1px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;}
 
-  .cards-topbar{position:sticky;top:0;background:rgba(244,241,234,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:12px 28px;display:flex;align-items:center;gap:10px;z-index:5;}
+  /* 아이콘 칸을 정사각형으로 만들고 구분선을 바 높이만큼 세우기 위해
+     왼쪽 패딩을 없애고 align-items:stretch 로 자식들이 바 높이를 물려받게 합니다. */
+  .cards-topbar{position:sticky;top:0;background:rgba(244,241,234,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:0 28px 0 0;display:flex;align-items:stretch;gap:0;z-index:5;min-height:50px;}
   .to-intro-btn{width:28px;height:28px;border-radius:0;border:1px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:13px;}
   .cards-topbar h3{font-family:var(--mono);font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin:0;flex:1;}
-  .li-title{display:flex;align-items:center;gap:12px;}
-  .li-icon{font-size:16px;color:var(--text);flex:none;}
-  .li-divider{width:1px;height:20px;background:var(--border);flex:none;}
+  .li-title{display:flex;align-items:stretch;gap:0;}
+  /* 아이콘 칸: 바 높이와 같은 변을 가진 정사각형 */
+  .li-icon{flex:none;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text);}
+  /* 구분선: 위/아래 보더에 맞닿도록 세로로 꽉 채움 */
+  .li-divider{width:1px;background:var(--border);flex:none;}
+  .li-label{display:flex;align-items:center;padding-left:14px;}
   .cards-section{padding:0;}
   .card-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:0;border-left:1px solid var(--border);}
-  .add-card-mini{width:26px;height:26px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;display:flex;align-items:center;justify-content:center;flex:none;}
+  .add-card-mini{width:26px;height:26px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;display:flex;align-items:center;justify-content:center;flex:none;align-self:center;}
   .add-card-mini:hover{background:var(--surface-2);}
   .add-card{border:none;border-right:1px solid var(--border);border-bottom:1px solid var(--border);aspect-ratio:2.5/1;display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--text-muted);background:var(--surface);}
   .add-card:hover{background:var(--surface-2);color:var(--text);}
@@ -144,7 +149,14 @@
 
   /* ---- Archive ---- */
   .archive-toolbar{display:flex;gap:8px;padding:16px 28px 0;}
-  .archive-body{padding:20px 28px 60px;display:flex;flex-direction:column;gap:14px;}
+  /* ARCHIVE 는 남은 높이를 격자/표가 나눠 쓰고 페이지 버튼이 하단에 고정되도록
+     세로 flex 로 잡는다. (.view.active 가 display:block 이므로 여기서 덮어씀) */
+  #view-archive.active{display:flex;flex-direction:column;min-height:0;}
+  /* 아래 여백은 페이지 버튼과 검색창 사이 간격이 됩니다(20px→10px).
+     줄어든 10px 은 flex:1 인 격자/표가 그대로 가져가므로 썸네일이 그만큼 높아집니다. */
+  .archive-body{padding:20px 28px 10px;display:flex;flex-direction:column;gap:14px;flex:1;min-height:0;}
+  /* OOC/ETC 표는 길어지면 표 영역만 스크롤 (페이지 버튼은 아래에 고정) */
+  .archive-table-scroll{flex:1;min-height:0;overflow-y:auto;}
   .arc-item{border:1px solid var(--border);border-radius:var(--radius);padding:14px;position:relative;background:var(--bg);}
   .arc-item .arc-del{position:absolute;top:8px;right:8px;background:none;border:none;color:var(--text-muted);font-size:12px;align-items:center;}
   .arc-text{font-size:13px;line-height:1.6;white-space:pre-wrap;}
@@ -179,14 +191,17 @@
   .login-error{font-size:11.5px;color:#e0483f;margin-top:-4px;margin-bottom:10px;display:none;}
 
   /* ---- Pair detail (layout-first, inline editable) ---- */
-  .pd-title-input{font-family:var(--mono);font-size:20.7px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;border:none;outline:none;width:100%;margin:2px 0 0;color:var(--text);background:transparent;}
+  .pd-title-input{font-family:var(--mono);font-size:20.7px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;border:none;outline:none;width:100%;margin:20px 0 0;color:var(--text);background:transparent;}
   .pd-subtitle-input{font-family:var(--mono);font-size:11px;border:none;outline:none;width:100%;margin:0 0 6px;color:var(--text-muted);background:transparent;}
   .pd-modal-wrap{position:relative;display:flex;align-items:flex-start;}
   .pd-index-tabs{position:absolute;right:100%;top:70px;display:flex;flex-direction:column;}
   .pd-index-tab{width:98px;box-sizing:border-box;background:var(--page-bg);color:#fff;border:1px solid #000;border-right:none;padding:14px 12px;font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.06em;margin-bottom:6px;text-align:right;opacity:.82;}
   .pd-index-tab:hover{opacity:1;}
   .pd-index-tab.active{opacity:1;}
-  .pd-tab-content{flex:1;min-width:0;padding:18px 4px 18px 0;height:600px;overflow-y:auto;box-sizing:border-box;}
+  /* 제목을 헤더에서 20px 떨어뜨린 만큼 높이에서 되돌려 모달 전체 높이는 그대로 둡니다.
+     대신 위아래 안쪽 여백을 18px→8px 로 줄여(높이는 border-box 라 그대로) 20px 을
+     다시 확보하므로, GALLERY 격자 간격과 LOG 목록 높이는 이전과 같습니다. */
+  .pd-tab-content{flex:1;min-width:0;padding:8px 4px 8px 0;height:580px;overflow-y:auto;box-sizing:border-box;}
   .modal.pd-modal, .pd-tab-content, .log-table-scroll{scrollbar-width:none;-ms-overflow-style:none;}
   .modal.pd-modal::-webkit-scrollbar, .pd-tab-content::-webkit-scrollbar, .log-table-scroll::-webkit-scrollbar{display:none;width:0;height:0;}
   .pd-tab-pane{display:none;}
@@ -194,17 +209,26 @@
   .pd-tab-pane-log.active{display:flex;flex-direction:column;height:100%;}
   .log-pane-toolbar{display:flex;justify-content:flex-end;margin-bottom:10px;flex:none;}
   /* 게시글 검색 (보기 모드 전용) */
-  .log-search{display:flex;gap:6px;margin-bottom:10px;flex:none;}
+  /* 검색창은 페이지 버튼 아래, 가로 가운데에 놓입니다 */
+  .log-search{display:flex;justify-content:center;gap:6px;margin-top:10px;flex:none;}
   body.logged-in .log-search{display:none;}
   .log-search select,.log-search input{border:1px solid var(--border);border-radius:0;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:10.5px;padding:5px 7px;outline:none;}
   .log-search select{flex:none;}
-  .log-search input{flex:1;min-width:0;}
+  /* 날짜와 달력 아이콘 사이가 벌어지지 않을 만큼만 */
+  .log-search input[type=date]{flex:none;width:104px;padding-right:4px;}
+  /* 기본은 이 폭을 쓰되, 창이 좁아지면 줄어들도록(넘치지 않도록) 합니다 */
+  .log-search input[type=text]{flex:0 1 325px;min-width:0;width:auto;}
+  .archive-search input[type=text]{flex:0 1 425px;}
+  /* ARCHIVE 검색창은 본문 바깥(아래)에 있으므로 좌우 여백을 본문과 맞춥니다 */
+  .archive-search{margin:0 28px 20px;}
   .log-search button{border:1px solid var(--border);background:var(--bg);color:var(--text-muted);font-size:10px;padding:0 8px;flex:none;}
   .log-search button:hover{background:var(--surface-2);color:var(--text);}
   .pd-tab-pane-log .log-list{flex:1;min-height:0;display:flex;flex-direction:column;}
   .log-table-scroll{flex:1;min-height:0;overflow-y:auto;}
   .log-table-scroll table{width:100%;}
-  .pd-info-grid{display:grid;grid-template-columns:1fr 260px;gap:20px;align-items:start;}
+  /* 보기 모드의 LOG 탭에서 제목 아래 표 머리글(NO/LOG/DATE)까지의 간격과 같게 맞춥니다.
+     (LOG 는 ＋게시글 추가 줄이 보기 모드에서 사라지고 아래 여백 10px 만 남습니다) */
+  .pd-info-grid{display:grid;grid-template-columns:1fr 260px;gap:20px;align-items:start;margin-top:10px;}
   .pd-section{margin-bottom:22px;}
   .pd-section h4{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin:0 0 24px;padding-bottom:8px;border-bottom:1px solid var(--border);}
   .pd-profile-tag{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--accent);margin:14px 0 8px;text-transform:uppercase;}
@@ -252,6 +276,8 @@
   .arc-attach-item .arc-attach-del{border:none;background:none;color:var(--text-muted);font-size:11px;flex:none;}
   .arc-view-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:2px;padding-right:36px;}
   .arc-view-head h3{margin:0;}
+  /* LOG 게시글 보기: 제목과 게시일 간격을 ARCHIVE 와 동일하게(2px) */
+  #modalLogView h3{margin:0 0 2px;padding-right:36px;}
   .arc-kebab-btn{position:absolute;top:14px;right:48px;background:rgba(244,241,234,.9);border:1px solid var(--border);width:26px;height:26px;display:none;align-items:center;justify-content:center;font-size:15px;color:var(--text);z-index:10;}
   body.logged-in .arc-kebab-btn{display:flex;}
   .arc-kebab-menu{position:absolute;top:44px;right:14px;background:var(--bg);border:1px solid var(--border);display:none;flex-direction:column;z-index:11;min-width:120px;box-shadow:0 4px 14px rgba(0,0,0,.15);}
@@ -283,7 +309,7 @@
     line-height:1;letter-spacing:.02em;text-align:center;padding:0 5px;margin:0;flex:1;min-height:14px;
     display:flex;align-items:center;justify-content:center;}
   /* 본문 구분선 */
-  .log-editor hr,.arc-view-content hr{border:none;border-top:1px solid var(--border);margin:12px 0;}
+  .log-editor hr,.arc-view-content hr,.arc-editor hr{border:none;border-top:1px solid var(--border);margin:12px 0;}
   .rt-toolbar-log{margin-bottom:0;border:1px solid var(--border);border-bottom:none;padding:5px 6px;background:var(--surface);}
   .log-editor{min-height:160px;border:1px solid var(--border);padding:10px;overflow-y:auto;max-height:320px;}
   body.logged-in .log-editor{border:1px solid var(--border);}
@@ -323,8 +349,13 @@
   body.logged-in .rel-text{border:1px solid var(--border);border-radius:0;padding:6px;}
   .rel-icon{align-self:center;font-size:16px;color:var(--accent);}
 
-  .gallery-folder-bar{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;}
-  .gallery-folder-tab{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;font-weight:700;border:1px solid var(--border);background:var(--bg);color:var(--text-muted);padding:5px 6px 5px 10px;}
+  /* 위 여백(6px) + 폴더 영역 + 아래 여백(13px). 위아래 여백 합이 19px 로 고정이라
+     폴더바만 내려가고 아래 이미지 격자는 움직이지 않습니다. */
+  .gallery-folder-bar{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;margin-bottom:13px;}
+  /* 편집 모드에서는 오른쪽 ✎ 버튼 자리를 두고, 보기 모드에서는 좌우 여백을 같게 해
+     폴더 이름이 칸 가운데 오도록 합니다. */
+  .gallery-folder-tab{display:inline-flex;align-items:center;justify-content:center;gap:6px;font-family:var(--mono);font-size:10.5px;font-weight:700;border:1px solid var(--border);background:var(--bg);color:var(--text-muted);padding:5px 10px;}
+  body.logged-in .gallery-folder-tab{padding:5px 6px 5px 10px;}
   .gallery-folder-tab.active{background:var(--text);color:var(--bg);border-color:var(--text);}
   .gallery-folder-tab:hover{background:var(--surface-2);}
   .gallery-folder-tab.active:hover{background:var(--text);}
@@ -332,6 +363,33 @@
   .gallery-folder-rename{border:none;background:none;color:inherit;font-size:10px;opacity:.7;padding:0 2px;}
   .gallery-folder-rename:hover{opacity:1;}
   .gallery-folder-add{font-family:var(--mono);font-size:10.5px;font-weight:700;border:1px dashed var(--accent);background:var(--bg);color:var(--accent);padding:5px 10px;}
+  /* 비밀 폴더 표시 — 이름 앞 자물쇠 */
+  .gf-lock{font-size:9.5px;line-height:1;flex:none;}
+
+  /* 폴더 추가/수정 모달 */
+  .modal.gf-modal{max-width:420px;}
+  .gf-option{border:1px solid var(--border);background:var(--surface);padding:10px 12px;margin-bottom:10px;}
+  .gf-switch{display:flex;align-items:center;gap:9px;cursor:pointer;margin:0;}
+  .gf-switch input{position:absolute;opacity:0;width:0;height:0;}
+  .gf-switch-track{width:34px;height:18px;flex:none;border:1px solid var(--border);background:var(--bg);position:relative;transition:background .15s;}
+  .gf-switch-knob{position:absolute;top:2px;left:2px;width:12px;height:12px;background:var(--text-muted);transition:left .15s, background .15s;}
+  .gf-switch input:checked + .gf-switch-track{background:var(--accent);border-color:var(--accent);}
+  .gf-switch input:checked + .gf-switch-track .gf-switch-knob{left:18px;background:#fff;}
+  .gf-switch input:focus-visible + .gf-switch-track{outline:2px solid var(--accent);outline-offset:2px;}
+  .gf-switch-label{font-size:12px;font-weight:700;color:var(--text);}
+  .gf-hint{font-size:10.5px;color:var(--text-muted);margin-top:6px;line-height:1.5;}
+  .gf-pw-row{margin-top:8px;margin-bottom:0;}
+  .gf-actions{align-items:center;}
+  .gf-actions-spacer{flex:1;}
+  .gf-danger{color:#c0392b;border-color:#c0392b;}
+  .gf-danger:hover{background:#c0392b;color:#fff;}
+  .gf-delete-warn{font-size:11px;color:#c0392b;line-height:1.5;margin-bottom:8px;}
+
+  /* 비밀 폴더 잠김 화면 */
+  .gallery-locked{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    display:flex;flex-direction:column;align-items:center;gap:10px;z-index:3;}
+  .gallery-locked .gl-icon{font-size:26px;line-height:1;}
+  .gallery-locked .gl-text{font-size:12.5px;color:var(--text-muted);}
   .gallery-select-info{font-family:var(--mono);font-size:10.5px;color:var(--text-muted);margin-bottom:8px;}
   .pd-tab-pane-gallery.active{display:flex;flex-direction:column;height:100%;position:relative;}
   /* 위/아래 힌트 화살표가 썸네일을 가리지 않도록 여백을 확보하고,
@@ -345,12 +403,20 @@
      썸네일과의 간격이 위아래 대칭으로 맞습니다. */
   .gallery-scroll-hint{position:absolute;left:50%;bottom:4px;transform:translateX(-50%);color:var(--accent);font-size:26px;font-weight:900;line-height:1;-webkit-text-stroke:1.5px var(--accent);text-shadow:0 1px 0 var(--accent),0 2px 4px rgba(0,0,0,.25);animation:gallery-bounce 1.4s infinite;pointer-events:none;z-index:4;}
   @keyframes gallery-bounce{0%,100%{transform:translate(-50%,0);}50%{transform:translate(-50%,4px);}}
-  /* 위쪽 페이지가 있을 때 상단에 뜨는 힌트 */
-  .gallery-scroll-hint.up{top:4px;bottom:auto;animation:gallery-bounce-up 1.4s infinite;}
+  /* 위쪽 페이지가 있을 때 상단에 뜨는 힌트.
+     ︽ 와 ︾ 는 같은 26px 상자 안에서 글자가 그려지는 높이가 7px 다릅니다
+     (︽ 는 상자 아래쪽에 3.5px 여백, ︾ 는 상자 위로 3.5px 넘쳐 그려짐).
+     그래서 상자를 똑같이 4px 씩 띄우면 위 간격만 7px 넓어 보입니다.
+     위쪽 힌트를 7px 내려 실제로 보이는 간격을 위아래 같게 맞춥니다. */
+  .gallery-scroll-hint.up{top:11px;bottom:auto;animation:gallery-bounce-up 1.4s infinite;}
   @keyframes gallery-bounce-up{0%,100%{transform:translate(-50%,0);}50%{transform:translate(-50%,-4px);}}
   /* 넘길 페이지가 없을 때도 화살표는 그대로 두고, 애니메이션 없이 회색으로 비활성 표시 */
   .gallery-scroll-hint.disabled, .gallery-scroll-hint.up.disabled{
     color:#b9b3a6;-webkit-text-stroke:1.5px #b9b3a6;text-shadow:none;animation:none;}
+  /* 이미지를 드래그하는 중에만 화살표가 드롭을 받을 수 있게 한다 */
+  body.gallery-dragging .gallery-scroll-hint:not(.disabled){pointer-events:auto;}
+  .gallery-scroll-hint.drop-target{color:var(--page-bg);-webkit-text-stroke:1.5px var(--page-bg);
+    animation:none;transform:translateX(-50%) scale(1.35);}
   /* will-change 를 상시 걸어두면 레이어가 미리 래스터화되어
      썸네일 배경 이미지가 거칠게(계단처럼) 보입니다.
      페이지 전환 중에만 JS에서 붙입니다. */
@@ -412,7 +478,13 @@
   /* 이미지가 없을 때: 썸네일 영역 정중앙에 한 줄로 */
   .gallery-empty-msg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
     color:var(--text-muted);font-size:12.5px;white-space:nowrap;pointer-events:none;z-index:3;}
-  .gallery-thumb{aspect-ratio:1/1;background:var(--surface-2) center/cover no-repeat;border-radius:8px;cursor:pointer;border:1px solid var(--border);}
+  .gallery-thumb{aspect-ratio:1/1;background:var(--surface-2);border-radius:8px;cursor:pointer;border:1px solid var(--border);position:relative;overflow:hidden;}
+  /* 이미지는 별도 레이어에 깔린다 — 블러를 보더 안쪽 이미지 영역에만 적용하기 위함 */
+  .gallery-thumb .gt-img{position:absolute;inset:0;background:center/cover no-repeat;}
+  /* '썸네일 흐리게' 옵션이 켜진 폴더 — 커서를 올리면 선명해짐.
+     살짝 확대해두면 블러가 가장자리를 갉아먹어 생기는 테두리 얼룩이 보이지 않는다. */
+  .gallery-thumb.blurred .gt-img{filter:blur(9px);transform:scale(1.14);transition:filter .18s ease, transform .18s ease;}
+  .gallery-thumb.blurred:hover .gt-img{filter:none;transform:none;}
   .lightbox{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;gap:18px;z-index:200;}
   .lightbox.open{display:flex;}
   .lightbox img{max-width:80vw;max-height:88vh;border-radius:6px;}
@@ -430,8 +502,10 @@
   .arc-lb-thumb{width:64px;height:64px;flex:none;background-size:cover;background-position:center;border:2px solid rgba(255,255,255,.25);cursor:pointer;}
   .arc-lb-thumb.active{border-color:var(--page-bg);}
   .add-mini-btn{font-size:11px;font-weight:700;color:var(--accent);background:none;border:1px solid var(--accent);border-radius:var(--radius-sm);padding:5px 9px;margin-bottom:10px;}
-  .arc-nai-grid{display:grid;grid-template-columns:repeat(6, 1fr);gap:8px;}
-  .arc-nai-thumb{position:relative;aspect-ratio:1/1;background-size:cover;background-position:center;background-repeat:no-repeat;border:1px solid var(--border);cursor:pointer;overflow:hidden;}
+  /* PROMPT: 한 페이지에 가로 4 x 세로 2 = 8개가 남은 높이를 꽉 채운다.
+     행 높이를 1fr 로 두므로 칸 비율은 창 크기에 따라 자동으로 정해진다. */
+  .arc-nai-grid{display:grid;grid-template-columns:repeat(4, 1fr);grid-template-rows:repeat(2, 1fr);gap:8px;flex:1;min-height:0;}
+  .arc-nai-thumb{position:relative;min-height:0;background-size:cover;background-position:center;background-repeat:no-repeat;border:1px solid var(--border);cursor:pointer;overflow:hidden;}
   .arc-nai-pin{position:absolute;top:4px;left:4px;font-size:11px;text-shadow:0 0 3px rgba(0,0,0,.8);z-index:2;}
   .arc-nai-overlay{position:absolute;inset:0;background:rgba(0,0,0,0);display:flex;align-items:flex-end;transition:background .15s;}
   .arc-nai-thumb:hover .arc-nai-overlay{background:rgba(0,0,0,.55);}

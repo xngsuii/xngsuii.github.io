@@ -161,6 +161,13 @@ function migrateGalleryFolders(p){
   if(!p.galleryFolders || p.galleryFolders.length===0){
     p.galleryFolders = [{ id:'default', name:'기본', images: p.gallery||[] }];
   }
+  // 비밀 폴더 / 썸네일 흐리게 옵션은 나중에 추가된 항목이라 기본값을 채워둔다
+  p.galleryFolders.forEach(f=>{
+    if(f.secret == null) f.secret = false;
+    if(f.pwHash == null) f.pwHash = '';
+    if(f.blur   == null) f.blur   = false;
+    if(!Array.isArray(f.images)) f.images = [];
+  });
 }
 function defaultKw(){ return [{text:'키워드',color:'#4b4bff'},{text:'키워드',color:'#4b4bff'},{text:'키워드',color:'#4b4bff'}]; }
 function migrateArchiveItem(item){
@@ -495,12 +502,32 @@ const introBannerAdj = createAdjustable(
 /* ============================================================
    HOME - CARDS (인라인 편집, 드래그 정렬)
    ============================================================ */
-document.getElementById('addCardBtn').addEventListener('click', async ()=>{
+bindOnce(document.getElementById('addCardBtn'), async ()=>{
   if(!isLoggedIn) return;
   state.cards.push({ id:Date.now(), name:'이름', catch:'캐치프레이즈', genre:'장르', desc:'짧은 소개글을 입력하세요.', image:blankImg() });
   await storageSet('cards', state.cards);
   renderCards();
 });
+
+/* ------------------------------------------------------------
+   저장/추가 버튼 중복 실행 방지
+   ------------------------------------------------------------
+   저장은 await storageSet(...) 을 기다리는 비동기 처리라,
+   그 사이에 버튼을 한 번 더 누르면 같은 항목이 두 번 만들어집니다.
+   처리 중에는 버튼을 잠그고 한 번만 받습니다.
+   ------------------------------------------------------------ */
+function bindOnce(el, handler){
+  if(!el) return;
+  let busy = false;
+  el.addEventListener('click', async (e)=>{
+    if(busy) return;
+    busy = true;
+    const wasDisabled = el.disabled;
+    el.disabled = true;
+    try{ await handler(e); }
+    finally{ busy = false; el.disabled = wasDisabled; }
+  });
+}
 
 /* FLIP 기반 실시간 드래그 재정렬 유틸 */
 function flipCapture(container, itemSelector){
@@ -603,7 +630,7 @@ let currentArchiveCategory='ooc';
 let selectMode=false;
 let selectedPairIds=new Set();
 
-document.getElementById('writePairBtn').addEventListener('click', async ()=>{
+bindOnce(document.getElementById('writePairBtn'), async ()=>{
   if(!isLoggedIn) return;
   const post = migratePost({ id:Date.now(), type: currentPairFilter==='dream'?'dream':'aichat', title:'새 페어' });
   state.pairPosts.push(post);
@@ -938,17 +965,31 @@ function renderLogContentInto(el, entry){
 let pdLogPage = 1;
 let logSearchTerm = '';
 let logSearchField = 'title';
+let logSearchDate = '';     // YYYY-MM-DD, 비우면 전체 기간
 
-/* 검색은 보기 모드(LOCKED)에서만 적용합니다 */
+/* 게시일 문자열에서 날짜 부분만 뽑는다 (예: "2026-07-30 14:02" → "2026-07-30") */
+function dateKeyOf(entry){
+  const d = String(entry.date||'');
+  const m = d.match(/\d{4}[-.\/]\d{1,2}[-.\/]\d{1,2}/);
+  if(!m) return '';
+  const [y,mo,da] = m[0].split(/[-.\/]/);
+  return `${y}-${String(mo).padStart(2,'0')}-${String(da).padStart(2,'0')}`;
+}
+
+/* 검색은 보기 모드(LOCKED)에서만 적용합니다.
+   게시일과 제목/내용은 각각 독립적으로 걸립니다(둘 다 있으면 AND).
+   게시일을 비워두면 전체 기간이 대상입니다. */
 function filterLogItems(items){
+  if(isLoggedIn) return items;
   const q = logSearchTerm.trim().toLowerCase();
-  if(isLoggedIn || !q) return items;
+  const day = logSearchDate;
+  if(!q && !day) return items;
   return items.filter(entry=>{
-    if(logSearchField==='title')   return (entry.title||'').toLowerCase().includes(q);
-    if(logSearchField==='date')    return (entry.date||'').toLowerCase().includes(q);
+    if(day && dateKeyOf(entry) !== day) return false;
+    if(!q) return true;
+    if(logSearchField==='title') return (entry.title||'').toLowerCase().includes(q);
     // 내용은 서식 태그를 걷어내고 글자만 비교
-    const plain = htmlToPlainText(entry.content||'');
-    return plain.toLowerCase().includes(q);
+    return htmlToPlainText(entry.content||'').toLowerCase().includes(q);
   });
 }
 
@@ -999,11 +1040,17 @@ function renderLogList(p){
   const input = document.getElementById('logSearchInput');
   const field = document.getElementById('logSearchField');
   const clear = document.getElementById('logSearchClear');
+  const dateEl = document.getElementById('logSearchDate');
   if(!input || !field || !clear) return;   // 옛 HTML이면 건너뜀
   const rerender = ()=>{ pdLogPage=1; const p=getCurrentPost(); if(p) renderLogList(p); };
   input.addEventListener('input', ()=>{ logSearchTerm = input.value; rerender(); });
   field.addEventListener('change', ()=>{ logSearchField = field.value; rerender(); });
-  clear.addEventListener('click', ()=>{ input.value=''; logSearchTerm=''; rerender(); });
+  if(dateEl) dateEl.addEventListener('change', ()=>{ logSearchDate = dateEl.value; rerender(); });
+  clear.addEventListener('click', ()=>{
+    input.value=''; logSearchTerm='';
+    if(dateEl){ dateEl.value=''; logSearchDate=''; }
+    rerender();
+  });
 })();
 
 let editingLogId = null;
@@ -1062,7 +1109,7 @@ document.getElementById('addLogBtn').addEventListener('click', ()=>{
   fillLogEditor(null);
   openModal('modalLogWrite');
 });
-document.getElementById('saveLogBtn').addEventListener('click', async ()=>{
+bindOnce(document.getElementById('saveLogBtn'), async ()=>{
   const title=document.getElementById('logTitle').value.trim();
   if(!title){ alert('제목을 입력해주세요.'); return; }
   const p=getCurrentPost();
@@ -1124,26 +1171,203 @@ let gallerySelectedIdx = new Set(); // "folderId::imgIdx"
 
 function getFolder(p, folderId){ return p.galleryFolders.find(f=>f.id===folderId); }
 
+/* ---- 비밀 폴더 ----
+   주의: Firestore 읽기는 공개이므로 이 비밀번호는 "실제 보안"이 아니다.
+   이미지 자체도 공개적으로 읽을 수 있어, 화면에서 가리는 용도(소프트 잠금)일 뿐이다.
+   그래도 평문 저장은 피하려고 SHA-256 해시만 저장한다. */
+const unlockedFolders = new Set();   // 이 세션에서 열어둔 폴더 (새로고침하면 초기화)
+
+async function hashPw(str){
+  const buf = new TextEncoder().encode('gf:'+str);
+  const h = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(h)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function folderLocked(f){
+  // 관리자(편집 모드)는 폴더를 관리해야 하므로 잠금을 통과한다
+  if(!f || !f.secret || !f.pwHash) return false;
+  if(isLoggedIn) return false;
+  return !unlockedFolders.has(f.id);
+}
+
+/* 폴더 추가/수정 모달 */
+let gfTarget = null;   // { post, folder|null }
+function openFolderModal(post, folder){
+  gfTarget = { post, folder: folder||null };
+  document.getElementById('gfModalTitle').innerText = folder ? '폴더 수정' : '폴더 추가';
+  document.getElementById('gfName').value = folder ? folder.name : '';
+  document.getElementById('gfSecret').checked = !!(folder && folder.secret);
+  document.getElementById('gfBlur').checked   = !!(folder && folder.blur);
+  document.getElementById('gfPw').value = '';
+  document.getElementById('gfError').style.display='none';
+  // 기존 비밀번호가 있으면 "비워두면 유지" 안내를 보여준다
+  document.getElementById('gfPwKeep').style.display = (folder && folder.pwHash) ? 'block' : 'none';
+  document.getElementById('gfPwRow').style.display  = document.getElementById('gfSecret').checked ? 'block' : 'none';
+  // 삭제 버튼은 기존 폴더를 수정할 때만, 그리고 폴더가 2개 이상일 때만 (마지막 폴더는 남겨둔다)
+  const delBtn=document.getElementById('gfDeleteBtn');
+  const warn=document.getElementById('gfDeleteWarn');
+  if(delBtn){
+    delBtn.style.display = (folder && post.galleryFolders.length>1) ? 'inline-flex' : 'none';
+    delBtn.innerText='🗑 폴더 삭제';
+    delBtn.dataset.confirm='';
+  }
+  if(warn) warn.style.display='none';
+  document.getElementById('gfSaveBtn').disabled = false;
+  openModal('modalGalleryFolder');
+  setTimeout(()=> document.getElementById('gfName').focus(), 30);
+}
+
+function initFolderModal(){
+  const secret=document.getElementById('gfSecret'), pwRow=document.getElementById('gfPwRow');
+  const nameInput=document.getElementById('gfName'), err=document.getElementById('gfError');
+  const saveBtn=document.getElementById('gfSaveBtn');
+  if(!secret || !saveBtn) return;
+
+  secret.addEventListener('change', ()=>{ pwRow.style.display = secret.checked ? 'block' : 'none'; });
+
+  const showErr=(msg)=>{ err.innerText=msg; err.style.display='block'; };
+
+  /* 저장 버튼과 Enter 키가 같은 save() 를 부르므로,
+     연달아 눌리면 폴더가 두 개 만들어질 수 있다. 진행 중에는 한 번만 받는다. */
+  let saving = false;
+  const save = async ()=>{
+    if(!gfTarget || saving) return;
+    const { post, folder } = gfTarget;
+    const name = nameInput.value.trim();
+    if(!name){ showErr('폴더 이름을 입력해주세요.'); nameInput.focus(); return; }
+    const wantSecret = secret.checked;
+    const typedPw = document.getElementById('gfPw').value;
+    const hadHash = folder && folder.pwHash;
+    if(wantSecret && !typedPw && !hadHash){ showErr('비밀 폴더는 비밀번호가 필요합니다.'); return; }
+
+    saving = true;
+    saveBtn.disabled = true;
+    let pwHash = folder ? (folder.pwHash||'') : '';
+    if(!wantSecret) pwHash = '';
+    else if(typedPw) pwHash = await hashPw(typedPw);
+
+    if(folder){
+      folder.name = name;
+      folder.secret = wantSecret;
+      folder.pwHash = pwHash;
+      folder.blur = document.getElementById('gfBlur').checked;
+      // 비밀번호가 바뀌었으면 이 세션의 열람 기록도 지운다
+      if(typedPw) unlockedFolders.delete(folder.id);
+    }else{
+      const created = { id:'f'+Date.now(), name, images:[],
+        secret:wantSecret, pwHash, blur:document.getElementById('gfBlur').checked };
+      post.galleryFolders.push(created);
+      currentGalleryFolderId = created.id;
+      galleryPage = 1;
+      // 만든 사람은 편집 모드라서 어차피 바로 보인다.
+      // 여기서 unlockedFolders 에 넣으면 로그아웃 후에도 열린 상태로 남으므로 넣지 않는다.
+    }
+    await storageSet('pairPosts', state.pairPosts);
+    closeModal('modalGalleryFolder');
+    renderGallery(post);
+    saving = false;
+    saveBtn.disabled = false;
+  };
+
+  saveBtn.addEventListener('click', save);
+  nameInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') save(); });
+  document.getElementById('gfPw').addEventListener('keydown', (e)=>{ if(e.key==='Enter') save(); });
+
+  /* 폴더 삭제 — 안에 든 이미지가 함께 사라지므로 한 번 더 확인받는다.
+     브라우저 기본 confirm 창 대신 모달 안에서 두 번 눌러 확인하는 방식. */
+  const delBtn=document.getElementById('gfDeleteBtn');
+  const warn=document.getElementById('gfDeleteWarn');
+  if(delBtn) delBtn.addEventListener('click', async ()=>{
+    if(!gfTarget || !gfTarget.folder) return;
+    const { post, folder } = gfTarget;
+    if(post.galleryFolders.length<=1) return;   // 마지막 폴더는 남겨둔다
+    if(delBtn.dataset.confirm!=='1'){
+      delBtn.dataset.confirm='1';
+      delBtn.innerText='한 번 더 누르면 삭제';
+      warn.innerText = folder.images.length>0
+        ? `'${folder.name}' 폴더와 안에 있는 이미지 ${folder.images.length}장이 함께 삭제됩니다. 되돌릴 수 없습니다.`
+        : `'${folder.name}' 폴더를 삭제합니다.`;
+      warn.style.display='block';
+      return;
+    }
+    post.galleryFolders = post.galleryFolders.filter(f=>f!==folder);
+    unlockedFolders.delete(folder.id);
+    if(currentGalleryFolderId===folder.id){
+      currentGalleryFolderId = post.galleryFolders[0].id;
+      galleryPage = 1;
+    }
+    await storageSet('pairPosts', state.pairPosts);
+    closeModal('modalGalleryFolder');
+    renderGallery(post);
+  });
+}
+
+/* 비밀 폴더 열람 */
+let fuTarget = null;   // { folder, onOk }
+function openFolderUnlock(folder, onOk){
+  fuTarget = { folder, onOk };
+  document.getElementById('fuFolderName').innerText = folder.name;
+  document.getElementById('fuPw').value='';
+  document.getElementById('fuError').style.display='none';
+  openModal('modalFolderUnlock');
+  setTimeout(()=> document.getElementById('fuPw').focus(), 30);
+}
+function initFolderUnlock(){
+  const pw=document.getElementById('fuPw'), btn=document.getElementById('fuSubmitBtn'), err=document.getElementById('fuError');
+  if(!pw || !btn) return;
+  // 잠김 화면의 '비밀번호 입력' 버튼
+  const unlockBtn=document.getElementById('galleryUnlockBtn');
+  if(unlockBtn) unlockBtn.addEventListener('click', ()=>{
+    const p=getCurrentPost(); if(!p) return;
+    const f=getFolder(p, currentGalleryFolderId); if(!f) return;
+    openFolderUnlock(f, ()=> renderGallery(p));
+  });
+  const submit = async ()=>{
+    if(!fuTarget) return;
+    const h = await hashPw(pw.value);
+    if(h !== fuTarget.folder.pwHash){
+      err.innerText='비밀번호가 일치하지 않습니다.';
+      err.style.display='block';
+      pw.select();
+      return;
+    }
+    unlockedFolders.add(fuTarget.folder.id);
+    const cb = fuTarget.onOk;
+    closeModal('modalFolderUnlock');
+    fuTarget = null;
+    if(cb) cb();
+  };
+  btn.addEventListener('click', submit);
+  pw.addEventListener('keydown', (e)=>{ if(e.key==='Enter') submit(); });
+}
+
 function renderGalleryFolderBar(p){
   const bar=document.getElementById('galleryFolderBar');
   bar.innerHTML='';
   p.galleryFolders.forEach(f=>{
     const btn=document.createElement('button');
     btn.type='button'; btn.className='gallery-folder-tab'+(f.id===currentGalleryFolderId?' active':'');
+    if(f.secret){
+      const lock=document.createElement('span');
+      lock.className='gf-lock'; lock.innerText='🔒'; lock.title='비밀 폴더';
+      btn.appendChild(lock);
+    }
     const nameSpan=document.createElement('span');
     nameSpan.innerText=f.name;
     btn.appendChild(nameSpan);
     btn.addEventListener('click', (e)=>{
       if(e.target.closest('.gallery-folder-rename')) return;
-      currentGalleryFolderId=f.id; gallerySelectedIdx.clear(); galleryPage=1; renderGallery(p);
+      const open = ()=>{
+        currentGalleryFolderId=f.id; gallerySelectedIdx.clear(); galleryPage=1; renderGallery(p);
+      };
+      if(folderLocked(f)) openFolderUnlock(f, open);
+      else open();
     });
     if(isLoggedIn){
       const renameBtn=document.createElement('button');
-      renameBtn.type='button'; renameBtn.className='gallery-folder-rename'; renameBtn.innerText='✎'; renameBtn.title='폴더 이름 수정';
-      renameBtn.addEventListener('click', async (e)=>{
+      renameBtn.type='button'; renameBtn.className='gallery-folder-rename'; renameBtn.innerText='✎'; renameBtn.title='폴더 설정';
+      renameBtn.addEventListener('click', (e)=>{
         e.stopPropagation();
-        const name=prompt('폴더 이름 수정', f.name);
-        if(name && name.trim()){ f.name=name.trim(); await storageSet('pairPosts', state.pairPosts); renderGallery(p); }
+        openFolderModal(p, f);
       });
       btn.appendChild(renameBtn);
 
@@ -1184,15 +1408,7 @@ function renderGalleryFolderBar(p){
     const addBtn=document.createElement('button');
     addBtn.type='button'; addBtn.className='gallery-folder-add';
     addBtn.innerText='＋ 폴더';
-    addBtn.addEventListener('click', async ()=>{
-      const name=prompt('새 폴더 이름');
-      if(name && name.trim()){
-        p.galleryFolders.push({ id:'f'+Date.now(), name:name.trim(), images:[] });
-        await storageSet('pairPosts', state.pairPosts);
-        currentGalleryFolderId = p.galleryFolders[p.galleryFolders.length-1].id;
-        renderGallery(p);
-      }
-    });
+    addBtn.addEventListener('click', ()=> openFolderModal(p, null));
     bar.appendChild(addBtn);
   }
 }
@@ -1303,6 +1519,19 @@ function renderGallery(p){
     }
   };
 
+  /* 잠긴 비밀 폴더는 썸네일을 아예 그리지 않는다.
+     (폴더 탭을 거치지 않고 들어오는 경로가 있어 여기서도 막는다) */
+  const locked = document.getElementById('galleryLocked');
+  if(folderLocked(folder)){
+    fillSlots(GALLERY_PER_PAGE);
+    if(emptyMsg) emptyMsg.style.display='none';
+    if(locked) locked.style.display='flex';
+    setGalleryHint(hint, false);
+    setGalleryHint(hintUp, false);
+    return;
+  }
+  if(locked) locked.style.display='none';
+
   if(!folder || folder.images.length===0){
     fillSlots(GALLERY_PER_PAGE);
     if(emptyMsg) emptyMsg.style.display='block';
@@ -1322,8 +1551,14 @@ function renderGallery(p){
   pageImages.forEach((src, i)=>{
     const idx = start+i;
     const key = folder.id+'::'+idx;
-    const el=document.createElement('div'); el.className='gallery-thumb'; el.style.backgroundImage=`url('${src}')`;
-    applyThumbBg(el, src, 128);   // 실측 박스 123.6px
+    const el=document.createElement('div');
+    el.className='gallery-thumb'+(folder.blur?' blurred':'');
+    // 이미지는 안쪽 레이어에 — 블러가 보더까지 번지지 않게, 선택 체크 표시도 선명하게 유지
+    const img=document.createElement('div');
+    img.className='gt-img';
+    img.style.backgroundImage=`url('${src}')`;
+    applyThumbBg(img, src, 128);   // 실측 박스 123.6px
+    el.appendChild(img);
     el.dataset.key = key;
     if(gallerySelectMode){
       const checked = gallerySelectedIdx.has(key);
@@ -1335,9 +1570,22 @@ function renderGallery(p){
       });
       if(isLoggedIn){
         el.draggable = true;
-        el.addEventListener('dragstart', ()=>{ draggedGalleryKey = key; draggedGalleryEl = el; el.classList.add('dragging'); });
+        el.addEventListener('dragstart', ()=>{
+          draggedGalleryKey = key; draggedGalleryEl = el; el.classList.add('dragging');
+          galleryDragPageMoved = false;
+          // 여러 장을 선택해 둔 경우 함께 옮긴다 (드래그 시작 시점으로 고정)
+          galleryDragSrcKeys = gallerySelectedIdx.size>0 ? Array.from(gallerySelectedIdx) : [key];
+          // 드래그 중에만 화살표가 드롭을 받도록(평소에는 pointer-events:none)
+          document.body.classList.add('gallery-dragging');
+        });
         el.addEventListener('dragend', async ()=>{
           el.classList.remove('dragging');
+          document.body.classList.remove('gallery-dragging');
+          document.querySelectorAll('.gallery-scroll-hint.drop-target')
+            .forEach(h=> h.classList.remove('drop-target'));
+          /* 화살표로 다른 페이지를 거쳐 왔으면, 화면(DOM)에 놓인 자리를 그대로 반영한다 */
+          if(galleryDragPageMoved){ await finishGalleryDrag(); return; }
+          galleryDragSrcKeys=null;
           if(draggedGalleryEl){
             /* 화면에는 현재 페이지 몫만 그려져 있습니다.
                전체 배열을 DOM 순서로 덮어쓰면 다른 페이지 이미지가 사라지므로,
@@ -1386,6 +1634,160 @@ function setGalleryHint(el, active){
   if(!el) return;
   el.style.display='block';
   el.classList.toggle('disabled', !active);
+}
+
+/* ------------------------------------------------------------
+   선택 모드에서 이미지를 화살표로 끌고 가 다른 페이지로 옮기기
+   ------------------------------------------------------------
+   화살표 위에 잠깐 머무르면 그 방향 페이지로 "화면만" 넘깁니다.
+   데이터는 그대로 두고, 끌고 있던 이미지를 새 페이지 격자에 끼워 넣어
+   같은 페이지에서 순서를 바꾸는 것과 똑같이 원하는 자리에 놓을 수 있습니다.
+   실제 배열 변경은 드롭이 끝나는 시점(dragend)에 한 번만 합니다.
+   ------------------------------------------------------------ */
+let galleryDragSrcKeys = null;   // 드래그 시작 시점의 이동 대상 키들
+let galleryDragPageMoved = false;
+const HINT_DWELL_MS = 450;
+
+/* 화면만 목표 페이지로 넘기고, 끌고 있던 이미지를 그 격자에 넣어준다 */
+function flipGalleryPageDuringDrag(dir){
+  if(!draggedGalleryKey) return false;
+  if(galleryTransitioning) return false;
+  const p = getCurrentPost(); if(!p) return false;
+  const folder = getFolder(p, currentGalleryFolderId); if(!folder) return false;
+  const targetPage = galleryPage + dir;
+  if(targetPage < 1 || targetPage > galleryTotalPages(folder)) return false;
+
+  // 휠로 넘길 때와 똑같은 세로 스와이프 효과로 넘긴다
+  animateGalleryPageChange(dir, ()=>{
+    galleryPage = targetPage;
+    galleryDragPageMoved = true;
+    renderGallery(p);                  // 데이터는 건드리지 않음
+    attachDraggedThumbToGrid(folder);
+  });
+  return true;
+}
+
+/* 끌고 있던 썸네일을 현재 격자에 다시 만들어 붙인다(이동 중 표시용) */
+function attachDraggedThumbToGrid(folder){
+  const grid = document.getElementById('galleryGrid');
+  if(!grid || !draggedGalleryKey) return;
+  const idx = Number(draggedGalleryKey.split('::')[1]);
+  const src = folder.images[idx];
+  if(src === undefined) return;
+
+  // 빈 자리를 하나 빼서 격자 높이가 그대로 유지되게 한다
+  const slot = grid.querySelector('.gallery-slot');
+  if(slot) slot.remove();
+
+  const el = document.createElement('div');
+  el.className = 'gallery-thumb dragging' + (folder.blur ? ' blurred' : '');
+  el.dataset.key = draggedGalleryKey;
+  const img = document.createElement('div');
+  img.className = 'gt-img';
+  img.style.backgroundImage = `url('${src}')`;
+  applyThumbBg(img, src, 128);
+  el.appendChild(img);
+  // 원본 썸네일은 페이지가 넘어가면서 사라지므로, 이 대역 요소에도 종료 처리를 붙여둔다
+  el.addEventListener('dragend', ()=> finishGalleryDrag());
+  grid.appendChild(el);
+  draggedGalleryEl = el;
+}
+
+/* 드래그 종료 처리 — drop / dragend 중 먼저 오는 쪽에서 한 번만 확정한다.
+   (페이지를 넘기면 원본 요소가 DOM 에서 사라져 dragend 가 오지 않을 수 있다) */
+let galleryDragCommitting = false;
+async function finishGalleryDrag(){
+  if(galleryDragCommitting || !galleryDragPageMoved) return;
+  galleryDragCommitting = true;
+  const p = getCurrentPost();
+  const folder = p ? getFolder(p, currentGalleryFolderId) : null;
+  try{
+    if(p && folder) await commitCrossPageDrag(p, folder);
+  }finally{
+    galleryDragPageMoved = false;
+    galleryDragSrcKeys = null;
+    gallerySelectedIdx.clear();
+    draggedGalleryKey = null; draggedGalleryEl = null;
+    document.body.classList.remove('gallery-dragging');
+    document.querySelectorAll('.gallery-scroll-hint.drop-target')
+      .forEach(h=> h.classList.remove('drop-target'));
+    galleryDragCommitting = false;
+    if(p) renderGallery(p);
+  }
+}
+
+/* 드롭이 끝났을 때: 화면(DOM) 순서를 그대로 배열에 반영한다.
+   다른 페이지에서 끌고 온 이미지는 DOM 에 놓인 그 자리에 들어간다. */
+async function commitCrossPageDrag(p, folder){
+  const grid = document.getElementById('galleryGrid');
+  const perPage = GALLERY_PER_PAGE;
+  const order = Array.from(grid.querySelectorAll('.gallery-thumb')).map(el=> el.dataset.key);
+
+  const movingKeys = new Set(galleryDragSrcKeys || [draggedGalleryKey]);
+  const movingIdx = [...new Set(
+    [...movingKeys].map(k=> String(k).split('::')).filter(([fid])=> fid===folder.id).map(([,i])=> Number(i))
+  )].filter(i=> Number.isInteger(i) && i>=0 && i<folder.images.length).sort((a,b)=> a-b);
+  if(!movingIdx.length) return false;
+
+  const movingImgs = movingIdx.map(i=> folder.images[i]);
+  const movingSet = new Set(movingIdx);
+
+  // 화면에 보이는 페이지를 DOM 순서대로 다시 구성 (이동 대상은 그 자리에 통째로)
+  const pageImgs = [];
+  let placed = false;
+  order.forEach(k=>{
+    if(movingKeys.has(k)){
+      if(!placed){ pageImgs.push(...movingImgs); placed = true; }
+      return;
+    }
+    const i = Number(String(k).split('::')[1]);
+    if(!movingSet.has(i) && folder.images[i] !== undefined) pageImgs.push(folder.images[i]);
+  });
+  if(!placed) pageImgs.push(...movingImgs);   // 화살표만 누르고 놓은 경우 등
+
+  const rest = folder.images.filter((_,i)=> !movingSet.has(i));
+  const pageStart = (galleryPage-1)*perPage;
+  const movedBefore = movingIdx.filter(i=> i < pageStart).length;
+  const startRest = Math.max(0, Math.min(rest.length, pageStart - movedBefore));
+  const existingCount = pageImgs.length - movingImgs.length;
+
+  rest.splice(startRest, existingCount, ...pageImgs);
+  folder.images = rest;
+
+  await storageSet('pairPosts', state.pairPosts);
+  return true;
+}
+
+function initGalleryPageDrop(){
+  const bind = (el, dir)=>{
+    if(!el) return;
+    let dwell = null;
+    const clear = ()=>{ if(dwell){ clearTimeout(dwell); dwell=null; } el.classList.remove('drop-target'); };
+    el.addEventListener('dragover', (e)=>{
+      if(!draggedGalleryKey || el.classList.contains('disabled')) return;
+      e.preventDefault();
+      el.classList.add('drop-target');
+      if(!dwell) dwell = setTimeout(()=>{ dwell=null; clear(); flipGalleryPageDuringDrag(dir); }, HINT_DWELL_MS);
+    });
+    el.addEventListener('dragleave', clear);
+    // 화살표 위에서 그냥 놓으면 페이지만 넘기고, 위치는 사용자가 이어서 정한다
+    el.addEventListener('drop', (e)=>{
+      if(!draggedGalleryKey || el.classList.contains('disabled')) return;
+      e.preventDefault();
+      clear();
+      flipGalleryPageDuringDrag(dir);
+    });
+  };
+  bind(document.getElementById('galleryScrollHint'), 1);
+  bind(document.getElementById('galleryScrollHintUp'), -1);
+
+  /* 격자 안에서 놓았을 때 확정 — 원본 요소가 사라져 dragend 가 오지 않는 경우를 대비 */
+  const wrap = document.getElementById('galleryGridWrap');
+  if(wrap) wrap.addEventListener('drop', (e)=>{
+    if(!galleryDragPageMoved) return;
+    e.preventDefault();
+    finishGalleryDrag();
+  });
 }
 function updateGallerySelectCount(){
   const info=document.getElementById('gallerySelectInfo');
@@ -1540,6 +1942,16 @@ document.getElementById('arcColorInput').addEventListener('input', (e)=>{
   editor.focus();
   document.execCommand('foreColor', false, e.target.value);
 });
+/* 구분선 삽입 (LOG 편집기와 같은 방식) */
+const arcDividerBtn = document.getElementById('arcDividerBtn');
+if(arcDividerBtn){
+  arcDividerBtn.addEventListener('mousedown', e=> e.preventDefault());
+  arcDividerBtn.addEventListener('click', ()=>{
+    const editor=document.getElementById('arcContentEditor');
+    editor.focus();
+    document.execCommand('insertHTML', false, '<hr><br>');
+  });
+}
 
 /* 이미지 삽입 + 삽입 후 삭제/이동 툴바 */
 document.getElementById('arcInsertImageBtn').addEventListener('click', ()=>{
@@ -1702,7 +2114,7 @@ document.addEventListener('click', async (e)=>{
   }
 });
 
-document.getElementById('saveArcBtn').addEventListener('click', async ()=>{
+bindOnce(document.getElementById('saveArcBtn'), async ()=>{
   const title=document.getElementById('arcTitleInput').value.trim();
   const category=document.getElementById('arcCategoryInput').value;
   const content=document.getElementById('arcContentEditor').innerHTML.trim();
@@ -1796,15 +2208,63 @@ function extractFirstImage(html){
   const m = (html||'').match(/<img[^>]+src="([^"]*)"/i);
   return m ? m[1] : '';
 }
+/* 사이드바 세부 카테고리 키 → 상단 표기 */
+const ARCHIVE_CAT_LABEL = { ooc:'OOC', nai:'PROMPT', etc:'ETC' };
+
+/* --- ARCHIVE 검색 (보기 모드 전용, LOG 와 같은 방식) --- */
+let arcSearchTerm = '';
+let arcSearchField = 'title';
+let arcSearchDate = '';
+function filterArchiveItems(items){
+  if(isLoggedIn) return items;
+  const q = arcSearchTerm.trim().toLowerCase();
+  const day = arcSearchDate;
+  if(!q && !day) return items;
+  return items.filter(item=>{
+    if(day && dateKeyOf(item) !== day) return false;
+    if(!q) return true;
+    if(arcSearchField==='title') return (item.title||'').toLowerCase().includes(q);
+    return htmlToPlainText(item.content||'').toLowerCase().includes(q);
+  });
+}
+(function initArcSearch(){
+  const input=document.getElementById('arcSearchInput');
+  const field=document.getElementById('arcSearchField');
+  const clear=document.getElementById('arcSearchClear');
+  const dateEl=document.getElementById('arcSearchDate');
+  if(!input || !field || !clear) return;
+  const rerender=()=>{ arcPage=1; renderArchive(); };
+  input.addEventListener('input', ()=>{ arcSearchTerm=input.value; rerender(); });
+  field.addEventListener('change', ()=>{ arcSearchField=field.value; rerender(); });
+  if(dateEl) dateEl.addEventListener('change', ()=>{ arcSearchDate=dateEl.value; rerender(); });
+  clear.addEventListener('click', ()=>{
+    input.value=''; arcSearchTerm='';
+    if(dateEl){ dateEl.value=''; arcSearchDate=''; }
+    rerender();
+  });
+})();
+
 function renderArchive(){
   const wrap=document.getElementById('archiveBody');
+  // PAIR 처럼 상단에 현재 카테고리를 함께 표기
+  const titleEl=document.getElementById('archiveTitle');
+  if(titleEl) titleEl.innerText = 'Archive · ' + (ARCHIVE_CAT_LABEL[currentArchiveCategory] || currentArchiveCategory);
   const isGallery = currentArchiveCategory==='nai';
-  const perPage = isGallery ? 18 : 15;
+  const perPage = isGallery ? 8 : 15;   // PROMPT 는 4열 x 2행
   const catItems = state.archive.filter(x=>(x.category||'ooc')===currentArchiveCategory);
   if(catItems.length===0){ wrap.innerHTML='<div class="empty-note">아직 백업된 항목이 없어요.</div>'; return; }
-  const pinned = catItems.filter(x=>x.pinned).slice(0,3).sort((a,b)=>(a.seq||0)-(b.seq||0));
-  const rest = catItems.filter(x=>!x.pinned).slice().sort((a,b)=>(b.seq||0)-(a.seq||0));
+  const found = filterArchiveItems(catItems);
+  if(found.length===0){ wrap.innerHTML='<div class="empty-note">검색 결과가 없어요.</div>'; return; }
+  const pinned = found.filter(x=>x.pinned).slice(0,3).sort((a,b)=>(a.seq||0)-(b.seq||0));
+  const rest = found.filter(x=>!x.pinned).slice().sort((a,b)=>(b.seq||0)-(a.seq||0));
   const items = [...pinned, ...rest];
+
+  /* 화면에 보이는 No 는 저장된 seq(누적 카운터)가 아니라
+     카테고리 안의 등록 순서로 1부터 다시 매긴다.
+     seq 를 그대로 쓰면 글을 모두 지운 뒤 새로 써도 번호가 계속 커진다.
+     등록 순서를 기준으로 하므로 고정(📌)해도 번호는 바뀌지 않는다. */
+  const chrono = catItems.slice().sort((a,b)=> (a.seq||0)-(b.seq||0) || (a.id||0)-(b.id||0));
+  const displayNo = new Map(chrono.map((it,i)=> [it, i+1]));
 
   const totalPages=Math.max(1, Math.ceil(items.length/perPage));
   if(arcPage>totalPages) arcPage=totalPages;
@@ -1828,7 +2288,10 @@ function renderArchive(){
         <div class="arc-nai-overlay ${thumb?'':'arc-nai-overlay-static'}"><div class="arc-nai-title">${escapeHtml(item.title)}</div></div>
       </div>`;
     });
-    wrap.innerHTML = `<div class="arc-nai-grid">${cells}</div>${totalPages>1?`<div class="log-pagination">${pag}</div>`:''}`;
+    /* 페이지 버튼 자리는 항상 비워두고(하단 중앙 고정),
+       다음 페이지가 있을 때만 버튼을 그린다 — 격자 높이가 흔들리지 않게 */
+    wrap.innerHTML = `<div class="arc-nai-grid">${cells}</div>`
+      + `<div class="log-pagination-slot">${totalPages>1?`<div class="log-pagination">${pag}</div>`:''}</div>`;
     wrap.querySelectorAll('.arc-nai-thumb[data-abs]').forEach(el=>{
       el.addEventListener('click', ()=> openArcView(items[Number(el.dataset.abs)]));
       // 6열 격자라 칸이 100px 안팎인데 원본은 800px대다 — 표시용 축소본으로 교체
@@ -1838,10 +2301,10 @@ function renderArchive(){
   }else{
     let rows='';
     pageItems.forEach((item,i)=>{
-      rows += `<tr data-abs="${start+i}"><td>${item.seq!=null?item.seq:''}</td><td class="log-td-title">${item.pinned?'<span class="arc-pin-tag">📌</span> ':''}${escapeHtml(item.title)}</td><td>${item.date||''}</td></tr>`;
+      rows += `<tr data-abs="${start+i}"><td>${displayNo.get(item)||''}</td><td class="log-td-title">${item.pinned?'<span class="arc-pin-tag">📌</span> ':''}${escapeHtml(item.title)}</td><td>${item.date||''}</td></tr>`;
     });
-    wrap.innerHTML = `<table class="log-table"><thead><tr><th>No</th><th>Title</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table>
-      ${totalPages>1?`<div class="log-pagination">${pag}</div>`:''}`;
+    wrap.innerHTML = `<div class="archive-table-scroll"><table class="log-table"><thead><tr><th>No</th><th>Title</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table></div>`
+      + `<div class="log-pagination-slot">${totalPages>1?`<div class="log-pagination">${pag}</div>`:''}</div>`;
     wrap.querySelectorAll('tr[data-abs]').forEach(tr=>{
       tr.addEventListener('click', ()=> openArcView(items[Number(tr.dataset.abs)]));
     });
@@ -1865,10 +2328,18 @@ function renderArchive(){
 async function boot(){
   initPairImageAdjusters();
   initSaveIndicator();
+  initFolderModal();
+  initFolderUnlock();
+  initGalleryPageDrop();
 
   window.SiteStore.onAuthChange((admin)=>{
     isLoggedIn = admin;
+    // 로그인/로그아웃 시 비밀 폴더 열람 기록을 비운다.
+    // (편집 모드에서 열어둔 폴더가 보기 모드로 돌아온 뒤에도 열려 있으면 안 된다)
+    unlockedFolders.clear();
     applyEditMode();
+    const post = getCurrentPost();
+    if(post && document.getElementById('modalPairDetail').classList.contains('open')) renderGallery(post);
   });
 
   try{
