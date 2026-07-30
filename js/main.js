@@ -2314,7 +2314,21 @@ function renderArchive(){
     wrap.innerHTML = `<div class="arc-nai-grid">${cells}</div>`
       + `<div class="log-pagination-slot">${totalPages>1?`<div class="log-pagination">${pag}</div>`:''}</div>`;
     wrap.querySelectorAll('.arc-nai-thumb[data-abs]').forEach(el=>{
-      el.addEventListener('click', ()=> openArcView(items[Number(el.dataset.abs)]));
+      el.addEventListener('click', ()=>{
+        /* 터치 기기에는 hover 가 없습니다. 사진이 있는 칸은 첫 탭에서 반투명
+           레이어와 제목이 뜨고, 두 번째 탭에서 글이 열립니다 — 마우스를 올려
+           제목을 확인하고 누르던 흐름과 같습니다.
+           사진이 없는 칸(.arc-nai-overlay-static)은 이미 제목이 보이므로 바로 엽니다. */
+        const hasImage = !el.querySelector('.arc-nai-overlay-static');
+        if(hasImage && !el.classList.contains('revealed')
+           && !window.matchMedia('(hover:hover)').matches){
+          // 한 번에 하나만 드러나게 (마우스를 옮기는 느낌과 같게)
+          wrap.querySelectorAll('.arc-nai-thumb.revealed').forEach(o=> o.classList.remove('revealed'));
+          el.classList.add('revealed');
+          return;
+        }
+        openArcView(items[Number(el.dataset.abs)]);
+      });
       // 6열 격자라 칸이 100px 안팎인데 원본은 800px대다 — 표시용 축소본으로 교체
       const src = extractFirstImage(items[Number(el.dataset.abs)].content);
       if(src) applyThumbBg(el, src);
