@@ -2506,6 +2506,17 @@ function initTouchDrag(){
     fire(src, 'dragstart', startX, startY);
   };
 
+  /* 화면 스크롤을 실제로 막는 것은 touchmove 의 preventDefault 뿐입니다.
+     - pointermove 에서 preventDefault 해봐야 스크롤에는 아무 영향이 없습니다.
+     - touch-action 은 손가락이 닿는 순간 값이 정해지므로, 드래그가 시작된
+       뒤에 body 에 붙여도 이미 진행 중인 제스처에는 적용되지 않습니다.
+     드래그는 손가락을 움직이지 않고 0.4초를 기다려야 시작되므로, 그 시점엔
+     아직 스크롤이 시작되지 않아 첫 touchmove 를 막으면 위아래로 자유롭게
+     끌 수 있습니다. */
+  document.addEventListener('touchmove', (e)=>{
+    if(active && e.cancelable) e.preventDefault();
+  }, {passive:false});
+
   document.addEventListener('pointerdown', (e)=>{
     if(e.pointerType === 'mouse') return;         // PC 는 기본 DnD 를 씁니다
     const t = e.target;

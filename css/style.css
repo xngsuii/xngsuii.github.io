@@ -237,6 +237,12 @@
   .pd-info-grid{display:grid;grid-template-columns:1fr 260px;gap:20px;align-items:start;margin-top:10px;}
   .pd-section{margin-bottom:22px;}
   .pd-section h4{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin:0 0 24px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+  /* 제목과 추가 버튼을 한 줄에 놓는 머리줄. 밑줄은 제목이 아니라 이 줄이 갖습니다
+     (제목만 갖고 있으면 버튼 아래로는 선이 이어지지 않습니다). */
+  .pd-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;
+    border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:24px;}
+  .pd-section-head h4{margin:0;padding:0;border-bottom:none;flex:1;min-width:0;}
+  .pd-section-head .add-mini-btn{margin:0;flex:none;}
   .pd-profile-tag{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--accent);margin:14px 0 8px;text-transform:uppercase;}
   .pd-profile-tag:first-of-type{margin-top:0;}
 
@@ -588,7 +594,10 @@
     .sidebar.open{transform:none;}
     /* ☰ 자리를 비워둡니다 */
     .topbar{padding:10px 14px 10px 56px;}
-    .cards-topbar{padding-left:56px;padding-right:14px;}
+    /* 카드 페이지 머리줄은 왼쪽 여백을 주지 않습니다 — ❣ 칸이 데스크톱과 똑같이
+       바 높이만 한 정사각형으로 왼쪽 끝에 붙고 기호가 그 안에 가운데 옵니다.
+       ☰ 가 그 위를 덮지만, 칸 모양을 맞추는 쪽을 택했습니다. */
+    .cards-topbar{padding-right:14px;}
     .nav-item{padding:13px 10px;font-size:13px;}
     .nav-sub-item{padding:13px 10px;font-size:12px;}
     .nav-sub{max-height:0;}
@@ -680,15 +689,19 @@
     .pd-tab-content{height:calc(100dvh - 268px);min-height:280px;padding:8px 2px 8px 0;
       overscroll-behavior:contain;}
     .pd-info-grid{grid-template-columns:1fr;gap:0;}
-    .pd-section h4{margin-bottom:18px;}
+    /* 직계 자식만 — TIMELINE 처럼 .pd-section-head 안에 들어간 제목은
+       그 줄에서 가운데 정렬돼야 하므로 아래 여백을 주면 안 됩니다. */
+    .pd-section > h4{margin-bottom:18px;}
 
     /* 캐릭터와 페르소나를 좌우로 나란히 놓습니다.
        DOM 순서가 [프로필A][말풍선A][말풍선B][프로필B] 라 순서만으로는 안 되므로
        .pd-section 을 2열 격자로 만들고 각자 칸을 지정합니다(마크업 수정 없음).
          1행: 캐릭터 프로필 | 페르소나 프로필
          2행: 캐릭터 말풍선 | 페르소나 말풍선 */
-    .pd-section{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start;}
-    .pd-section h4{grid-column:1/-1;}
+    /* Profile 절에만 적용합니다 — TIMELINE 절(.pd-section-nohead)까지 2열이 되면
+       추가 버튼과 목록이 좌우로 쪼개집니다. */
+    .pd-section:not(.pd-section-nohead){display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start;}
+    .pd-section:not(.pd-section-nohead) > h4{grid-column:1/-1;}
     .pd-profile.char-layout{grid-column:1;grid-row:2;}
     .pd-profile.persona-layout{grid-column:2;grid-row:2;}
     .speech-bubble.char-bubble{grid-column:1;grid-row:3;}
@@ -838,8 +851,9 @@
   /* 글을 고치는 칸은 당연히 선택할 수 있어야 합니다 */
   body.logged-in .dream-card [contenteditable="true"]{
     -webkit-user-select:text;user-select:text;-webkit-touch-callout:default;}
-  /* 드래그 중에는 화면이 같이 스크롤되거나 글자가 잡히지 않게 JS 가 body 에 붙입니다 */
-  body.touch-dragging{overflow:hidden;touch-action:none;
-    -webkit-user-select:none;user-select:none;}
+  /* 드래그 중 표시용. 스크롤을 실제로 막는 것은 JS 의 touchmove preventDefault 이고
+     (touch-action 은 손가락이 닿는 순간 정해져 도중에 바꿔도 안 먹습니다),
+     여기서는 글자 선택만 확실히 꺼둡니다. */
+  body.touch-dragging{-webkit-user-select:none;user-select:none;}
   .touch-drag-ghost{position:fixed;z-index:900;pointer-events:none;opacity:.85;
     box-shadow:0 8px 24px rgba(0,0,0,.35);transform-origin:center;}
