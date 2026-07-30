@@ -2,22 +2,28 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<!-- viewport-fit=cover: 아이폰 노치/홈 인디케이터 영역까지 배경이 이어지게 합니다.
+     user-scalable=no 는 넣지 않습니다 — 확대는 접근성 기능이라 막지 않습니다. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>갠홈</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <!-- ?v= 는 캐시 무효화용입니다.
      css/js를 고칠 때마다 이 숫자를 함께 올려주세요.
      올리지 않으면 브라우저가 옛 파일을 계속 써서
      새 HTML과 짝이 맞지 않아 화면이 깨질 수 있습니다. -->
-<link rel="stylesheet" href="css/style.css?v=4" />
+<link rel="stylesheet" href="css/style.css?v=5" />
 </head>
 <body>
 <div class="app-window">
 <div class="punch-margin left"><div class="punch-hole"></div><div class="punch-hole"></div><div class="punch-hole"></div><div class="punch-hole"></div><div class="punch-hole"></div><div class="punch-hole"></div></div>
 <div class="app-shell">
 
+  <!-- 모바일(768px 이하) 전용 — PC 에서는 CSS 로 숨깁니다 -->
+  <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="메뉴 열기" aria-expanded="false">☰</button>
+  <div class="drawer-backdrop" id="drawerBackdrop"></div>
+
   <!-- ================= SIDEBAR ================= -->
-  <aside class="sidebar">
+  <aside class="sidebar" id="sidebar">
     <div class="profile-block">
       <input class="profile-name" id="profileName" value="이름" readonly />
       <textarea class="profile-bio" id="profileBio" placeholder="간단한 소개글" readonly>여기에 소개글을 적어주세요.</textarea>
@@ -63,12 +69,15 @@
             <div class="intro-divider">*</div>
             <div class="home-intro" id="homeIntro" contenteditable="false"></div>
           </div>
+          <!-- 모바일 전용 — PC 는 휠 스크롤로 넘기므로 CSS 로 숨깁니다 -->
+          <button class="to-cards-btn" id="toCardsBtn" aria-label="카드 보기">︾</button>
         </div>
 
         <div class="home-page" id="home-cards-page">
           <div class="cards-topbar">
             <h3 class="li-title"><span class="li-icon">❣</span><span class="li-divider"></span><span class="li-label">Love Interest</span></h3>
             <button class="add-card-mini" id="addCardBtn" data-editonly title="카드 추가">＋</button>
+            <button class="to-intro-btn" id="toIntroBtn" aria-label="위로">︽</button>
           </div>
           <div class="cards-section">
             <div class="card-grid" id="cardGrid"></div>
@@ -460,7 +469,7 @@
 </div>
 
 
-<script src="js/main.js?v=4"></script>
-<script type="module" src="js/firebase-store.js?v=4"></script>
+<script src="js/main.js?v=5"></script>
+<script type="module" src="js/firebase-store.js?v=5"></script>
 </body>
 </html>

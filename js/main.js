@@ -1439,9 +1439,19 @@ let galleryTransitioning = false;
    (사라진 뒤 나타나는 2단계 방식은 끊겨 보여서 한 번에 움직이도록 함) */
 const GALLERY_EASE = 'cubic-bezier(.4,0,.2,1)';
 const GALLERY_SLIDE_MS = 450;
-const GALLERY_PER_PAGE = 15;
+/* PC 는 5열 x 3행 = 15장, 모바일은 3열 x 3행 = 9장.
+   (CSS 의 .gallery-grid 열 개수와 반드시 짝을 맞춰야 합니다)
+   iPhone SE 처럼 세로가 짧은 기기는 3행이 잘리므로 2행 = 6장으로 줄입니다.
+   행 수는 CSS 에서 지정하지 않고 자동으로 늘어나므로 여기만 바꾸면 됩니다. */
+const MOBILE_MQ = '(max-width:768px)';
+const SHORT_MQ  = '(max-height:720px)';
+function isMobileWidth(){ return window.matchMedia(MOBILE_MQ).matches; }
+function galleryPerPage(){
+  if(!isMobileWidth()) return 15;
+  return window.matchMedia(SHORT_MQ).matches ? 6 : 9;
+}
 function galleryTotalPages(folder){
-  return Math.max(1, Math.ceil(folder.images.length / GALLERY_PER_PAGE));
+  return Math.max(1, Math.ceil(folder.images.length / galleryPerPage()));
 }
 function animateGalleryPageChange(direction, applyChange){
   if(galleryTransitioning) return;
@@ -1523,7 +1533,7 @@ function renderGallery(p){
      (폴더 탭을 거치지 않고 들어오는 경로가 있어 여기서도 막는다) */
   const locked = document.getElementById('galleryLocked');
   if(folderLocked(folder)){
-    fillSlots(GALLERY_PER_PAGE);
+    fillSlots(galleryPerPage());
     if(emptyMsg) emptyMsg.style.display='none';
     if(locked) locked.style.display='flex';
     setGalleryHint(hint, false);
@@ -1533,7 +1543,7 @@ function renderGallery(p){
   if(locked) locked.style.display='none';
 
   if(!folder || folder.images.length===0){
-    fillSlots(GALLERY_PER_PAGE);
+    fillSlots(galleryPerPage());
     if(emptyMsg) emptyMsg.style.display='block';
     setGalleryHint(hint, false);
     setGalleryHint(hintUp, false);
@@ -1541,7 +1551,7 @@ function renderGallery(p){
   }
   if(emptyMsg) emptyMsg.style.display='none';
 
-  const perPage=GALLERY_PER_PAGE;
+  const perPage=galleryPerPage();
   const totalPages=galleryTotalPages(folder);
   if(galleryPage>totalPages) galleryPage=totalPages;
   if(galleryPage<1) galleryPage=1;
@@ -1606,7 +1616,16 @@ function renderGallery(p){
         });
       }
     }else{
-      el.addEventListener('click', ()=> openGalleryLightbox(folder.images.slice(), idx));
+      el.addEventListener('click', ()=>{
+        /* 터치 기기에는 hover 가 없습니다. 흐린 폴더는 첫 탭에서 선명해지고
+           두 번째 탭에서 원본이 열립니다 — 마우스로 올려보고 누르던 흐름과 같습니다. */
+        if(folder.blur && !el.classList.contains('revealed')
+           && !window.matchMedia('(hover:hover)').matches){
+          el.classList.add('revealed');
+          return;
+        }
+        openGalleryLightbox(folder.images.slice(), idx);
+      });
     }
     grid.appendChild(el);
   });
@@ -1720,7 +1739,7 @@ async function finishGalleryDrag(){
    다른 페이지에서 끌고 온 이미지는 DOM 에 놓인 그 자리에 들어간다. */
 async function commitCrossPageDrag(p, folder){
   const grid = document.getElementById('galleryGrid');
-  const perPage = GALLERY_PER_PAGE;
+  const perPage = galleryPerPage();
   const order = Array.from(grid.querySelectorAll('.gallery-thumb')).map(el=> el.dataset.key);
 
   const movingKeys = new Set(galleryDragSrcKeys || [draggedGalleryKey]);
@@ -2325,12 +2344,274 @@ function renderArchive(){
    Firestore에서 데이터를 받아온 뒤 화면을 그립니다.
    로그인 상태가 바뀌면 편집 모드도 따라서 갱신됩니다.
    ============================================================ */
+/* ============================================================
+   모바일 / 터치
+   ------------------------------------------------------------
+   PC 동작은 그대로 두고, 마우스가 없어서 못 쓰는 조작만 채웁니다.
+   ============================================================ */
+
+/* ---- 햄버거 서랍 ---- */
+function initMobileDrawer(){
+  const btn = document.getElementById('mobileMenuBtn');
+  const backdrop = document.getElementById('drawerBackdrop');
+  const sidebar = document.getElementById('sidebar');
+  if(!btn || !backdrop || !sidebar) return;
+
+  const setOpen = (open)=>{
+    sidebar.classList.toggle('open', open);
+    backdrop.classList.toggle('open', open);
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  };
+
+  btn.addEventListener('click', ()=> setOpen(!sidebar.classList.contains('open')));
+  backdrop.addEventListener('click', ()=> setOpen(false));
+  document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') setOpen(false); });
+
+  /* HOME 은 하위 메뉴가 없으니 바로 닫고,
+     PAIR/ARCHIVE 는 이어서 하위 항목을 고를 수 있게 열어 둡니다. */
+  document.querySelectorAll('.nav-item').forEach(b=>{
+    b.addEventListener('click', ()=>{ if(b.dataset.view === 'home') setOpen(false); });
+  });
+  document.querySelectorAll('.nav-sub-item').forEach(b=>{
+    b.addEventListener('click', ()=> setOpen(false));
+  });
+
+  // 창이 넓어져 PC 레이아웃으로 돌아가면 서랍 흔적을 지웁니다
+  window.matchMedia(MOBILE_MQ).addEventListener('change', (e)=>{ if(!e.matches) setOpen(false); });
+}
+
+/* ---- HOME 페이지 전환 (휠 대체) ---- */
+function initHomeTouchNav(){
+  const wrap = document.getElementById('homePagesWrap');
+  const cards = document.getElementById('home-cards-page');
+  const toCards = document.getElementById('toCardsBtn');
+  const toIntro = document.getElementById('toIntroBtn');
+  if(toCards) toCards.addEventListener('click', ()=> wrap && wrap.classList.add('show-cards'));
+  if(toIntro) toIntro.addEventListener('click', ()=> wrap && wrap.classList.remove('show-cards'));
+  if(!wrap || !cards) return;
+
+  let y0 = null, t0 = 0;
+  wrap.addEventListener('touchstart', (e)=>{
+    if(e.touches.length !== 1){ y0 = null; return; }
+    y0 = e.touches[0].clientY; t0 = Date.now();
+  }, {passive:true});
+  wrap.addEventListener('touchend', (e)=>{
+    if(y0 === null) return;
+    const dy = e.changedTouches[0].clientY - y0;
+    y0 = null;
+    if(Date.now() - t0 > 700) return;      // 천천히 끈 것은 스크롤로 봅니다
+    if(Math.abs(dy) < 50) return;
+    const showing = wrap.classList.contains('show-cards');
+    if(!showing && dy < 0) wrap.classList.add('show-cards');
+    else if(showing && dy > 0 && cards.scrollTop <= 0) wrap.classList.remove('show-cards');
+  }, {passive:true});
+}
+
+/* ---- 갤러리 페이지 전환 (휠 대체) ---- */
+function galleryStepPage(dir){
+  if(galleryTransitioning) return;
+  const p = getCurrentPost(); if(!p) return;
+  const folder = getFolder(p, currentGalleryFolderId); if(!folder) return;
+  const total = galleryTotalPages(folder);
+  if(dir > 0 && galleryPage < total){
+    animateGalleryPageChange(1, ()=>{ galleryPage++; renderGallery(p); });
+  }else if(dir < 0 && galleryPage > 1){
+    animateGalleryPageChange(-1, ()=>{ galleryPage--; renderGallery(p); });
+  }
+}
+function initGalleryTouchNav(){
+  /* 화살표는 평소 pointer-events:none 이라 못 눌렀습니다.
+     모바일 CSS 에서 auto 로 열어두고 여기서 탭을 받습니다. */
+  const bindHint = (id, dir)=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.addEventListener('click', ()=>{
+      if(el.classList.contains('disabled')) return;
+      galleryStepPage(dir);
+    });
+  };
+  bindHint('galleryScrollHint', 1);
+  bindHint('galleryScrollHintUp', -1);
+
+  const wrap = document.getElementById('galleryGridWrap');
+  if(!wrap) return;
+  let y0 = null, x0 = 0;
+  wrap.addEventListener('touchstart', (e)=>{
+    // 길게 눌러 드래그 중이면 스와이프로 해석하지 않습니다
+    if(e.touches.length !== 1 || document.body.classList.contains('touch-dragging')){ y0 = null; return; }
+    y0 = e.touches[0].clientY; x0 = e.touches[0].clientX;
+  }, {passive:true});
+  wrap.addEventListener('touchend', (e)=>{
+    if(y0 === null) return;
+    const dy = e.changedTouches[0].clientY - y0;
+    const dx = e.changedTouches[0].clientX - x0;
+    y0 = null;
+    if(document.body.classList.contains('touch-dragging')) return;
+    if(Math.abs(dy) < 45 || Math.abs(dy) < Math.abs(dx)) return;
+    galleryStepPage(dy < 0 ? 1 : -1);
+  }, {passive:true});
+}
+
+/* ---- 길게 눌러 드래그 ----------------------------------------
+   HTML5 드래그앤드롭은 터치에서 아예 동작하지 않습니다.
+   기존 dragstart/dragover/dragleave/drop/dragend 핸들러들은 전부 평범한
+   리스너라서, 같은 이름의 MouseEvent 를 만들어 쏘면 그대로 실행됩니다.
+   덕분에 카드 순서 / 프로필 정보행 / 갤러리 썸네일 / 폴더 탭 드롭 네 곳의
+   기존 코드를 한 줄도 고치지 않고 터치를 지원합니다.
+   (갤러리 화살표 위에 손가락을 얹고 있으면 페이지가 넘어가는 것도 그대로) */
+function initTouchDrag(){
+  const HOLD_MS = 400;        // 이만큼 누르고 있어야 드래그 시작
+  const MOVE_TOLERANCE = 8;   // 그 전에 이만큼 움직이면 스크롤로 봅니다
+
+  let timer = null, src = null, ghost = null, active = false;
+  let startX = 0, startY = 0, offX = 0, offY = 0, lastTarget = null;
+
+  const fire = (el, type, x, y)=>{
+    if(!el) return;
+    el.dispatchEvent(new MouseEvent(type, {
+      bubbles:true, cancelable:true, clientX:x, clientY:y, view:window
+    }));
+  };
+
+  const cleanup = ()=>{
+    if(timer){ clearTimeout(timer); timer = null; }
+    if(ghost){ ghost.remove(); ghost = null; }
+    document.body.classList.remove('touch-dragging');
+    src = null; active = false; lastTarget = null;
+  };
+
+  const begin = (visual)=>{
+    active = true;
+    if(navigator.vibrate) navigator.vibrate(15);   // 안드로이드만 반응, iOS 는 무시
+    document.body.classList.add('touch-dragging');
+
+    const r = visual.getBoundingClientRect();
+    offX = startX - r.left;
+    offY = startY - r.top;
+    ghost = visual.cloneNode(true);
+    ghost.classList.add('touch-drag-ghost');
+    ghost.style.left = r.left + 'px';
+    ghost.style.top = r.top + 'px';
+    ghost.style.width = r.width + 'px';
+    ghost.style.height = r.height + 'px';
+    ghost.style.margin = '0';
+    document.body.appendChild(ghost);
+
+    fire(src, 'dragstart', startX, startY);
+  };
+
+  document.addEventListener('pointerdown', (e)=>{
+    if(e.pointerType === 'mouse') return;         // PC 는 기본 DnD 를 씁니다
+    const t = e.target;
+    if(!(t instanceof Element)) return;
+    // 글을 쓰는 중에는 iOS 텍스트 선택(돋보기)과 충돌하므로 걸지 않습니다
+    if(t.closest('[contenteditable="true"]')) return;
+    const handle = t.closest('[draggable="true"]');
+    if(!handle) return;
+
+    cleanup();
+    src = handle;
+    startX = e.clientX; startY = e.clientY;
+    // 손잡이(::)만 draggable 인 정보행은 행 전체를 들어올려야 자연스럽습니다
+    const visual = handle.closest('.meta-row') || handle;
+    timer = setTimeout(()=> begin(visual), HOLD_MS);
+  }, {passive:true});
+
+  document.addEventListener('pointermove', (e)=>{
+    if(e.pointerType === 'mouse' || !src) return;
+    if(!active){
+      // 아직 시작 전인데 움직였다면 스크롤하려던 것으로 봅니다
+      if(Math.hypot(e.clientX - startX, e.clientY - startY) > MOVE_TOLERANCE) cleanup();
+      return;
+    }
+    e.preventDefault();
+    ghost.style.left = (e.clientX - offX) + 'px';
+    ghost.style.top  = (e.clientY - offY) + 'px';
+
+    // 고스트 자신이 잡히지 않게 잠깐 숨기고 아래 요소를 찾습니다
+    ghost.style.display = 'none';
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    ghost.style.display = '';
+
+    if(under !== lastTarget){
+      if(lastTarget) fire(lastTarget, 'dragleave', e.clientX, e.clientY);
+      lastTarget = under;
+    }
+    if(under) fire(under, 'dragover', e.clientX, e.clientY);
+  }, {passive:false});
+
+  const finish = (e)=>{
+    if(e.pointerType === 'mouse' || !src) return;
+    if(!active){ cleanup(); return; }
+    const source = src;
+    ghost.style.display = 'none';
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    if(under) fire(under, 'drop', e.clientX, e.clientY);
+    fire(source, 'dragend', e.clientX, e.clientY);
+
+    /* 손을 떼면 브라우저가 click 을 한 번 더 보냅니다.
+       그대로 두면 방금 옮긴 썸네일의 선택이 토글되므로 한 번만 막습니다. */
+    const block = (ev)=>{ ev.stopPropagation(); ev.preventDefault(); };
+    document.addEventListener('click', block, {capture:true, once:true});
+    setTimeout(()=> document.removeEventListener('click', block, {capture:true}), 400);
+
+    cleanup();
+  };
+  document.addEventListener('pointerup', finish);
+  document.addEventListener('pointercancel', ()=> cleanup());
+}
+
+/* ---- 라이트박스 좌우 스와이프 ---- */
+function initLightboxSwipe(){
+  const bind = (id, onStep)=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    let x0 = null, y0 = 0;
+    el.addEventListener('touchstart', (e)=>{
+      if(e.touches.length !== 1){ x0 = null; return; }
+      x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
+    }, {passive:true});
+    el.addEventListener('touchend', (e)=>{
+      if(x0 === null) return;
+      const dx = e.changedTouches[0].clientX - x0;
+      const dy = e.changedTouches[0].clientY - y0;
+      x0 = null;
+      if(Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy)) return;
+      onStep(dx < 0 ? 1 : -1);     // 왼쪽으로 밀면 다음 장
+    }, {passive:true});
+  };
+  bind('lightbox', (d)=> stepGalleryLightbox(d));
+  bind('arcLightbox', (d)=>{
+    if(arcLbImages.length < 2) return;
+    arcLbIndex = (arcLbIndex + d + arcLbImages.length) % arcLbImages.length;
+    renderArcLightbox();
+  });
+}
+
+/* ---- 화면 크기가 바뀌면 한 페이지 장수가 달라지므로 다시 그립니다 ---- */
+function initResponsiveWatch(){
+  const onChange = ()=>{
+    galleryPage = 1;
+    const p = getCurrentPost();
+    if(p && document.getElementById('modalPairDetail').classList.contains('open')) renderGallery(p);
+    if(document.getElementById('view-archive').classList.contains('active')) renderArchive();
+  };
+  window.matchMedia(MOBILE_MQ).addEventListener('change', onChange);
+  window.matchMedia(SHORT_MQ).addEventListener('change', onChange);
+}
+
 async function boot(){
   initPairImageAdjusters();
   initSaveIndicator();
   initFolderModal();
   initFolderUnlock();
   initGalleryPageDrop();
+  initMobileDrawer();
+  initHomeTouchNav();
+  initGalleryTouchNav();
+  initLightboxSwipe();
+  initTouchDrag();
+  initResponsiveWatch();
 
   window.SiteStore.onAuthChange((admin)=>{
     isLoggedIn = admin;

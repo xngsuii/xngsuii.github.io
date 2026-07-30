@@ -35,8 +35,12 @@
   .nav-item:hover{background:var(--surface-2);}
   .nav-item.active{background:var(--accent-soft);color:var(--accent);}
   .nav-sub{display:flex;flex-direction:column;gap:1px;margin-left:14px;overflow:hidden;max-height:0;transition:max-height .18s ease;}
-  .nav-item:hover + .nav-sub{max-height:120px;}
-  .nav-sub:hover{max-height:120px;}
+  /* 터치 기기에는 hover 가 없습니다. 어정쩡하게 걸려 메뉴가 열린 채 굳는 것을 막기 위해
+     마우스가 있는 기기에서만 hover 로 펼칩니다. 터치에서는 .open 클래스(JS)로만 열립니다. */
+  @media (hover:hover){
+    .nav-item:hover + .nav-sub{max-height:120px;}
+    .nav-sub:hover{max-height:120px;}
+  }
   .nav-sub.open{max-height:120px;}
   .nav-sub-item{padding:7px 10px;font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);border-radius:var(--radius-sm);border:none;background:transparent;text-align:left;font-weight:500;}
   .nav-sub-item:hover{background:var(--surface-2);color:var(--text);}
@@ -126,7 +130,9 @@
   .dream-card .dc-name{font-size:16px;font-weight:700;margin:3px 0;outline:none;}
   .dream-card .dc-catch{font-size:11.5px;opacity:.9;font-style:italic;margin-bottom:5px;outline:none;}
   .dream-card .dc-desc{font-size:10.5px;opacity:.85;line-height:1.5;outline:none;}
-  .dream-card [contenteditable="true"]:hover{outline:1px solid rgba(255,255,255,.4);border-radius:3px;}
+  @media (hover:hover){
+    .dream-card [contenteditable="true"]:hover{outline:1px solid rgba(255,255,255,.4);border-radius:3px;}
+  }
   .dream-card .dc-del{position:absolute;top:8px;right:8px;z-index:5;width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.85);border:none;font-size:11px;color:#333;align-items:center;justify-content:center;}
   .dream-card .dc-drag{position:absolute;top:8px;left:8px;z-index:5;font-size:13px;color:#fff;cursor:grab;background:rgba(0,0,0,.4);border-radius:6px;padding:3px 7px;}
   body:not(.logged-in) .dc-drag{display:none;}
@@ -140,7 +146,7 @@
   .post-card.selectable{cursor:default;}
   .post-check{position:absolute;top:6px;left:6px;width:18px;height:18px;border:1px solid var(--border);background:var(--bg);z-index:4;display:flex;align-items:center;justify-content:center;font-size:11px;}
   .post-check.checked{background:var(--accent);color:#fff;border-color:var(--accent);}
-  .post-card:hover{box-shadow:0 4px 14px rgba(0,0,0,.12);}
+  @media (hover:hover){ .post-card:hover{box-shadow:0 4px 14px rgba(0,0,0,.12);} }
   .post-thumb{width:100%;aspect-ratio:1/1;background:var(--surface-2) center/cover no-repeat;}
   .post-info{padding:10px 12px;}
   .post-type{font-family:var(--mono);font-size:9.5px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.05em;}
@@ -484,7 +490,9 @@
   /* '썸네일 흐리게' 옵션이 켜진 폴더 — 커서를 올리면 선명해짐.
      살짝 확대해두면 블러가 가장자리를 갉아먹어 생기는 테두리 얼룩이 보이지 않는다. */
   .gallery-thumb.blurred .gt-img{filter:blur(9px);transform:scale(1.14);transition:filter .18s ease, transform .18s ease;}
-  .gallery-thumb.blurred:hover .gt-img{filter:none;transform:none;}
+  @media (hover:hover){ .gallery-thumb.blurred:hover .gt-img{filter:none;transform:none;} }
+  /* 터치 기기: hover 가 없으므로 한 번 탭하면 선명해집니다 (JS 가 .revealed 를 붙임) */
+  .gallery-thumb.blurred.revealed .gt-img{filter:none;transform:none;}
   .lightbox{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;gap:18px;z-index:200;}
   .lightbox.open{display:flex;}
   .lightbox img{max-width:80vw;max-height:88vh;border-radius:6px;}
@@ -508,8 +516,293 @@
   .arc-nai-thumb{position:relative;min-height:0;background-size:cover;background-position:center;background-repeat:no-repeat;border:1px solid var(--border);cursor:pointer;overflow:hidden;}
   .arc-nai-pin{position:absolute;top:4px;left:4px;font-size:11px;text-shadow:0 0 3px rgba(0,0,0,.8);z-index:2;}
   .arc-nai-overlay{position:absolute;inset:0;background:rgba(0,0,0,0);display:flex;align-items:flex-end;transition:background .15s;}
-  .arc-nai-thumb:hover .arc-nai-overlay{background:rgba(0,0,0,.55);}
+  @media (hover:hover){ .arc-nai-thumb:hover .arc-nai-overlay{background:rgba(0,0,0,.55);} }
   .arc-nai-overlay-static{background:rgba(0,0,0,.08) !important;}
   .arc-nai-title{color:#fff;font-size:10px;padding:8px;opacity:0;transition:opacity .15s;font-family:var(--mono);line-height:1.3;}
-  .arc-nai-thumb:hover .arc-nai-title{opacity:1;}
+  @media (hover:hover){ .arc-nai-thumb:hover .arc-nai-title{opacity:1;} }
   .arc-nai-overlay-static .arc-nai-title{opacity:1;color:var(--text);text-shadow:none;}
+
+  /* ============================================================
+     반응형 (모바일 / 태블릿)
+     ------------------------------------------------------------
+     769px 이상에서는 아래 어떤 규칙도 적용되지 않습니다.
+     PC 화면은 이 블록이 없던 때와 완전히 동일합니다.
+     ============================================================ */
+
+  /* Safari 가 가로 모드에서 임의로 글자를 키우는 것을 막습니다 */
+  html{-webkit-text-size-adjust:100%;text-size-adjust:100%;}
+  /* backdrop-filter 는 Safari 에서 접두사가 필요합니다 */
+  .topbar,.cards-topbar{-webkit-backdrop-filter:blur(6px);}
+  /* 모바일 전용으로 새로 넣은 요소들 — PC 에서는 존재하지 않는 것처럼 숨깁니다 */
+  .mobile-menu-btn,.drawer-backdrop,.to-cards-btn,.to-intro-btn{display:none;}
+
+  /* ---------- 태블릿 (769~1100px) ----------
+     16:9 를 고정해두면 1024x768 에서 983x553 이 되어 세로 215px 를 버립니다.
+     사이드바 구조는 그대로 두고 창 비율만 풀어 화면을 꽉 쓰게 합니다. */
+  @media (min-width:769px) and (max-width:1100px){
+    .app-window{width:100%;max-width:100%;aspect-ratio:auto;height:100vh;height:100dvh;max-height:none;}
+    .punch-margin{width:26px;}
+    /* 인덱스 탭(72px)은 모달 왼쪽 바깥에 그려지고 모달은 가운데 정렬이라,
+       모달 폭이 화면폭 - 탭폭*2 보다 크면 탭이 화면 밖으로 밀려납니다.
+       870px 아래에서만 줄어들고 그 위로는 PC 와 같은 720px 를 유지합니다. */
+    .modal.wide.pd-modal{width:min(720px, calc(100vw - 168px));}
+    .pd-index-tabs{top:40px;}
+    .pd-index-tab{width:72px;padding:12px 10px;font-size:11px;}
+  }
+
+  /* ================= 모바일 (768px 이하) ================= */
+  @media (max-width:768px){
+
+    /* ---------- 프레임: 좌우 펀치 구멍을 상하 가로줄로 ----------
+       .app-window 은 [좌 펀치][app-shell][우 펀치] 순서의 flex row 라서
+       column 으로 뒤집으면 그대로 [상][본문][하] 가 됩니다. */
+    body{align-items:stretch;justify-content:stretch;min-height:0;}
+    .app-window{flex-direction:column;width:100%;max-width:100%;aspect-ratio:auto;
+      height:100vh;height:100dvh;max-height:none;border:none;box-shadow:none;}
+    .punch-margin{flex-direction:row;width:auto;height:22px;flex:none;padding:0 18px;}
+    .punch-margin.left{border-right:none;border-bottom:1px solid var(--border);}
+    .punch-margin.right{border-left:none;border-top:1px solid var(--border);
+      height:calc(22px + env(safe-area-inset-bottom));
+      padding-bottom:env(safe-area-inset-bottom);}
+    .punch-hole{width:10px;height:10px;}
+    .app-shell{flex-direction:column;min-height:0;position:relative;}
+    .main{min-height:0;overscroll-behavior:contain;}
+    /* 가로 스크롤은 어떤 경우에도 생기지 않게 */
+    html,body{overflow-x:hidden;max-width:100%;}
+    img,video,canvas{max-width:100%;}
+
+    /* ---------- 햄버거 서랍 ----------
+       z-index 는 .topbar(20) 위, .modal-overlay(100) 아래로 잡아
+       모달이 열렸을 때 서랍/버튼이 모달을 덮지 않게 합니다.
+       ☰(56) 는 어두운 배경(55) 보다 위, 서랍(60) 보다 아래에 둡니다.
+       그래야 평소엔 눌리고, 서랍이 열리면 서랍에 가려집니다. */
+    .mobile-menu-btn{display:flex;align-items:center;justify-content:center;
+      position:absolute;top:7px;left:8px;width:40px;height:40px;z-index:56;
+      border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:17px;line-height:1;}
+    .drawer-backdrop{position:fixed;inset:0;background:rgba(20,20,25,.45);z-index:55;}
+    .drawer-backdrop.open{display:block;}
+    .sidebar{position:fixed;left:0;top:0;width:270px;max-width:84vw;height:100vh;height:100dvh;
+      z-index:60;transform:translateX(-100%);transition:transform .25s ease;
+      border-right:1px solid var(--border);box-shadow:6px 0 24px rgba(0,0,0,.25);
+      padding:22px 16px calc(20px + env(safe-area-inset-bottom));overscroll-behavior:contain;}
+    .sidebar.open{transform:none;}
+    /* ☰ 자리를 비워둡니다 */
+    .topbar{padding:10px 14px 10px 56px;}
+    .cards-topbar{padding-left:56px;padding-right:14px;}
+    .nav-item{padding:13px 10px;font-size:13px;}
+    .nav-sub-item{padding:13px 10px;font-size:12px;}
+    .nav-sub{max-height:0;}
+    .nav-sub.open{max-height:220px;}
+    .login-btn-small{min-height:40px;padding:10px 14px;font-size:12px;}
+
+    /* ---------- Home ---------- */
+    #home-intro-page{padding:20px 16px 56px;}
+    .intro-card{padding:20px 16px 24px;}
+    .intro-sitename{font-size:16px;}
+    .home-intro{font-size:14px;line-height:1.8;}
+    /* 휠이 없으므로 페이지 전환 화살표를 실제로 보여줍니다 */
+    .to-cards-btn{display:flex;width:40px;height:40px;bottom:16px;color:var(--accent);font-size:16px;}
+    .to-intro-btn{display:flex;width:34px;height:34px;flex:none;align-self:center;
+      margin-left:8px;color:var(--accent);font-size:14px;}
+    .card-grid{grid-template-columns:1fr;}
+    .dream-card .dc-content{max-width:88%;padding:12px 14px;}
+    /* 1열이 되면 카드가 넓어져 왼쪽 그라데이션만으로는 글자가 안 읽힙니다 */
+    .dream-card .dc-grad{background:linear-gradient(90deg, rgba(0,0,0,.85) 0%, rgba(0,0,0,.6) 34%, rgba(0,0,0,0) 74%);}
+    .dream-card .dc-name{font-size:15px;}
+    .dream-card .dc-del,.dream-card .dc-drag{width:30px;height:30px;display:flex;
+      align-items:center;justify-content:center;padding:0;}
+    /* 편집 모드에서 어디를 눌러야 고칠 수 있는지 hover 없이 알 수 있게 상시 표시 */
+    body.logged-in .dream-card [contenteditable="true"]{outline:1px dashed rgba(255,255,255,.35);}
+
+    /* ---------- Pair 목록 ---------- */
+    .pair-body{padding:16px 14px 40px;}
+    .post-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}
+    .post-title{font-size:12.5px;}
+    .pair-select-bar{flex-wrap:wrap;padding:10px 14px;gap:6px;}
+    .pair-header-actions{gap:6px;}
+    .post-check{width:24px;height:24px;font-size:13px;}
+
+    /* ---------- Archive ---------- */
+    .archive-body{padding:16px 14px 10px;}
+    /* 한 페이지 8개는 그대로 두고 4x2 를 2x4 로 세웁니다 (JS 수정 불필요) */
+    .arc-nai-grid{grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(4,1fr);}
+    /* hover 가 없으니 제목을 항상 보여줍니다 */
+    .arc-nai-overlay{background:rgba(0,0,0,.4);}
+    .arc-nai-title{opacity:1;font-size:11px;}
+    .log-table th:first-child,.log-table td:first-child{width:30px;padding-right:8px;}
+    .log-table td:last-child{width:60px;}
+    .log-table td{padding:12px 4px;}
+    .archive-search{margin:0 14px 14px;}
+
+    /* 검색 컨트롤 4개는 한 줄에 안 들어가므로 두 줄로 접습니다:
+       [날짜][제목▾] / [검색어][✕] */
+    .log-search{flex-wrap:wrap;row-gap:6px;}
+    .log-search input[type=text]{flex:1 1 200px;}
+    .archive-search input[type=text]{flex:1 1 200px;}
+    .log-search select,.log-search input{font-size:16px;padding:8px 8px;}
+    .log-search input[type=date]{width:auto;flex:1 1 130px;}
+    .log-search button{min-width:40px;font-size:13px;}
+
+    /* ---------- 모달 공통 ---------- */
+    .modal{max-width:100%;max-height:calc(100dvh - 24px);padding:20px 16px;
+      overscroll-behavior:contain;}
+    .modal.wide,.modal.wide.arc-modal,.modal.login-modal,.modal.gf-modal{max-width:100%;}
+    .modal-close{width:38px;height:38px;top:8px;right:8px;font-size:15px;}
+    .arc-kebab-btn{width:38px;height:38px;top:8px;right:52px;font-size:17px;}
+    .arc-kebab-menu{top:50px;right:8px;}
+    .arc-kebab-menu button{padding:13px 14px;font-size:12.5px;}
+    .arc-view-head{padding-right:96px;}
+    #modalLogView h3{padding-right:96px;}
+    .form-actions{gap:6px;}
+    .gf-actions{flex-wrap:wrap;row-gap:8px;}
+
+    /* ---------- Pair 상세 모달 ----------
+       인덱스 탭이 모달 왼쪽 바깥(right:100%)에 있어 화면 밖으로 나갑니다.
+       가로 3등분 세그먼트로 바꿔 모달 아래에 붙입니다 — 엄지로 닿기 쉽고,
+       서류철에서 탭이 본체 밖으로 튀어나온 느낌도 그대로입니다.
+       위쪽 보더를 지워 모달과 한 덩어리로 이어지게 합니다. */
+    .pd-modal-wrap{flex-direction:column;width:100%;align-items:stretch;}
+    .pd-index-tabs{position:static;flex-direction:row;width:100%;}
+    .pd-index-tab{flex:1;width:auto;text-align:center;margin-bottom:0;padding:13px 6px;
+      font-size:11px;border-top:none;border-right:none;}
+    .pd-index-tab:last-child{border-right:1px solid #000;}
+    /* 탭 줄(약 40px)이 모달 위로 올라왔으므로 그만큼 빼줍니다.
+       계산이 어긋나도 잘리지는 않게 .modal 의 overflow-y:auto 는 살려둡니다. */
+    .modal.wide.pd-modal{width:100%;max-width:100%;max-height:calc(100dvh - 70px);}
+    .pd-modal-body{padding:0 14px 8px;}
+    .pd-title-input{font-size:18px;margin:14px 0 0;}
+    /* GALLERY/LOG 탭이 height:100% 기반 flex 라 높이를 auto 로 풀면 무너집니다.
+       모달의 나머지 요소(탭 40 + 배너 113 + 제목 62 + 여백 32)를 뺀 값으로 고정. */
+    .pd-tab-content{height:calc(100dvh - 268px);min-height:280px;padding:8px 2px 8px 0;
+      overscroll-behavior:contain;}
+    .pd-info-grid{grid-template-columns:1fr;gap:0;}
+    .pd-section h4{margin-bottom:18px;}
+    /* 프로필 사진과 정보를 세로로 쌓습니다. 페르소나는 order 를 유지해
+       (글 → 사진) 좌우 반전된 느낌이 세로에서도 남게 합니다. */
+    .pd-profile,.pd-profile.persona-layout{grid-template-columns:1fr;gap:12px;margin-bottom:22px;}
+    /* 전체폭이면 3:4 비율 때문에 세로 480px 짜리 사진이 되어버립니다 */
+    .pd-profile-img{width:150px;justify-self:center;}
+    .pd-name-input{width:100%;}
+    .pd-relationship{flex-direction:column;gap:10px;margin-bottom:20px;}
+    .rel-icon{transform:rotate(90deg);align-self:center;}
+    .speech-bubble.persona-bubble{margin-bottom:24px;}
+
+    /* ---------- 갤러리 ----------
+       5열 15장 -> 3열 9장 (JS 의 galleryPerPage() 와 짝을 맞춥니다) */
+    .gallery-grid{grid-template-columns:repeat(3,1fr);gap:8px;}
+    /* PC 는 격자가 남은 높이를 거의 채우지만 폰에서는 남는 높이가 커서,
+       flex:1 로 두면 화살표가 가장자리로 밀려 이미지와 100px 넘게 벌어집니다.
+       내용 높이만큼만 차지하게 하고 위아래 auto 여백으로 가운데 정렬합니다. */
+    .gallery-grid-wrap{flex:0 0 auto;margin-top:auto;margin-bottom:auto;
+      padding-top:34px;padding-bottom:34px;}
+    /* 화살표가 pointer-events:none 이라 못 눌렀습니다. 탭으로 페이지를 넘길 수 있게 합니다.
+       세로 여백을 주면 눌리는 영역이 첫 줄 썸네일을 덮어 이미지 대신 페이지가 넘어가므로,
+       좌우로만 넓혀 위 여백(34px) 안에 정확히 들어가게 합니다. */
+    .gallery-scroll-hint{pointer-events:auto;padding:0 20px;}
+    .gallery-scroll-hint.disabled{pointer-events:none;}
+    .gallery-scroll-hint.up{top:7px;}
+    .gallery-scroll-hint{bottom:0;}
+    .gallery-fab{width:44px;height:44px;font-size:18px;}
+    .gallery-fab-row{bottom:4px;right:4px;gap:8px;}
+    .gallery-check{width:22px;height:22px;font-size:12px;}
+    /* 폴더가 여러 개면 줄바꿈되어 격자 높이를 잡아먹습니다.
+       한 줄로 고정하고 좌우로 밀어 보게 합니다 (스크롤바는 숨김). */
+    .gallery-folder-bar{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;
+      scrollbar-width:none;-ms-overflow-style:none;}
+    .gallery-folder-bar::-webkit-scrollbar{display:none;height:0;}
+    .gallery-folder-tab,.gallery-folder-add{flex:none;white-space:nowrap;}
+    .gallery-folder-tab{padding:13px 12px;font-size:11px;}
+    body.logged-in .gallery-folder-tab{padding:13px 8px 13px 12px;}
+    .gallery-folder-add{padding:13px 12px;}
+    .gallery-folder-rename{padding:4px 6px;font-size:12px;}
+
+    /* ---------- LOG / 타임라인 ---------- */
+    .log-entry{padding:13px 12px;}
+    .tl-del{width:28px;height:28px;}
+    .log-pg-btn{padding:8px 12px;font-size:12px;}
+    .add-mini-btn{padding:9px 12px;font-size:12px;}
+
+    /* ---------- 편집 툴바 ---------- */
+    /* 툴바 버튼이 많아 두 줄로 접히지만(flex-wrap), 손가락으로 누르는 게 우선입니다 */
+    .rt-toolbar{gap:5px;}
+    .rt-toolbar button{width:38px;height:38px;font-size:14px;}
+    .rt-color{width:38px;height:38px;}
+    .rt-colorbar .rt-colorcell{min-width:52px;}
+    .rt-colorbar .rt-colorcell input[type=color]{height:18px;}
+    .rt-colorbar .rt-colorcell span{font-size:9.5px;min-height:18px;}
+    .arc-attach-item{padding:10px;}
+    .arc-attach-item .arc-attach-del{width:30px;height:30px;}
+    .meta-del{width:26px;height:26px;}
+    .meta-drag{padding:2px 6px;font-size:13px;}
+
+    /* ---------- 버튼/터치 타겟 ---------- */
+    .btn-primary,.btn-ghost{min-height:40px;padding:9px 13px;}
+    .add-card-mini{width:34px;height:34px;font-size:16px;}
+
+    /* ---------- iOS 입력창 확대 방지 ----------
+       Safari 는 16px 미만 입력창에 포커스하면 화면을 강제로 확대합니다. */
+    .form-row input[type=text],.form-row input[type=url],.form-row input[type=date],
+    .form-row input[type=password],.form-row input[type=email],
+    .form-row textarea,.form-row select,
+    .log-editor,.arc-editor,#arcCodeInput,
+    .profile-name,.profile-bio,.pd-input{font-size:16px;}
+    .profile-bio{height:52px;}
+    .form-row input[type=text],.form-row input[type=password],
+    .form-row input[type=email],.form-row select{padding:10px;}
+    /* 읽는 글자는 12.5px 로는 폰에서 너무 작습니다 */
+    .profile-view-text,.arc-view-content{font-size:14px;line-height:1.6;}
+    .arc-view-content,.log-editor,.arc-editor{overflow-wrap:anywhere;}
+
+    /* 본문에 직접 타이핑하는 칸들(정보행, 말풍선, 관계, 타임라인, 카드 글귀)은
+       보기 모드에서는 원래 크기를 유지하고, 편집 모드에서만 16px 로 올립니다.
+       방문자 화면 디자인은 그대로 두면서 관리자가 폰에서 글을 고칠 때만
+       iOS 의 강제 확대를 피하기 위함입니다. */
+    body.logged-in .pd-subtitle-input,
+    body.logged-in .meta-label,body.logged-in .meta-value,
+    body.logged-in .kw-text,
+    body.logged-in .speech-bubble,
+    body.logged-in .rel-label,body.logged-in .rel-text,
+    body.logged-in .tl-title,body.logged-in .tl-content,
+    body.logged-in .home-intro,
+    body.logged-in .profile-view-text,
+    body.logged-in .dream-card .dc-genre,body.logged-in .dream-card .dc-catch,
+    body.logged-in .dream-card .dc-desc{font-size:16px;}
+
+    /* ---------- 라이트박스 ---------- */
+    .lightbox{gap:0;}
+    .lightbox img{max-width:92vw;max-height:78vh;}
+    .lb-nav{position:absolute;width:44px;height:44px;font-size:24px;}
+    #lbPrev{left:10px;}
+    #lbNext{right:10px;}
+    .arc-lightbox{gap:0;flex-direction:column;justify-content:center;}
+    .arc-lb-main-wrap{max-width:92vw;max-height:64vh;}
+    .arc-lb-main-wrap img{max-height:64vh;}
+    .arc-lb-nav{position:absolute;top:46%;width:44px;height:44px;font-size:24px;z-index:2;}
+    #arcLbPrev{left:8px;}
+    #arcLbNext{right:8px;}
+    .arc-lb-close{width:40px;height:40px;top:12px;right:12px;}
+    /* 세로 열이던 썸네일을 하단 가로 스크롤 줄로 */
+    .arc-lb-thumbs{position:absolute;left:0;right:0;bottom:calc(10px + env(safe-area-inset-bottom));
+      flex-direction:row;max-height:none;width:100%;overflow-x:auto;overflow-y:hidden;
+      padding:0 12px;gap:6px;justify-content:flex-start;}
+    .arc-lb-thumb{width:52px;height:52px;}
+  }
+
+  /* 세로가 짧은 기기(iPhone SE 667px) — 한 페이지는 JS 에서 6장으로 줄입니다 */
+  @media (max-width:768px) and (max-height:720px){
+    .gallery-grid{gap:6px;}
+    .pd-tab-content{height:calc(100dvh - 250px);}
+  }
+
+  /* 가로 모드 — 세로 공간이 거의 없으므로 배너를 낮추고 탭 높이를 최소로 */
+  @media (max-width:900px) and (orientation:landscape) and (max-height:520px){
+    .pd-header-banner{aspect-ratio:6/1;}
+    .pd-index-tab{padding:8px 6px;}
+    .pd-tab-content{height:calc(100dvh - 200px);min-height:200px;}
+    .pd-title-input{font-size:16px;margin-top:8px;}
+  }
+
+  /* 드래그(길게 눌러 끌기) 중에는 화면이 같이 스크롤되지 않게 JS 가 body 에 붙입니다 */
+  body.touch-dragging{overflow:hidden;touch-action:none;}
+  .touch-drag-ghost{position:fixed;z-index:900;pointer-events:none;opacity:.85;
+    box-shadow:0 8px 24px rgba(0,0,0,.35);transform-origin:center;}
