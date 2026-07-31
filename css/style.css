@@ -65,7 +65,11 @@
   .main{flex:1;overflow-y:auto;position:relative;}
   .view{display:none;height:100%;}
   .view.active{display:block;}
-  .topbar{position:sticky;top:0;background:rgba(244,241,234,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;z-index:20;}
+  /* 높이를 편집 모드 기준(60px = 여백 14+14 + 버튼 31 + 아래 보더 1)으로 고정합니다.
+     보기 모드에서는 버튼이 사라져 44px 로 줄어들고 LOVE INTEREST 바는 50px 라,
+     화면을 옮기거나 로그인할 때마다 제목 줄이 위아래로 튀었습니다.
+     .cards-topbar 도 같은 값으로 맞춰 세 화면의 머리줄이 한 높이로 이어집니다. */
+  .topbar{position:sticky;top:0;background:rgba(244,241,234,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;z-index:20;}
   .topbar h2{font-family:var(--mono);font-size:14px;margin:0;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
   .btn-primary{background:var(--text);color:#fff;border:none;border-radius:var(--radius-sm);padding:8px 14px;font-size:12.5px;font-weight:600;}
   .btn-primary:hover{opacity:.85;}
@@ -103,17 +107,17 @@
 
   /* 아이콘 칸을 정사각형으로 만들고 구분선을 바 높이만큼 세우기 위해
      왼쪽 패딩을 없애고 align-items:stretch 로 자식들이 바 높이를 물려받게 합니다. */
-  /* 높이를 고정합니다 — 아이콘 칸을 정사각형으로 잡으려면 바 높이가 확정돼야 합니다
-     (내용이 50px 보다 작아 min-height 일 때와 보이는 결과는 같습니다) */
-  .cards-topbar{position:sticky;top:0;background:rgba(244,241,234,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:0 28px 0 0;display:flex;align-items:stretch;gap:0;z-index:5;height:50px;}
+  /* 높이를 고정합니다 — 아이콘 칸을 정사각형으로 잡으려면 바 높이가 확정돼야 하고,
+     .topbar(PAIR/ARCHIVE)와 같은 60px 를 써서 화면을 옮겨도 머리줄이 이어져 보입니다. */
+  .cards-topbar{position:sticky;top:0;background:rgba(244,241,234,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:0 28px 0 0;display:flex;align-items:stretch;gap:0;z-index:5;height:60px;}
   .to-intro-btn{width:28px;height:28px;border-radius:0;border:1px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:13px;}
   .cards-topbar h3{font-family:var(--mono);font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin:0;flex:1;}
   .li-title{display:flex;align-items:stretch;gap:0;}
   /* 아이콘 칸: 바 높이와 같은 변을 가진 정사각형.
      폭을 직접 지정합니다 — 사파리는 늘어난(stretch) 높이로부터 aspect-ratio 의
      폭을 계산하지 못해서, 비율만 걸어두면 기호 글자 너비(약 16px)로 쪼그라듭니다.
-     49px = 바 높이 50px - 아래 보더 1px (box-sizing:border-box) */
-  .li-icon{flex:none;width:49px;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text);}
+     59px = 바 높이 60px - 아래 보더 1px (box-sizing:border-box) */
+  .li-icon{flex:none;width:59px;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text);}
   /* 구분선: 위/아래 보더에 맞닿도록 세로로 꽉 채움 */
   .li-divider{width:1px;background:var(--border);flex:none;}
   .li-label{display:flex;align-items:center;padding-left:14px;}
@@ -142,21 +146,100 @@
   .dream-card .dc-drag{position:absolute;top:8px;left:8px;z-index:5;font-size:13px;color:#fff;cursor:grab;background:rgba(0,0,0,.4);border-radius:6px;padding:3px 7px;}
   body:not(.logged-in) .dc-drag{display:none;}
 
-  /* ---- Pair list ---- */
-  .pair-body{padding:20px 28px 60px;}
-  .post-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;}
+  /* ---- Pair list ----
+     PROMPT 페이지와 같이 한 페이지에 4열 x 2행 = 8개가 남은 높이를 꽉 채우고
+     페이지 버튼이 아래에 고정됩니다. (.view.active 가 display:block 이므로 덮어씀) */
+  #view-pair.active{display:flex;flex-direction:column;min-height:0;}
+  #view-pair .topbar,.pair-select-bar{flex:none;}
+  .pair-body{padding:20px 28px 10px;display:flex;flex-direction:column;gap:14px;flex:1;min-height:0;}
+  .post-grid{display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(2,1fr);gap:14px;flex:1;min-height:0;}
+  /* 마지막 페이지가 덜 차도 격자 높이가 그대로 유지되는 빈 자리 */
+  .post-slot{visibility:hidden;pointer-events:none;}
+  .post-grid .empty-note{grid-column:1/-1;grid-row:1/-1;align-self:center;}
   .pair-select-bar{display:flex;align-items:center;gap:8px;padding:10px 28px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text-muted);background:var(--surface);}
   .pair-header-actions{gap:8px;}
-  .post-card{position:relative;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--bg);cursor:pointer;}
+  .post-card{position:relative;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--bg);cursor:pointer;display:flex;flex-direction:column;min-height:0;}
   .post-card.selectable{cursor:default;}
   .post-check{position:absolute;top:6px;left:6px;width:18px;height:18px;border:1px solid var(--border);background:var(--bg);z-index:4;display:flex;align-items:center;justify-content:center;font-size:11px;}
   .post-check.checked{background:var(--accent);color:#fff;border-color:var(--accent);}
   @media (hover:hover){ .post-card:hover{box-shadow:0 4px 14px rgba(0,0,0,.12);} }
-  .post-thumb{width:100%;aspect-ratio:1/1;background:var(--surface-2) center/cover no-repeat;}
-  .post-info{padding:10px 12px;}
+  /* 칸 높이가 행(1fr)으로 정해지므로 썸네일이 남은 높이를 가져갑니다 */
+  .post-thumb{width:100%;flex:1;min-height:0;background:var(--surface-2) center/cover no-repeat;}
+  .post-info{padding:10px 12px;flex:none;}
   .post-type{font-family:var(--mono);font-size:9.5px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.05em;}
   .post-title{font-size:13px;font-weight:700;margin-top:2px;}
   .empty-note{color:var(--text-muted);font-size:12.5px;padding:30px 0;text-align:center;}
+
+  /* ---- OC 목록 ----
+     PAIR 목록과 같은 4열 x 2행 격자 + PROMPT 방식 폴더 탭.
+     카드에는 분류 줄이 없고 제목만 들어갑니다. */
+  #view-oc.active{display:flex;flex-direction:column;min-height:0;}
+  #view-oc .topbar{flex:none;}
+  .oc-body{padding:20px 28px 10px;display:flex;flex-direction:column;gap:14px;flex:1;min-height:0;position:relative;}
+  /* 제목 아래 캐치프레이즈 한 줄 */
+  .oc-catch{font-size:10.5px;color:var(--text-muted);margin-top:2px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+  /* ---- OC 상세 ----
+     인덱스 탭이 없고 프로필/갤러리/로그 세 장이 위아래로 넘어갑니다. */
+  .modal.wide.oc-modal{width:720px;max-width:96vw;max-height:calc(100vh - 24px);padding:0;}
+  /* PAIR 상세(.pd-tab-content)와 같은 580px — 갤러리 격자 크기가 같아집니다 */
+  .oc-pages{position:relative;height:580px;overflow:hidden;margin-top:10px;}
+  .oc-page{position:absolute;inset:0;display:flex;flex-direction:column;min-height:0;
+    background:var(--bg);transition:transform .45s cubic-bezier(.4,0,.2,1);}
+  /* 몇 번째 장인지 알려주는 점 — 창 바깥 왼쪽, 세로 가운데.
+     넘기는 것은 스크롤/스와이프로만 하므로 누를 수 없습니다. */
+  .oc-modal-wrap{position:relative;display:flex;align-items:flex-start;}
+  .oc-page-dots{position:absolute;right:100%;top:50%;transform:translateY(-50%);
+    margin-right:14px;display:flex;flex-direction:column;gap:5px;pointer-events:none;z-index:12;}
+  /* 어두운 배경 위에 놓이므로 흰 점 + 얇은 검은 테두리로 어디서든 보이게 합니다 */
+  .oc-page-dot{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.5);
+    box-shadow:0 0 0 1px rgba(0,0,0,.4);}
+  .oc-page-dot.active{background:#fff;}
+
+  /* 왼쪽은 프로필 + 키워드 + 자유 글, 오른쪽은 세로로 긴 이미지 한 장 */
+  .oc-info-grid{display:grid;grid-template-columns:1fr 260px;gap:20px;flex:1;min-height:0;}
+  .oc-info-main{display:flex;flex-direction:column;min-height:0;}
+  /* 사진 - 키워드 - 자유 글 사이 간격을 14px 로 똑같이 맞춥니다
+     (원래 프로필 줄이 갖고 있던 32px + 절 여백 22px 을 걷어냅니다) */
+  .oc-info-main .pd-section{margin-bottom:0;}
+  /* 높이를 사진 칸에 맞춰 고정합니다 — 144px 열에 3:4 비율이므로 192px.
+     설명이 길어지면 아래 .pd-desc-box 안에서만 스크롤됩니다. */
+  .oc-info-main .pd-profile{height:192px;margin-bottom:14px;}
+  .oc-info-main .pd-profile-info{display:flex;flex-direction:column;min-height:0;}
+  .oc-info-main .pd-desc-box{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;}
+  .oc-info-side{min-height:0;}
+  .oc-side-img{height:100%;border:1px solid var(--border);}
+  /* 키워드 3등분 칸 */
+  .oc-kw-row{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--border);flex:none;}
+  .oc-kw{padding:9px 8px;text-align:center;font-size:11.5px;font-weight:700;color:var(--text);
+    border-right:1px solid var(--border);outline:none;min-width:0;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .oc-kw:last-child{border-right:none;}
+  body.logged-in .oc-kw:hover{background:var(--surface);}
+  body.logged-in .oc-kw:focus{background:var(--surface);outline:1px solid var(--accent);}
+  /* 자유 텍스트 — 길어지면 이 박스 안에서만 스크롤됩니다 */
+  .oc-free-box{flex:1;min-height:90px;margin-top:14px;border:1px solid var(--border);
+    padding:10px;overflow-y:auto;overscroll-behavior:contain;}
+  .oc-free-box .oc-free{min-height:100%;border:none;padding:0;}
+  body.logged-in .oc-free-box .oc-free{border:none;padding:0;}
+  .oc-free-box .oc-free:empty:before{content:'자유롭게 적어보세요...';color:var(--text-muted);}
+  .oc-free-box img{max-width:100%;display:block;margin:8px 0;}
+
+  /* 가로로 넘기는 갤러리(OC).
+     격자 크기는 PAIR 과 똑같이 두려고 좌우 여백을 주지 않고(위아래 38px 만),
+     화살표는 격자 위아래 빈 띠의 양 끝 — 《 는 좌상단, 》 는 우하단에 둡니다. */
+  .gallery-grid-wrap.horiz{padding:38px 0;}
+  .gallery-grid-wrap.horiz .gallery-scroll-hint{left:auto;right:2px;top:auto;bottom:4px;
+    transform:none;animation:gallery-bounce-right 1.4s infinite;pointer-events:auto;}
+  .gallery-grid-wrap.horiz .gallery-scroll-hint.up{left:2px;right:auto;top:4px;bottom:auto;
+    transform:none;animation:gallery-bounce-left 1.4s infinite;}
+  @keyframes gallery-bounce-right{0%,100%{transform:translateX(0);}50%{transform:translateX(4px);}}
+  @keyframes gallery-bounce-left{0%,100%{transform:translateX(0);}50%{transform:translateX(-4px);}}
+  .gallery-grid-wrap.horiz .gallery-scroll-hint.drop-target{transform:scale(1.35);}
+  .gallery-grid-wrap.horiz .gallery-scroll-hint.disabled{pointer-events:none;}
+  /* 오른쪽 아래는 》 자리이므로 선택/추가 버튼은 왼쪽으로 보냅니다 */
+  .oc-page-gallery .gallery-fab-row{left:2px;right:auto;justify-content:flex-start;}
 
   /* ---- Archive ---- */
   .archive-toolbar{display:flex;gap:8px;padding:16px 28px 0;}
@@ -242,12 +325,20 @@
   .pd-info-grid{display:grid;grid-template-columns:1fr 260px;gap:20px;align-items:start;margin-top:10px;}
   .pd-section{margin-bottom:22px;}
   .pd-section h4{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin:0 0 24px;padding-bottom:8px;border-bottom:1px solid var(--border);}
-  /* 제목과 추가 버튼을 한 줄에 놓는 머리줄. 밑줄은 제목이 아니라 이 줄이 갖습니다
-     (제목만 갖고 있으면 버튼 아래로는 선이 이어지지 않습니다). */
-  .pd-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;
-    border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:24px;}
-  .pd-section-head h4{margin:0;padding:0;border-bottom:none;flex:1;min-width:0;}
-  .pd-section-head .add-mini-btn{margin:0;flex:none;}
+  /* 제목과 추가 버튼을 한 줄에 놓는 머리줄.
+     밑줄·여백은 제목(h4)이 그대로 갖습니다 — 왼쪽 PROFILE 의 h4 와 규칙이 똑같아야
+     두 절의 밑줄이 같은 높이에 옵니다. 버튼을 이 줄에 흘려 넣으면 버튼 높이만큼
+     줄이 높아져 밑줄이 내려가므로, 버튼은 흐름에서 빼내 오른쪽 끝에 겹쳐 둡니다.
+     위(0)/아래(밑줄 9px = 여백 8 + 선 1)를 제목 글자 줄에 맞춰 늘려두면
+     글자 크기가 달라져도 버튼이 함께 따라옵니다. */
+  .pd-section-head{position:relative;margin-bottom:24px;}
+  .pd-section-head h4{margin:0;}
+  /* ＋ 기호 하나만 두고 테두리·배경을 없애 글줄에 얹힌 것처럼 보이게 합니다. */
+  .pd-section-head .add-mini-btn{position:absolute;right:0;top:0;bottom:9px;margin:0;
+    padding:0 2px;border:none;background:none;color:var(--accent);
+    font-size:14px;line-height:1;white-space:nowrap;}
+  .pd-section-head .add-mini-btn:hover{color:var(--text);}
+  body.logged-in .pd-section-head .add-mini-btn[data-editonly]{display:inline-flex;align-items:center;}
   .pd-profile-tag{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--accent);margin:14px 0 8px;text-transform:uppercase;}
   .pd-profile-tag:first-of-type{margin-top:0;}
 
@@ -282,6 +373,48 @@
   .ce-tab:hover{opacity:.85;}
   .code-embed-download{margin-left:auto;font-family:var(--mono);font-size:12px;border:1px solid var(--border);background:var(--bg);padding:4px 9px;}
   .code-embed-download:hover{background:var(--surface-2);}
+  /* 코드 복사 — 다운로드 버튼 왼쪽에 붙습니다.
+     오른쪽으로 미는 margin-left:auto 를 이 버튼이 가져가고,
+     다운로드는 바로 옆에 붙도록 되돌립니다. */
+  .code-embed-copy{margin-left:auto;font-family:var(--mono);font-size:10.5px;
+    border:1px solid var(--border);background:var(--bg);color:var(--text);padding:4px 9px;}
+  .code-embed-copy:hover{background:var(--surface-2);}
+  .code-embed-copy + .code-embed-download{margin-left:4px;}
+
+  /* ---- 본문 코드 블록 (``` 로 감싼 구간) ----
+     통째로 복사하는 ⧉ 버튼이 오른쪽 위에 붙습니다.
+     안쪽은 보더(#1a1a1a)보다 한 단계 밝은 어두운 색 #2e2b27 에 밝은 글자 #f4f1ea. */
+  .code-block{position:relative;border:1px solid var(--border);background:#2e2b27;margin:10px 0;}
+  .code-block .code-block-copy{position:absolute;top:6px;right:6px;z-index:2;font-family:var(--mono);
+    font-size:12px;line-height:1;border:1px solid #56514a;background:#3d3933;color:#f4f1ea;
+    width:24px;height:24px;padding:0;display:flex;align-items:center;justify-content:center;}
+  .code-block .code-block-copy:hover{background:#56514a;}
+  /* 선택자를 두 겹으로 씁니다 — .arc-view-content pre / .arc-editor pre 가
+     밝은 배경과 보더를 이미 걸어두고 있어서 한 겹으로는 밀립니다.
+     오른쪽 여백은 ⧉ 버튼 자리입니다. */
+  .code-block .code-block-body{margin:0;padding:12px 38px 12px 12px;border:none;background:none;
+    font-family:var(--mono);font-size:11px;line-height:1.6;color:#f4f1ea;
+    overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;}
+
+  /* ---- 접기(토글) ----
+     노션의 토글 목록처럼 상자 없이 본문 글줄로 보입니다.
+     화살표만 눌러도 되고(편집 중), 읽을 때는 제목 줄 아무 데나 눌러도 열립니다.
+     .open 이 붙어 있을 때만 내용이 보입니다 — 저장 시점에 .open 을 떼므로
+     게시글은 언제나 접힌 채로 시작합니다. */
+  /* 위아래 7px 은 접기 내용과 그 뒤 본문 사이 간격입니다
+     (제목과 내용 사이 .fold-body 의 margin-top 과 같은 값). */
+  .fold-block{margin:7px 0;}
+  .fold-head{display:flex;align-items:baseline;gap:8px;}
+  .fold-arrow{flex:none;width:12px;text-align:center;color:var(--text-muted);font-size:9px;
+    line-height:1.6;cursor:pointer;user-select:none;-webkit-user-select:none;}
+  .fold-arrow:hover{color:var(--text);}
+  .fold-title{flex:1;min-width:0;outline:none;}
+  /* 화살표(12px) + 간격(8px) 만큼 들여써서 제목 글자 왼쪽 끝에 맞춥니다.
+     위 여백은 본문 줄 간격(12.5px x 1.4 = 약 5px 벌어짐)보다 조금 넓게 잡아
+     제목과 내용이 한 문단으로 붙어 보이지 않게 합니다. */
+  .fold-body{padding-left:20px;margin-top:7px;}
+  .fold-block:not(.open) .fold-body{display:none;}
+  .arc-view-content .fold-head{cursor:pointer;}
   .code-embed-image{background:#fff;}
   .code-embed-preview-live{background:#fff;padding:10px;overflow:auto;}
   .code-embed-code{background:var(--surface);padding:8px;font-family:var(--mono);font-size:10.5px;overflow-x:auto;white-space:pre-wrap;}
@@ -297,15 +430,26 @@
   #modalLogView h3{margin:0 0 2px;padding-right:36px;}
   .arc-kebab-btn{position:absolute;top:14px;right:48px;background:rgba(244,241,234,.9);border:1px solid var(--border);width:26px;height:26px;display:none;align-items:center;justify-content:center;font-size:15px;color:var(--text);z-index:10;}
   body.logged-in .arc-kebab-btn{display:flex;}
-  .arc-kebab-menu{position:absolute;top:44px;right:14px;background:var(--bg);border:1px solid var(--border);display:none;flex-direction:column;z-index:11;min-width:120px;box-shadow:0 4px 14px rgba(0,0,0,.15);}
+  /* 항목 앞 기호를 없앤 만큼 폭도 줄였습니다 (120 -> 60px).
+     항목이 모두 두 글자라 60px 안에 넉넉히 들어갑니다. */
+  .arc-kebab-menu{position:absolute;top:44px;right:14px;background:var(--bg);border:1px solid var(--border);display:none;flex-direction:column;z-index:11;min-width:60px;box-shadow:0 4px 14px rgba(0,0,0,.15);}
   .arc-kebab-menu.open{display:flex;}
-  .arc-kebab-menu button{border:none;background:var(--bg);padding:9px 12px;text-align:left;font-size:11.5px;font-family:var(--mono);color:var(--text);}
+  .arc-kebab-menu button{border:none;background:var(--bg);padding:9px 6px;text-align:center;font-size:11.5px;font-family:var(--mono);color:var(--text);}
   .arc-kebab-menu button:hover{background:var(--surface-2);}
   .arc-pin-tag{color:var(--accent);}
   .rt-toolbar[data-editonly]{display:none;}
   body.logged-in .rt-toolbar[data-editonly]{display:flex;}
-  .rt-toolbar button{width:24px;height:24px;border:1px solid var(--border);background:var(--bg);border-radius:0;font-size:11px;}
+  /* padding:0 + flex 가운데 정렬이 필요합니다 — 브라우저 기본 버튼 여백(좌우 6px)이
+     24px 상자의 내용 폭을 10px 로 줄여서, 정렬 아이콘(15px)과 </> 같은 넓은 글자가
+     칸을 넘쳐 오른쪽으로 쏠려 보였습니다. */
+  .rt-toolbar button{width:24px;height:24px;padding:0;border:1px solid var(--border);
+    background:var(--bg);border-radius:0;font-size:11px;
+    display:inline-flex;align-items:center;justify-content:center;line-height:1;}
   .rt-toolbar button:hover{background:var(--surface-2);}
+  /* 정렬 버튼 아이콘 — 맞는 기호가 없어 얇은 선으로 직접 그립니다.
+     pointer-events 를 꺼야 클릭이 늘 버튼에 잡힙니다. */
+  .rt-ico{width:15px;height:15px;flex:none;fill:none;stroke:currentColor;
+    stroke-width:1;stroke-linecap:butt;pointer-events:none;}
   .rt-color{width:24px;height:24px;padding:0;border:1px solid var(--border);border-radius:0;background:var(--bg);cursor:pointer;}
   /* LOG 편집 툴바: 네 개의 컬러 메뉴를 하나의 사각형으로 묶고
      표처럼 세로선으로 나눔 (칩은 위, 이름은 아래) */
@@ -329,6 +473,7 @@
   .log-editor hr,.arc-view-content hr,.arc-editor hr{border:none;border-top:1px solid var(--border);margin:12px 0;}
   .rt-toolbar-log{margin-bottom:0;border:1px solid var(--border);border-bottom:none;padding:5px 6px;background:var(--surface);}
   .log-editor{min-height:160px;border:1px solid var(--border);padding:10px;overflow-y:auto;max-height:320px;}
+  .log-editor img{max-width:100%;display:block;margin:8px 0;}
   body.logged-in .log-editor{border:1px solid var(--border);}
   .log-autofmt-hint{font-size:9.5px;color:var(--text-muted);margin-top:6px;line-height:1.5;}
   .profile-view-text{font-size:12.5px;line-height:1.4;color:var(--text);outline:none;min-height:60px;}
@@ -524,8 +669,29 @@
   /* PROMPT: 한 페이지에 가로 4 x 세로 2 = 8개가 남은 높이를 꽉 채운다.
      행 높이를 1fr 로 두므로 칸 비율은 창 크기에 따라 자동으로 정해진다. */
   .arc-nai-grid{display:grid;grid-template-columns:repeat(4, 1fr);grid-template-rows:repeat(2, 1fr);gap:8px;flex:1;min-height:0;}
-  .arc-nai-thumb{position:relative;min-height:0;background-size:cover;background-position:center;background-repeat:no-repeat;border:1px solid var(--border);cursor:pointer;overflow:hidden;}
+  .arc-nai-thumb{position:relative;min-height:0;background:var(--surface);border:1px solid var(--border);cursor:pointer;overflow:hidden;}
+  .arc-nai-thumb.dragging{opacity:.4;}
+  /* 사진은 안쪽 레이어에 깝니다 — 흐림 효과가 제목·버튼·보더까지 번지지 않게 */
+  .an-img{position:absolute;inset:0;background-size:cover;background-position:center;background-repeat:no-repeat;}
+  /* '썸네일 흐리게' 폴더. 갤러리와 달리 커서를 올려도 풀리지 않고
+     오른쪽 위 👁 를 눌러야 풀립니다 — 커서를 올리면 제목이 뜨는 기능과 겹치기 때문입니다.
+     살짝 확대해두면 흐림이 가장자리를 갉아먹어 생기는 테두리 얼룩이 보이지 않습니다. */
+  .arc-nai-thumb.blurred .an-img{filter:blur(12px);transform:scale(1.14);}
+  .an-img{transition:filter .18s ease, transform .18s ease;}
+  /* 보기 버튼: 어두운 바탕(보더와 같은 #1a1a1a)에 밝은 기호.
+     👁 뒤의 U+FE0E 는 컬러 이모지 대신 글자 모양으로 그리라는 표시입니다 —
+     이게 없으면 기기에 따라 색이 박힌 이모지가 나와 color 가 먹지 않습니다. */
+  .an-eye{position:absolute;top:4px;right:4px;z-index:3;width:24px;height:24px;padding:0;
+    display:flex;align-items:center;justify-content:center;font-size:12px;line-height:1;
+    border:1px solid var(--border);background:var(--border);color:var(--bg);}
+  .an-eye:hover{background:#3d3933;}
+  /* 이미지가 없는 마지막 페이지의 빈 자리 (잠긴 폴더 표시용) */
+  .arc-nai-slot{visibility:hidden;pointer-events:none;}
+  /* 잠김 안내는 본문 영역 정중앙에 */
+  .archive-body{position:relative;}
+  .arc-folder-bar{margin:0;flex:none;}
   .arc-nai-pin{position:absolute;top:4px;left:4px;font-size:11px;text-shadow:0 0 3px rgba(0,0,0,.8);z-index:2;}
+  .arc-nai-thumb .gallery-check{z-index:4;}
   .arc-nai-overlay{position:absolute;inset:0;background:rgba(0,0,0,0);display:flex;align-items:flex-end;transition:background .15s;}
   @media (hover:hover){ .arc-nai-thumb:hover .arc-nai-overlay{background:rgba(0,0,0,.55);} }
   /* 터치 기기: hover 가 없으므로 한 번 탭하면 같은 효과가 나타납니다 (JS 가 .revealed 를 붙임) */
@@ -590,9 +756,10 @@
        모달이 열렸을 때 서랍/버튼이 모달을 덮지 않게 합니다.
        ☰(56) 는 어두운 배경(55) 보다 위, 서랍(60) 보다 아래에 둡니다.
        그래야 평소엔 눌리고, 서랍이 열리면 서랍에 가려집니다. */
-    /* ❣ 칸(49px) 안에 들어가도록 왼쪽 4px — 기호만 덮고 글씨는 덮지 않습니다 */
+    /* ❣ 칸(59px) 안에 들어가도록 왼쪽 4px — 기호만 덮고 글씨는 덮지 않습니다.
+       위 9px 은 40px 버튼을 59px 칸 가운데에 놓는 값입니다. */
     .mobile-menu-btn{display:flex;align-items:center;justify-content:center;
-      position:absolute;top:5px;left:4px;width:40px;height:40px;z-index:56;
+      position:absolute;top:9px;left:4px;width:40px;height:40px;z-index:56;
       border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:17px;line-height:1;}
     .drawer-backdrop{position:fixed;inset:0;background:rgba(20,20,25,.45);z-index:55;}
     .drawer-backdrop.open{display:block;}
@@ -601,8 +768,10 @@
       border-right:1px solid var(--border);box-shadow:6px 0 24px rgba(0,0,0,.25);
       padding:22px 16px calc(20px + env(safe-area-inset-bottom));overscroll-behavior:contain;}
     .sidebar.open{transform:none;}
-    /* ☰ 자리를 비워둡니다 */
-    .topbar{padding:10px 14px 10px 56px;}
+    /* ☰ 자리를 비워둡니다. 높이는 데스크톱과 같은 60px 를 쓰되, 손가락용으로
+       커진 버튼(min-height:40px)이 들어가도록 위아래 여백을 9px 로 줄입니다
+       (60 - 보더 1 - 여백 18 = 41px). */
+    .topbar{padding:9px 14px 9px 56px;}
     /* 카드 페이지 머리줄은 왼쪽 여백을 주지 않습니다 — ❣ 칸이 데스크톱과 똑같이
        바 높이만 한 정사각형으로 왼쪽 끝에 붙고 기호가 그 안에 가운데 옵니다.
        ☰ 가 그 위를 덮지만, 칸 모양을 맞추는 쪽을 택했습니다. */
@@ -633,12 +802,36 @@
     body.logged-in .dream-card [contenteditable="true"]{outline:1px dashed rgba(255,255,255,.35);}
 
     /* ---------- Pair 목록 ---------- */
-    .pair-body{padding:16px 14px 40px;}
-    .post-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}
+    .pair-body{padding:16px 14px 10px;}
+    /* 한 페이지 8개는 그대로 두고 4x2 를 2x4 로 세웁니다 (PROMPT 와 같은 방식) */
+    .post-grid{grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(4,1fr);gap:10px;}
+    .post-info{padding:8px 10px;}
     .post-title{font-size:12.5px;}
     .pair-select-bar{flex-wrap:wrap;padding:10px 14px;gap:6px;}
     .pair-header-actions{gap:6px;}
     .post-check{width:24px;height:24px;font-size:13px;}
+
+    /* ---------- OC ---------- */
+    .oc-body{padding:16px 14px 10px;}
+    .modal.wide.oc-modal{width:100%;max-width:100%;}
+    /* 세 장의 높이를 화면에 맞춥니다 (배너 + 제목 + 넘김 줄을 뺀 나머지) */
+    .oc-pages{height:calc(100dvh - 218px);min-height:260px;}
+    /* 창이 화면을 꽉 채워 바깥에 둘 자리가 없으므로 왼쪽 안쪽으로 들입니다 */
+    .oc-page-dots{right:auto;left:3px;margin-right:0;}
+    /* 한 칸으로 세우면 사진 높이에 맞출 이유가 없습니다 */
+    .oc-info-main .pd-profile{height:auto;}
+    .oc-info-main .pd-desc-box{max-height:200px;}
+    /* 좌우 두 칸을 위아래로 세웁니다. 이 화면은 내용이 넘치면 장 안에서 스크롤되고,
+       페이지는 아래 ︽ ︾ 로 넘깁니다. */
+    .oc-page{overflow-y:auto;overscroll-behavior:contain;}
+    /* 높이를 화면에 맞춰 나누지 않고 내용대로 흘려보냅니다 —
+       한 칸으로 세우면 내용이 칸 높이를 넘어 아래 칸 위에 겹쳐 그려집니다. */
+    .oc-info-grid{grid-template-columns:1fr;gap:12px;flex:none;}
+    .oc-info-main{min-height:auto;}
+    .oc-free-box{flex:none;min-height:120px;max-height:220px;}
+    /* 전체폭이면 3:4 비율 때문에 세로로 너무 길어집니다 (프로필 사진과 같은 처리) */
+    .oc-side-img{height:auto;aspect-ratio:3/4;width:100%;max-width:170px;margin:0 auto;}
+    .oc-kw{font-size:11px;padding:9px 4px;}
 
     /* ---------- Archive ---------- */
     .archive-body{padding:16px 14px 10px;}
@@ -698,9 +891,10 @@
     .pd-tab-content{height:calc(100dvh - 268px);min-height:280px;padding:8px 2px 8px 0;
       overscroll-behavior:contain;}
     .pd-info-grid{grid-template-columns:1fr;gap:0;}
-    /* 직계 자식만 — TIMELINE 처럼 .pd-section-head 안에 들어간 제목은
-       그 줄에서 가운데 정렬돼야 하므로 아래 여백을 주면 안 됩니다. */
+    /* 직계 자식만 — TIMELINE 의 제목은 .pd-section-head 안에 있고
+       아래 여백을 머리줄 쪽이 갖습니다(둘의 값을 같게 맞춥니다). */
     .pd-section > h4{margin-bottom:18px;}
+    .pd-section-head{margin-bottom:18px;}
 
     /* 캐릭터와 페르소나를 좌우로 나란히 놓습니다.
        DOM 순서가 [프로필A][말풍선A][말풍선B][프로필B] 라 순서만으로는 안 되므로

@@ -22,7 +22,7 @@ import {
   getFirestore, doc, getDoc, setDoc, deleteDoc,
   collection, getDocs, writeBatch
 } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
-import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=8';
+import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=19';
 
 const app  = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -35,8 +35,11 @@ const listRef = (key) => collection(db, ROOT[0], ROOT[1], key);
 const blobsRef = () => collection(db, ROOT[0], ROOT[1], 'blobs');
 
 /* 작은 값은 meta 문서 하나에, 배열은 항목별 문서로 나눠 저장 */
-const SCALAR_KEYS = ['profile', 'siteName', 'homeIntro', 'homeBanner', 'archiveSeqCounter'];
-const LIST_KEYS   = ['cards', 'pairPosts', 'archive'];
+/* archiveFolders 는 PROMPT 폴더 목록입니다. 안에 글을 담지 않고
+   이름·비밀번호해시·옵션만 들어 있어 항목 수가 적으므로 meta 문서에 함께 둡니다.
+   (글 쪽에 folderId 가 적혀 있어 폴더-글 연결은 archive 문서들이 갖습니다) */
+const SCALAR_KEYS = ['profile', 'siteName', 'homeIntro', 'homeBanner', 'archiveSeqCounter', 'archiveFolders', 'ocFolders'];
+const LIST_KEYS   = ['cards', 'pairPosts', 'archive', 'ocPosts'];
 
 /* Firestore 문서 1개 최대 1MiB. 여유를 두고 자릅니다. */
 const CHUNK_CHARS = 700000;

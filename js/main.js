@@ -18,10 +18,15 @@ function applyEditMode(){
 
   introBannerAdj && introBannerAdj.paint();
   renderCards();
+  renderOcPosts();
   renderArchive();
   if(currentPairPostId){
     const p = getCurrentPost();
     if(p) fillPairDetail(p);
+  }
+  if(currentOcId && document.getElementById('modalOcDetail').classList.contains('open')){
+    const o = getCurrentOc();
+    if(o) fillOcDetail(o);
   }
 }
 
@@ -100,8 +105,80 @@ function nowStamp(){ const d=new Date(); const yy=String(d.getFullYear()).slice(
 let state = {
   profile:{ name:'이름', bio:'여기에 소개글을 적어주세요.', photo:'' },
   siteName:'사이트 이름', homeIntro:'', homeBanner: blankImg(),
-  cards:[], pairPosts:[], archive:[], archiveSeqCounter:0
+  cards:[], pairPosts:[], archive:[], archiveSeqCounter:0,
+  archiveFolders:[], ocPosts:[], ocFolders:[]
 };
+
+/* ---- PROMPT 폴더 ----
+   PAIR_GALLERY 의 폴더와 같은 모양({id,name,secret,pwHash,blur})이지만
+   이미지가 아니라 아카이브 글을 담습니다. 글 쪽에 folderId 를 적어두고
+   폴더 목록은 따로 저장합니다(개수가 적어 스칼라 키로 충분).
+   기본 폴더 id 는 갤러리의 'default' 와 겹치지 않게 다른 이름을 씁니다 —
+   비밀 폴더 열람 기록(unlockedFolders)을 두 곳이 함께 쓰기 때문입니다. */
+const ARC_DEFAULT_FOLDER = 'arcdefault';
+function normalizeArcFolders(list){
+  const out = Array.isArray(list) ? list.slice() : [];
+  if(!out.some(f=> f && f.id===ARC_DEFAULT_FOLDER)){
+    out.unshift({ id:ARC_DEFAULT_FOLDER, name:'기본' });
+  }
+  out.forEach(f=>{
+    if(f.secret == null) f.secret = false;
+    if(f.pwHash == null) f.pwHash = '';
+    if(f.blur   == null) f.blur   = false;
+  });
+  return out;
+}
+/* ---- OC 폴더 ----
+   PROMPT 폴더와 같은 모양이지만 '썸네일 흐리게'는 쓰지 않고 비밀 폴더만 씁니다. */
+const OC_DEFAULT_FOLDER = 'ocdefault';
+function normalizeOcFolders(list){
+  const out = Array.isArray(list) ? list.slice() : [];
+  if(!out.some(f=> f && f.id===OC_DEFAULT_FOLDER)){
+    out.unshift({ id:OC_DEFAULT_FOLDER, name:'기본' });
+  }
+  out.forEach(f=>{
+    if(f.secret == null) f.secret = false;
+    if(f.pwHash == null) f.pwHash = '';
+    f.blur = false;
+  });
+  return out;
+}
+function ocFolderIdOf(item){
+  const id = item.folderId || OC_DEFAULT_FOLDER;
+  return state.ocFolders.some(f=>f.id===id) ? id : OC_DEFAULT_FOLDER;
+}
+
+/* OC 글 한 건의 기본 모양을 채웁니다 (예전 데이터에 빠진 항목도 여기서 메꿉니다) */
+function migrateOcPost(o){
+  o.title = o.title || '새 캐릭터';
+  if(o.subtitle == null) o.subtitle = '캐치프레이즈';
+  o.headerImage = normalizeImg(o.headerImage);
+  o.sideImage   = normalizeImg(o.sideImage);
+  o.profile = o.profile || {};
+  if(o.profile.name == null) o.profile.name = '';
+  if(o.profile.intro == null) o.profile.intro = '';
+  if(o.profile.metaHtml == null) o.profile.metaHtml = '';
+  o.profile.image = normalizeImg(o.profile.image);
+  if(!Array.isArray(o.keywords) || o.keywords.length !== 3) o.keywords = ['키워드','키워드','키워드'];
+  if(o.freeText == null) o.freeText = '';
+  if(!o.folderId) o.folderId = OC_DEFAULT_FOLDER;
+  o.log = o.log || [];
+  migrateGalleryFolders(o);   // 갤러리 폴더 구조는 PAIR 과 똑같이 씁니다
+  migrateLogIds(o);
+  return o;
+}
+
+/* 로그인 상태는 데이터를 불러오기 전에 먼저 확정될 수 있고, 그때 applyEditMode 가
+   renderArchive / renderOcPosts 를 부릅니다. 폴더 목록이 비어 있으면 폴더를 못 찾아
+   터지므로, 기본 폴더를 미리 넣어둡니다. */
+state.archiveFolders = normalizeArcFolders(null);
+state.ocFolders = normalizeOcFolders(null);
+
+/* 글이 가리키는 폴더가 지워졌으면 기본 폴더로 봅니다 */
+function arcFolderIdOf(item){
+  const id = item.folderId || ARC_DEFAULT_FOLDER;
+  return state.archiveFolders.some(f=>f.id===id) ? id : ARC_DEFAULT_FOLDER;
+}
 
 function migrateCard(c){
   if(typeof c.image==='string' || !c.image) c.image = normalizeImg(c.image);
@@ -190,6 +267,9 @@ async function loadState(){
   state.cards     = (await storageGet('cards', [])).map(migrateCard);
   state.pairPosts = (await storageGet('pairPosts', [])).map(migratePost);
   state.archive   = (await storageGet('archive', [])).map(migrateArchiveItem);
+  state.archiveFolders = normalizeArcFolders(await storageGet('archiveFolders', null));
+  state.ocFolders = normalizeOcFolders(await storageGet('ocFolders', null));
+  state.ocPosts   = (await storageGet('ocPosts', [])).map(migrateOcPost);
   state.archiveSeqCounter = await storageGet('archiveSeqCounter', 0);
   let maxSeq = 0;
   state.archive.forEach(item=>{ if(item.seq==null){ maxSeq++; item.seq = maxSeq; } else if(item.seq>maxSeq){ maxSeq=item.seq; } });
@@ -208,6 +288,7 @@ function renderAll(){
   document.getElementById('homeIntro').innerText = state.homeIntro;
   renderCards();
   renderPairPosts();
+  renderOcPosts();
   renderArchive();
   applyEditMode();
 }
@@ -418,10 +499,23 @@ navItems.forEach(btn=>{
     document.getElementById('view-'+btn.dataset.view).classList.add('active');
     pairSub.classList.toggle('open', btn.dataset.view==='pair');
     archiveSub.classList.toggle('open', btn.dataset.view==='archive');
+    /* 큰 메뉴를 누르면 하위 분류는 늘 첫 항목으로 돌아갑니다 */
+    if(btn.dataset.view==='pair'){
+      currentPairFilter='all';
+      document.querySelectorAll('#pairSub .nav-sub-item').forEach(b=>b.classList.toggle('active', b.dataset.pairsub==='all'));
+      document.getElementById('pairTitle').innerText='Pair · 전체';
+      pairPage=1;
+      renderPairPosts();
+    }
+    if(btn.dataset.view==='oc'){
+      ocPage=1; ocSelectMode=false; ocSelectedIds.clear();
+      renderOcPosts();
+    }
     if(btn.dataset.view==='archive'){
-      currentArchiveCategory='ooc';
-      document.querySelectorAll('#archiveSub .nav-sub-item').forEach(b=>b.classList.toggle('active', b.dataset.archivesub==='ooc'));
+      currentArchiveCategory='nai';
+      document.querySelectorAll('#archiveSub .nav-sub-item').forEach(b=>b.classList.toggle('active', b.dataset.archivesub==='nai'));
       arcPage=1;
+      arcUnblurred.clear();
       renderArchive();
     }
   });
@@ -432,12 +526,15 @@ document.querySelectorAll('#pairSub .nav-sub-item').forEach(btn=>{
     document.querySelectorAll('#pairSub .nav-sub-item').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
     currentPairFilter = btn.dataset.pairsub;
     document.getElementById('pairTitle').innerText = 'Pair · ' + (currentPairFilter==='all'?'전체':currentPairFilter==='aichat'?'Ai chat':'Dream');
+    pairPage = 1;
     renderPairPosts();
     navItems.forEach(b=>b.classList.remove('active'));
     document.querySelector('.nav-item[data-view="pair"]').classList.add('active');
     document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
     document.getElementById('view-pair').classList.add('active');
+    // 고른 쪽만 열어둡니다 — 큰 메뉴를 눌러 들어왔을 때와 같은 모습이 되도록
     pairSub.classList.add('open');
+    archiveSub.classList.remove('open');
   });
 });
 document.querySelectorAll('#archiveSub .nav-sub-item').forEach(btn=>{
@@ -446,11 +543,14 @@ document.querySelectorAll('#archiveSub .nav-sub-item').forEach(btn=>{
     document.querySelectorAll('#archiveSub .nav-sub-item').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
     currentArchiveCategory = btn.dataset.archivesub;
     arcPage=1;
+    arcUnblurred.clear();
     navItems.forEach(b=>b.classList.remove('active'));
     document.querySelector('.nav-item[data-view="archive"]').classList.add('active');
     document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
     document.getElementById('view-archive').classList.add('active');
+    // 고른 쪽만 열어둡니다 — 큰 메뉴를 눌러 들어왔을 때와 같은 모습이 되도록
     archiveSub.classList.add('open');
+    pairSub.classList.remove('open');
     renderArchive();
   });
 });
@@ -626,15 +726,17 @@ function renderCards(){
    PAIR
    ============================================================ */
 let currentPairFilter='all';
-let currentArchiveCategory='ooc';
+let currentArchiveCategory='nai';   // ARCHIVE 첫 진입은 PROMPT
 let selectMode=false;
 let selectedPairIds=new Set();
 
 bindOnce(document.getElementById('writePairBtn'), async ()=>{
   if(!isLoggedIn) return;
   const post = migratePost({ id:Date.now(), type: currentPairFilter==='dream'?'dream':'aichat', title:'새 페어' });
-  state.pairPosts.push(post);
+  // 새 글은 맨 앞에 쌓입니다 — 첫 페이지 왼쪽 위에서 바로 보입니다
+  state.pairPosts.unshift(post);
   await storageSet('pairPosts', state.pairPosts);
+  pairPage = 1;
   renderPairPosts();
   openPairDetail(post.id);
 });
@@ -672,12 +774,27 @@ document.getElementById('moveToDreamBtn').addEventListener('click', async ()=>{
   renderPairPosts();
 });
 
+/* PROMPT 페이지와 같은 4열 x 2행 = 8개 (모바일은 2열 x 4행).
+   CSS 의 .post-grid 열/행 수와 반드시 짝을 맞춰야 합니다. */
+const PAIR_PER_PAGE = 8;
+let pairPage = 1;
+
 function renderPairPosts(){
   const grid=document.getElementById('postGrid'); grid.innerHTML='';
+  const pagSlot=document.getElementById('pairPagination');
+  if(pagSlot) pagSlot.innerHTML='';
   const list = state.pairPosts.filter(p=> currentPairFilter==='all' || p.type===currentPairFilter);
   if(list.length===0){ grid.innerHTML='<div class="empty-note">아직 작성된 글이 없어요.</div>'; return; }
-  list.forEach(p=>{
+
+  const totalPages = Math.max(1, Math.ceil(list.length/PAIR_PER_PAGE));
+  if(pairPage>totalPages) pairPage=totalPages;
+  if(pairPage<1) pairPage=1;
+  const start=(pairPage-1)*PAIR_PER_PAGE;
+  const pageItems = list.slice(start, start+PAIR_PER_PAGE);
+
+  pageItems.forEach(p=>{
     const el=document.createElement('div'); el.className='post-card'+(selectMode?' selectable':'');
+    el.dataset.id = p.id;
     const checked = selectedPairIds.has(p.id);
     el.innerHTML = `${selectMode?`<div class="post-check ${checked?'checked':''}">${checked?'✓':''}</div>`:''}
       <div class="post-thumb" style="background-image:url('${(p.headerImage&&p.headerImage.src)||''}')"></div>
@@ -697,6 +814,27 @@ function renderPairPosts(){
     const thumbSrc = p.headerImage && p.headerImage.src;
     if(thumbSrc) applyThumbBg(el.querySelector('.post-thumb'), thumbSrc);
   });
+
+  // 마지막 페이지가 덜 차도 격자 높이가 그대로 유지되도록 빈 자리를 채웁니다
+  for(let i=pageItems.length;i<PAIR_PER_PAGE;i++){
+    const slot=document.createElement('div'); slot.className='post-slot';
+    grid.appendChild(slot);
+  }
+
+  if(pagSlot && totalPages>1){
+    let pag = `<button class="log-pg-btn" data-pg="prev" ${pairPage===1?'disabled':''}>&lt;</button>`;
+    for(let i=1;i<=totalPages;i++){ pag += `<button class="log-pg-btn ${i===pairPage?'active':''}" data-pg="${i}">${i}</button>`; }
+    pag += `<button class="log-pg-btn" data-pg="next" ${pairPage===totalPages?'disabled':''}>&gt;</button>`;
+    pagSlot.innerHTML = `<div class="log-pagination">${pag}</div>`;
+    pagSlot.querySelectorAll('.log-pg-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        if(btn.dataset.pg==='prev') pairPage=Math.max(1,pairPage-1);
+        else if(btn.dataset.pg==='next') pairPage=Math.min(totalPages,pairPage+1);
+        else pairPage=Number(btn.dataset.pg);
+        renderPairPosts();
+      });
+    });
+  }
 }
 
 let currentPairPostId=null;
@@ -759,15 +897,18 @@ function fillPairDetail(p){
   pdHeaderImgAdj.paint();
 
   bindRichTextToolbars();
+  /* 갤러리·로그 엔진을 PAIR 창 쪽으로 돌려놓습니다 */
+  galleryHost = PAIR_GALLERY_HOST;
+  logHost = PAIR_LOG_HOST;
   pdLogPage = 1;
   currentGalleryFolderId = p.galleryFolders[0].id;
   galleryPage = 1;
   gallerySelectMode = false;
   gallerySelectedIdx.clear();
-  document.getElementById('gallerySelectInfo').style.display='none';
-  document.getElementById('gallerySelectDeleteBtn').style.display='none';
-  document.getElementById('gallerySelectBtn').innerText='✓';
-  document.getElementById('gallerySelectBtn').classList.remove('active');
+  gq('.gallery-select-info').style.display='none';
+  gq('.gallery-select-delete').style.display='none';
+  gq('.gallery-select-toggle').innerText='✓';
+  gq('.gallery-select-toggle').classList.remove('active');
   document.querySelectorAll('.pd-index-tab').forEach(t=>t.classList.toggle('active', t.dataset.pdtab==='info'));
   document.querySelectorAll('.pd-tab-pane').forEach(pn=>pn.classList.toggle('active', pn.dataset.pdpane==='info'));
   renderLogList(p); renderGallery(p); renderTimeline(p);
@@ -781,17 +922,20 @@ document.querySelectorAll('.pd-index-tab').forEach(tab=>{
   });
 });
 
-function bindMeta(elId, field, obj){
+/* persist 를 넘기지 않으면 PAIR 글로 저장합니다 (OC 창은 자기 저장 함수를 넘깁니다) */
+function bindMeta(elId, field, obj, persist){
+  const save = persist || savePair;
   const el=document.getElementById(elId); el.value=obj[field]||''; el.readOnly=!isLoggedIn;
-  el.oninput=()=>{ if(!isLoggedIn)return; obj[field]=el.value; storageSet('pairPosts',state.pairPosts); };
+  el.oninput=()=>{ if(!isLoggedIn)return; obj[field]=el.value; save(); };
 }
 let draggedMetaRow = null;
-function bindMetaContainer(elId, obj){
+function bindMetaContainer(elId, obj, persist){
   // 라벨(::라벨 값) 전용 컨테이너. 본문과 완전히 독립된 레이어로 동작.
   const el=document.getElementById(elId);
   el.innerHTML = obj.metaHtml || '';
   el.querySelectorAll('.meta-label,.meta-value').forEach(span=>{ span.contentEditable = isLoggedIn ? 'true' : 'false'; });
-  const save = ()=>{ obj.metaHtml=el.innerHTML; storageSet('pairPosts',state.pairPosts); };
+  const persistFn = persist || savePair;
+  const save = ()=>{ obj.metaHtml=el.innerHTML; persistFn(); };
   el._saveMeta = save;
 
   el.addEventListener('focusout', (e)=>{
@@ -832,12 +976,13 @@ function bindMetaContainer(elId, obj){
     }
   });
 }
-function bindBodyText(elId, obj){
+function bindBodyText(elId, obj, persist){
   // 본문 전용 영역. 라벨과 완전히 분리되어 일반적인 줄바꿈 동작만 수행.
   const el=document.getElementById(elId);
   el.innerHTML = obj.intro || '';
   el.contentEditable = isLoggedIn ? 'true' : 'false';
-  const save = ()=>{ obj.intro=el.innerHTML; storageSet('pairPosts',state.pairPosts); };
+  const persistFn = persist || savePair;
+  const save = ()=>{ obj.intro=el.innerHTML; persistFn(); };
   el.onblur=()=>{ if(!isLoggedIn)return; save(); };
   el._saveMeta = save;
 }
@@ -903,6 +1048,65 @@ const LOG_HIGHLIGHT_DEFAULT   = '#f8ddbf';  // 형광펜 (연한 오렌지톤)
 
 function looksLikeHtml(s){ return /<[a-z][\s\S]*>/i.test(s||''); }
 
+/* ------------------------------------------------------------
+   색 서식 껐다 켜기
+   ------------------------------------------------------------
+   볼드/이탤릭은 execCommand 가 알아서 토글하지만 색 명령은 그렇지 않습니다 —
+   같은 색을 다시 넣어도 그대로 남습니다. 이미 그 색이 걸려 있으면
+   기본값으로 되돌려서 한 번 더 누르면 풀리게 합니다.
+   ------------------------------------------------------------ */
+const LOG_TEXT_DEFAULT = '#1a1a1a';   // 본문 기본 글자색 (--text)
+
+/* '#c1440e' / 'rgb(193,68,14)' 처럼 표기가 달라도 비교할 수 있게
+   브라우저가 계산한 값으로 통일합니다. */
+function toRgb(color){
+  if(!color) return '';
+  const probe = document.createElement('span');
+  probe.style.color = color;
+  if(!probe.style.color) return '';      // 브라우저가 못 읽는 값
+  probe.style.position = 'fixed';
+  probe.style.visibility = 'hidden';
+  document.body.appendChild(probe);
+  const v = getComputedStyle(probe).color;
+  probe.remove();
+  return v;
+}
+function queryColor(cmd){
+  try{ return document.queryCommandValue(cmd) || ''; }catch(e){ return ''; }
+}
+function toggleForeColor(color){
+  const on = toRgb(queryColor('foreColor')) === toRgb(color);
+  document.execCommand('foreColor', false, on ? LOG_TEXT_DEFAULT : color);
+}
+/* 형광펜은 queryCommandValue 로 판단할 수 없습니다 —
+   크롬은 hiliteColor 에 빈 문자열을, backColor 에는 물려받은 페이지 배경색을
+   돌려줘서 칠하지 않은 글자도 "배경이 있다"고 나옵니다.
+   그래서 선택 위치에서 위로 올라가며 인라인 배경색이 걸린 요소를 직접 찾습니다. */
+function highlightedWith(color){
+  const sel = window.getSelection();
+  if(!sel || !sel.rangeCount) return false;
+  const range = sel.getRangeAt(0);
+  let node = range.startContainer;
+  // 선택 시작점이 요소면 그 자리의 자식부터 봅니다 (칸 전체를 선택한 경우)
+  if(node.nodeType === 1) node = node.childNodes[range.startOffset] || node;
+  if(node.nodeType === 3) node = node.parentNode;
+  const want = toRgb(color);
+  while(node && node.nodeType === 1){
+    if(node.isContentEditable === false || node.classList.contains('log-editor')
+       || node.classList.contains('arc-editor')) break;
+    const bg = node.style && node.style.backgroundColor;
+    if(bg) return toRgb(bg) === want;
+    node = node.parentNode;
+  }
+  return false;
+}
+function toggleHighlight(color){
+  const next = highlightedWith(color) ? 'transparent' : color;
+  if(!document.execCommand('hiliteColor', false, next)){
+    document.execCommand('backColor', false, next);
+  }
+}
+
 /* 구버전(일반 텍스트) 본문을 HTML로 */
 function logContentToHtml(content){
   if(!content) return '';
@@ -925,6 +1129,8 @@ function applyAutoFormat(root, subColor, parenColor){
   const targets = [];
   let n;
   while((n = walker.nextNode())){
+    // 코드 블록 안은 적은 그대로 보여야 하므로 자동 서식을 걸지 않습니다
+    if(n.parentNode && n.parentNode.closest && n.parentNode.closest('.code-block')) continue;
     if(n.nodeValue && RE.test(n.nodeValue)) targets.push(n);
     RE.lastIndex = 0;
   }
@@ -953,9 +1159,192 @@ function applyAutoFormat(root, subColor, parenColor){
   });
 }
 
+/* ============================================================
+   본문 공통 서식 — 코드 블록(```) / 접기(▸) / 복사 버튼
+   ------------------------------------------------------------
+   LOG 와 ARCHIVE 게시글에 함께 적용합니다.
+   본문은 contenteditable 이 만든 HTML 이라 줄바꿈이 <br> 로 들어오기도,
+   <div> 로 감싸지기도 합니다. ``` 가 어느 줄에 있는지 알아야 하므로
+   최상위 자식들을 먼저 줄 단위로 묶은 뒤 처리합니다.
+   ============================================================ */
+const CODE_FENCE = '```';
+/* 편집기는 연속된 공백을 줄바꿈 없는 공백(&nbsp;)으로 넣습니다.
+   코드 들여쓰기가 깨지므로 평범한 공백으로 되돌립니다. */
+const NBSP_RE = / /g;
+const BLOCK_TAGS = ['DIV','P','LI','UL','OL','H1','H2','H3','H4','H5','H6',
+                    'BLOCKQUOTE','PRE','HR','TABLE','FIGURE'];
+
+/* 요소의 자식들을 '한 줄'씩 묶어 돌려줍니다. 줄은 <br> 또는 블록 요소로 끊깁니다. */
+function contentLines(root){
+  const lines = [];
+  let cur = { nodes:[], text:'' };
+  const push = ()=>{ lines.push(cur); cur = { nodes:[], text:'' }; };
+  Array.from(root.childNodes).forEach(node=>{
+    if(node.nodeType===1 && node.tagName==='BR'){ cur.nodes.push(node); push(); return; }
+    if(node.nodeType===1 && BLOCK_TAGS.includes(node.tagName)){
+      if(cur.nodes.length) push();
+      cur.nodes.push(node);
+      cur.text = node.textContent || '';
+      push();
+      return;
+    }
+    cur.nodes.push(node);
+    cur.text += node.textContent || '';
+  });
+  if(cur.nodes.length) push();
+  return lines;
+}
+
+function makeCodeBlock(code){
+  const box = document.createElement('div');
+  box.className = 'code-block';
+  box.setAttribute('contenteditable','false');
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'code-block-copy'; btn.innerText = '⧉';
+  const pre = document.createElement('pre');
+  pre.className = 'code-block-body';
+  pre.textContent = code.replace(NBSP_RE,' ').replace(/^\n+|\n+$/g,'');
+  box.appendChild(btn); box.appendChild(pre);
+  return box;
+}
+
+/* ``` 로 감싼 구간을 코드 블록으로 바꿉니다.
+   ``` 는 각각 자기 줄에 두는 것을 기준으로 하고(한 줄에서 열고 닫는 것도 됩니다),
+   닫는 ``` 이 없으면 손대지 않고 원문 그대로 둡니다. */
+function applyCodeFences(root){
+  const plain = (s)=> String(s||'').replace(NBSP_RE,' ');
+  const lines = contentLines(root);
+  let i = 0;
+  while(i < lines.length){
+    const t = plain(lines[i].text);
+    const open = t.indexOf(CODE_FENCE);
+    if(open < 0){ i++; continue; }
+    let code, endLine;
+    const sameLine = t.indexOf(CODE_FENCE, open + CODE_FENCE.length);
+    if(sameLine >= 0){
+      code = t.slice(open + CODE_FENCE.length, sameLine);
+      endLine = i;
+    }else{
+      let j = i + 1;
+      while(j < lines.length && plain(lines[j].text).indexOf(CODE_FENCE) < 0) j++;
+      if(j >= lines.length){ i++; continue; }   // 닫는 ``` 이 없음
+      code = lines.slice(i+1, j).map(l=> plain(l.text)).join('\n');
+      endLine = j;
+    }
+    const anchor = lines[i].nodes[0];
+    if(anchor && anchor.parentNode){
+      anchor.parentNode.insertBefore(makeCodeBlock(code), anchor);
+      for(let k=i;k<=endLine;k++) lines[k].nodes.forEach(n=> n.remove());
+    }
+    i = endLine + 1;
+  }
+}
+
+/* 예전에 넣은 코드 상자에는 복사 버튼이 없으므로 그릴 때 채워 넣습니다 */
+function ensureCodeEmbedCopy(root){
+  root.querySelectorAll('.code-embed').forEach(embed=>{
+    const bar = embed.querySelector('.code-embed-toolbar');
+    if(!bar || bar.querySelector('.code-embed-copy')) return;
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'code-embed-copy'; btn.title = '코드 복사';
+    btn.innerText = '⧉';
+    bar.insertBefore(btn, bar.querySelector('.code-embed-download') || null);
+  });
+}
+
+/* 게시글 본문 한 번에 처리 — 코드 블록 + 코드 상자 복사 버튼 */
+function decorateContent(el){
+  applyCodeFences(el);
+  ensureCodeEmbedCopy(el);
+}
+
+/* navigator.clipboard 는 https / localhost 에서만 동작합니다.
+   막히면 화면 밖 textarea 를 만들어 예전 방식으로 복사합니다. */
+async function copyText(text){
+  try{
+    if(navigator.clipboard && window.isSecureContext){
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  }catch(e){ /* 아래 대체 경로로 넘어갑니다 */ }
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;left:-9999px;top:0;';
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try{ ok = document.execCommand('copy'); }catch(e){ ok = false; }
+  ta.remove();
+  return ok;
+}
+
+/* 본문은 열 때마다 새로 그려지므로 문서에 한 번만 걸어둡니다 */
+function initContentBlocks(){
+  document.addEventListener('click', async (e)=>{
+    if(!(e.target instanceof Element)) return;
+
+    const copyBtn = e.target.closest('.code-block-copy, .code-embed-copy');
+    if(copyBtn){
+      e.preventDefault(); e.stopPropagation();
+      const box = copyBtn.closest('.code-block, .code-embed');
+      const body = box && box.querySelector('.code-block-body, .code-embed-code');
+      const label = copyBtn.innerText;
+      const ok = await copyText(body ? body.textContent : '');
+      copyBtn.innerText = ok ? '✓' : '✕';
+      setTimeout(()=>{ copyBtn.innerText = label; }, 1200);
+      return;
+    }
+
+    /* 접기 — 편집 중에도 접었다 펼 수 있어야 하므로,
+       글을 쓰는 중에는 화살표만 반응합니다(제목 줄을 누르면 커서가 가야 하니까).
+       읽을 때는 제목 줄 아무 데나 눌러도 열립니다. */
+    const arrow = e.target.closest('.fold-arrow');
+    const head  = e.target.closest('.fold-head');
+    const block = (arrow || head) && (arrow || head).closest('.fold-block');
+    if(block){
+      const editing = !!block.closest('[contenteditable="true"]');
+      if(editing && !arrow) return;
+      setFoldOpen(block, !block.classList.contains('open'));
+    }
+  });
+
+  /* 화살표를 누를 때 편집기 커서가 튀지 않게 합니다 */
+  document.addEventListener('mousedown', (e)=>{
+    if(e.target instanceof Element && e.target.closest('.fold-arrow')) e.preventDefault();
+  });
+}
+
+function setFoldOpen(block, open){
+  block.classList.toggle('open', open);
+  const a = block.querySelector('.fold-arrow');
+  if(a) a.textContent = open ? '▾' : '▸';
+}
+
+/* 접기 블록을 편집기에 넣습니다 (ARCHIVE 와 PAIR_LOG 가 함께 씁니다).
+   넣자마자 내용을 적어야 하므로 펼친 상태로 만들고,
+   저장할 때 editorHtml() 이 .open 을 떼어내 게시글에서는 접힌 채로 시작합니다. */
+function insertFoldBlock(editorId){
+  const editor = document.getElementById(editorId);
+  if(!editor) return;
+  editor.focus();
+  document.execCommand('insertHTML', false,
+    '<div class="fold-block open">'
+    + '<div class="fold-head"><span class="fold-arrow" contenteditable="false">▾</span>'
+    + '<span class="fold-title">타이틀</span></div>'
+    + '<div class="fold-body">내용을 입력하세요</div></div><br>');
+}
+
+/* 저장할 본문을 꺼냅니다 — 펼쳐둔 접기 블록은 접힌 상태로 되돌립니다 */
+function editorHtml(editorId){
+  const copy = document.getElementById(editorId).cloneNode(true);
+  copy.querySelectorAll('.fold-block.open').forEach(b=> setFoldOpen(b, false));
+  return copy.innerHTML;
+}
+
 /* 저장된 본문을 화면에 그릴 때 쓰는 렌더러 */
 function renderLogContentInto(el, entry){
   el.innerHTML = logContentToHtml(entry.content);
+  decorateContent(el);
   applyAutoFormat(el,
     entry.subColor   || LOG_SUB_COLOR_DEFAULT,
     entry.parenColor || LOG_PAREN_COLOR_DEFAULT);
@@ -994,7 +1383,7 @@ function filterLogItems(items){
 }
 
 function renderLogList(p){
-  const wrap=document.getElementById('logList');
+  const wrap=lq('.log-list');
   const perPage=15;
   const all = p.log.slice().reverse();
   const items = filterLogItems(all);
@@ -1035,14 +1424,29 @@ function renderLogList(p){
     });
   });
 }
-/* 검색창 동작 */
-(function initLogSearch(){
-  const input = document.getElementById('logSearchInput');
-  const field = document.getElementById('logSearchField');
-  const clear = document.getElementById('logSearchClear');
-  const dateEl = document.getElementById('logSearchDate');
-  if(!input || !field || !clear) return;   // 옛 HTML이면 건너뜀
-  const rerender = ()=>{ pdLogPage=1; const p=getCurrentPost(); if(p) renderLogList(p); };
+/* ---- LOG 조각 하나에 조작을 붙입니다 (PAIR 상세 / OC 상세가 각각 한 번씩) ---- */
+function initLogRoot(host){
+  const root = host.root;
+  if(!root) return;
+  const use = ()=>{ logHost = host; };
+
+  const addBtn = root.querySelector('.log-add-btn');
+  if(addBtn) addBtn.addEventListener('click', ()=>{
+    use();
+    if(!isLoggedIn) return;
+    editingLogId = null;
+    document.getElementById('logWriteHeading').innerText='게시글 작성';
+    document.getElementById('logWriteHint').innerText='작성 시각이 자동으로 기록됩니다.';
+    fillLogEditor(null);
+    openModal('modalLogWrite');
+  });
+
+  const input  = root.querySelector('.log-search-input');
+  const field  = root.querySelector('.log-search-field');
+  const clear  = root.querySelector('.log-search-clear');
+  const dateEl = root.querySelector('.log-search-date');
+  if(!input || !field || !clear) return;
+  const rerender = ()=>{ use(); pdLogPage=1; const p=logPost(); if(p) renderLogList(p); };
   input.addEventListener('input', ()=>{ logSearchTerm = input.value; rerender(); });
   field.addEventListener('change', ()=>{ logSearchField = field.value; rerender(); });
   if(dateEl) dateEl.addEventListener('change', ()=>{ logSearchDate = dateEl.value; rerender(); });
@@ -1051,7 +1455,7 @@ function renderLogList(p){
     if(dateEl){ dateEl.value=''; logSearchDate=''; }
     rerender();
   });
-})();
+}
 
 let editingLogId = null;
 let currentLogViewId = null;
@@ -1070,15 +1474,12 @@ let currentLogViewId = null;
   const subBtn = document.getElementById('logSubColorBtn');
   if(subBtn) subBtn.addEventListener('click', ()=>{
     editor.focus();
-    document.execCommand('foreColor', false, document.getElementById('logSubColor').value);
+    toggleForeColor(document.getElementById('logSubColor').value);
   });
   const hlBtn = document.getElementById('logHighlightBtn');
   if(hlBtn) hlBtn.addEventListener('click', ()=>{
     editor.focus();
-    const c = document.getElementById('logHighlightColor').value;
-    if(!document.execCommand('hiliteColor', false, c)){
-      document.execCommand('backColor', false, c);
-    }
+    toggleHighlight(document.getElementById('logHighlightColor').value);
   });
   const divBtn = document.getElementById('logDividerBtn');
   if(divBtn) divBtn.addEventListener('click', ()=>{
@@ -1089,6 +1490,21 @@ let currentLogViewId = null;
   if(textColor) textColor.addEventListener('input', (e)=>{
     editor.focus();
     document.execCommand('foreColor', false, e.target.value);
+  });
+  /* 접기 — ARCHIVE 편집기와 같은 블록을 넣습니다 */
+  const foldBtn = document.getElementById('logFoldBtn');
+  if(foldBtn) foldBtn.addEventListener('click', ()=> insertFoldBlock('logContent'));
+  /* 사진 삽입 — ARCHIVE 편집기와 같은 방식(본문 안에 data URL 로 넣습니다) */
+  const imgBtn = document.getElementById('logInsertImageBtn');
+  if(imgBtn) imgBtn.addEventListener('click', ()=>{
+    const input=document.createElement('input'); input.type='file'; input.accept='image/*';
+    input.addEventListener('change', async ()=>{
+      const f=input.files[0]; if(!f) return;
+      const url=await fileToDataUrl(f);
+      editor.focus();
+      document.execCommand('insertHTML', false, `<img src="${url}" /><br>`);
+    });
+    input.click();
   });
 })();
 
@@ -1101,19 +1517,11 @@ function fillLogEditor(entry){
   document.getElementById('logTextColor').value  = '#1a1a1a';
 }
 
-document.getElementById('addLogBtn').addEventListener('click', ()=>{
-  if(!isLoggedIn) return;
-  editingLogId = null;
-  document.getElementById('logWriteHeading').innerText='게시글 작성';
-  document.getElementById('logWriteHint').innerText='작성 시각이 자동으로 기록됩니다.';
-  fillLogEditor(null);
-  openModal('modalLogWrite');
-});
 bindOnce(document.getElementById('saveLogBtn'), async ()=>{
   const title=document.getElementById('logTitle').value.trim();
   if(!title){ alert('제목을 입력해주세요.'); return; }
-  const p=getCurrentPost();
-  const content        = document.getElementById('logContent').innerHTML;
+  const p=logPost();
+  const content        = editorHtml('logContent');
   const subColor       = document.getElementById('logSubColor').value;
   const parenColor     = document.getElementById('logParenColor').value;
   const highlightColor = document.getElementById('logHighlightColor').value;
@@ -1123,7 +1531,7 @@ bindOnce(document.getElementById('saveLogBtn'), async ()=>{
   }else{
     p.log.push({ id:Date.now(), title, date:nowStamp(), content, subColor, parenColor, highlightColor });
   }
-  await storageSet('pairPosts', state.pairPosts);
+  await logHost.save();
   pdLogPage=1;
   renderLogList(p); closeModal('modalLogWrite');
 });
@@ -1143,7 +1551,7 @@ document.addEventListener('click', (e)=>{
 document.getElementById('logEditBtn').addEventListener('click', ()=>{
   logKebabMenu.classList.remove('open');
   if(!isLoggedIn || currentLogViewId==null) return;
-  const p=getCurrentPost();
+  const p=logPost();
   const entry = p.log.find(x=>x.id===currentLogViewId);
   if(!entry) return;
   editingLogId = entry.id;
@@ -1157,12 +1565,41 @@ document.getElementById('logDeleteBtn').addEventListener('click', async ()=>{
   logKebabMenu.classList.remove('open');
   if(!isLoggedIn || currentLogViewId==null) return;
   if(!confirm('이 게시글을 삭제할까요?')) return;
-  const p=getCurrentPost();
+  const p=logPost();
   p.log = p.log.filter(x=>x.id!==currentLogViewId);
-  await storageSet('pairPosts', state.pairPosts);
+  await logHost.save();
   renderLogList(p);
   closeModal('modalLogView');
 });
+
+/* ============================================================
+   갤러리 / LOG 엔진 공용화
+   ------------------------------------------------------------
+   PAIR 상세와 OC 상세가 똑같은 코드를 나눠 씁니다. 두 창은
+   어느 화면 조각 안에서 도는지(root), 어떤 글을 그리는지(getPost),
+   어디에 저장하는지(save)만 다르므로 그것만 host 로 받습니다.
+   요소는 id 가 아니라 root 안의 클래스로 찾습니다 —
+   같은 id 를 두 창에 둘 수 없기 때문입니다.
+   창은 한 번에 하나만 열리므로 아래 상태값들은 그대로 함께 씁니다.
+   ============================================================ */
+let galleryHost = null;   // { root, getPost, save, horizontal }
+let logHost = null;       // { root, getPost, save }
+function gq(sel){ return galleryHost ? galleryHost.root.querySelector(sel) : null; }
+function galleryPost(){ return galleryHost ? galleryHost.getPost() : null; }
+function gallerySave(){ return galleryHost ? galleryHost.save() : Promise.resolve(); }
+function lq(sel){ return logHost ? logHost.root.querySelector(sel) : null; }
+function logPost(){ return logHost ? logHost.getPost() : null; }
+
+const savePair = ()=> storageSet('pairPosts', state.pairPosts);
+const PAIR_GALLERY_HOST = { root: document.querySelector('.pd-tab-pane-gallery'),
+  getPost: ()=> getCurrentPost(), save: savePair, horizontal:false };
+const PAIR_LOG_HOST     = { root: document.querySelector('.pd-tab-pane-log'),
+  getPost: ()=> getCurrentPost(), save: savePair };
+/* OC 갤러리만 가로로 넘깁니다 — 세로 스크롤은 창 페이지 넘김이 씁니다 */
+const OC_GALLERY_HOST   = { root: document.querySelector('.oc-page-gallery'),
+  getPost: ()=> getCurrentOc(), save: ()=> saveOc(), horizontal:true };
+const OC_LOG_HOST       = { root: document.querySelector('.oc-page-log'),
+  getPost: ()=> getCurrentOc(), save: ()=> saveOc() };
 
 /* --- Gallery (폴더 분류 + 다중 선택 + 이동) --- */
 let currentGalleryFolderId = null;
@@ -1189,25 +1626,84 @@ function folderLocked(f){
   return !unlockedFolders.has(f.id);
 }
 
-/* 폴더 추가/수정 모달 */
-let gfTarget = null;   // { post, folder|null }
-function openFolderModal(post, folder){
-  gfTarget = { post, folder: folder||null };
+/* ---- 폴더 추가/수정 모달 ----
+   PAIR_GALLERY 와 ARCHIVE_PROMPT 가 같은 창을 씁니다.
+   두 곳은 폴더 목록이 어디에 붙어 있는지(글 안 / 사이트 전체)와
+   안에 든 것이 무엇인지(이미지 / 글)만 다르므로, 그 차이만 ctx 로 받습니다. */
+let gfTarget = null;   // { ctx, folder|null }
+
+function galleryFolderCtx(post){
+  return {
+    getList: ()=> post.galleryFolders,
+    blurHint: '썸네일이 흐리게 보이고, 커서를 올리면 선명해집니다.',
+    canDelete: ()=> post.galleryFolders.length>1,   // 마지막 폴더는 남겨둡니다
+    deleteWarn: (f)=> f.images.length>0
+      ? `'${f.name}' 폴더와 안에 있는 이미지 ${f.images.length}장이 함께 삭제됩니다. 되돌릴 수 없습니다.`
+      : `'${f.name}' 폴더를 삭제합니다.`,
+    newFolder: (base)=> ({ ...base, id:'f'+Date.now(), images:[] }),
+    onCreate: (f)=>{ currentGalleryFolderId = f.id; galleryPage = 1; },
+    onDelete: async (f)=>{
+      post.galleryFolders = post.galleryFolders.filter(x=>x!==f);
+      if(currentGalleryFolderId===f.id){
+        currentGalleryFolderId = post.galleryFolders[0].id;
+        galleryPage = 1;
+      }
+    },
+    save: ()=> storageSet('pairPosts', state.pairPosts),
+    rerender: ()=> renderGallery(post)
+  };
+}
+
+function archiveFolderCtx(){
+  const countIn = (f)=> state.archive.filter(x=>
+    (x.category||'ooc')==='nai' && arcFolderIdOf(x)===f.id).length;
+  return {
+    getList: ()=> state.archiveFolders,
+    blurHint: '썸네일이 흐리게 보이고, 각 글 오른쪽 위의 👁 를 누르면 그 글만 선명해집니다.',
+    canDelete: (f)=> f.id !== ARC_DEFAULT_FOLDER,
+    /* 갤러리와 달리 안에 든 글은 지우지 않습니다 — 글은 이미지보다 되돌리기 어렵고,
+       일괄 삭제는 선택 모드의 🗑 버튼으로 따로 할 수 있습니다. */
+    deleteWarn: (f)=>{
+      const n = countIn(f);
+      return n>0
+        ? `'${f.name}' 폴더를 삭제합니다. 안에 있는 글 ${n}개는 지워지지 않고 '기본' 폴더로 옮겨집니다.`
+        : `'${f.name}' 폴더를 삭제합니다.`;
+    },
+    newFolder: (base)=> ({ ...base, id:'af'+Date.now() }),
+    onCreate: (f)=>{ currentArcFolderId = f.id; arcPage = 1; },
+    onDelete: async (f)=>{
+      state.archive.forEach(x=>{ if(x.folderId===f.id) x.folderId = ARC_DEFAULT_FOLDER; });
+      state.archiveFolders = state.archiveFolders.filter(x=>x!==f);
+      if(currentArcFolderId===f.id){ currentArcFolderId = ARC_DEFAULT_FOLDER; arcPage = 1; }
+      await storageSet('archive', state.archive);
+    },
+    save: ()=> storageSet('archiveFolders', state.archiveFolders),
+    rerender: ()=> renderArchive()
+  };
+}
+
+function openFolderModal(ctx, folder){
+  gfTarget = { ctx, folder: folder||null };
   document.getElementById('gfModalTitle').innerText = folder ? '폴더 수정' : '폴더 추가';
   document.getElementById('gfName').value = folder ? folder.name : '';
   document.getElementById('gfSecret').checked = !!(folder && folder.secret);
   document.getElementById('gfBlur').checked   = !!(folder && folder.blur);
   document.getElementById('gfPw').value = '';
   document.getElementById('gfError').style.display='none';
+  const blurHint = document.getElementById('gfBlurHint');
+  if(blurHint) blurHint.innerText = ctx.blurHint;
+  // OC 폴더는 '썸네일 흐리게'를 쓰지 않으므로 그 칸 자체를 숨깁니다
+  const blurOpt = document.getElementById('gfBlur').closest('.gf-option');
+  if(blurOpt) blurOpt.style.display = ctx.hideBlur ? 'none' : '';
   // 기존 비밀번호가 있으면 "비워두면 유지" 안내를 보여준다
   document.getElementById('gfPwKeep').style.display = (folder && folder.pwHash) ? 'block' : 'none';
   document.getElementById('gfPwRow').style.display  = document.getElementById('gfSecret').checked ? 'block' : 'none';
-  // 삭제 버튼은 기존 폴더를 수정할 때만, 그리고 폴더가 2개 이상일 때만 (마지막 폴더는 남겨둔다)
+  // 삭제 버튼은 기존 폴더를 수정할 때만, 그리고 지울 수 있는 폴더일 때만
   const delBtn=document.getElementById('gfDeleteBtn');
   const warn=document.getElementById('gfDeleteWarn');
   if(delBtn){
-    delBtn.style.display = (folder && post.galleryFolders.length>1) ? 'inline-flex' : 'none';
-    delBtn.innerText='🗑 폴더 삭제';
+    delBtn.style.display = (folder && ctx.canDelete(folder)) ? 'inline-flex' : 'none';
+    delBtn.innerText='폴더 삭제';
     delBtn.dataset.confirm='';
   }
   if(warn) warn.style.display='none';
@@ -1231,7 +1727,7 @@ function initFolderModal(){
   let saving = false;
   const save = async ()=>{
     if(!gfTarget || saving) return;
-    const { post, folder } = gfTarget;
+    const { ctx, folder } = gfTarget;
     const name = nameInput.value.trim();
     if(!name){ showErr('폴더 이름을 입력해주세요.'); nameInput.focus(); return; }
     const wantSecret = secret.checked;
@@ -1245,25 +1741,24 @@ function initFolderModal(){
     if(!wantSecret) pwHash = '';
     else if(typedPw) pwHash = await hashPw(typedPw);
 
+    const wantBlur = document.getElementById('gfBlur').checked;
     if(folder){
       folder.name = name;
       folder.secret = wantSecret;
       folder.pwHash = pwHash;
-      folder.blur = document.getElementById('gfBlur').checked;
+      folder.blur = wantBlur;
       // 비밀번호가 바뀌었으면 이 세션의 열람 기록도 지운다
       if(typedPw) unlockedFolders.delete(folder.id);
     }else{
-      const created = { id:'f'+Date.now(), name, images:[],
-        secret:wantSecret, pwHash, blur:document.getElementById('gfBlur').checked };
-      post.galleryFolders.push(created);
-      currentGalleryFolderId = created.id;
-      galleryPage = 1;
+      const created = ctx.newFolder({ name, secret:wantSecret, pwHash, blur:wantBlur });
+      ctx.getList().push(created);
+      ctx.onCreate(created);
       // 만든 사람은 편집 모드라서 어차피 바로 보인다.
       // 여기서 unlockedFolders 에 넣으면 로그아웃 후에도 열린 상태로 남으므로 넣지 않는다.
     }
-    await storageSet('pairPosts', state.pairPosts);
+    await ctx.save();
     closeModal('modalGalleryFolder');
-    renderGallery(post);
+    ctx.rerender();
     saving = false;
     saveBtn.disabled = false;
   };
@@ -1278,26 +1773,20 @@ function initFolderModal(){
   const warn=document.getElementById('gfDeleteWarn');
   if(delBtn) delBtn.addEventListener('click', async ()=>{
     if(!gfTarget || !gfTarget.folder) return;
-    const { post, folder } = gfTarget;
-    if(post.galleryFolders.length<=1) return;   // 마지막 폴더는 남겨둔다
+    const { ctx, folder } = gfTarget;
+    if(!ctx.canDelete(folder)) return;
     if(delBtn.dataset.confirm!=='1'){
       delBtn.dataset.confirm='1';
       delBtn.innerText='한 번 더 누르면 삭제';
-      warn.innerText = folder.images.length>0
-        ? `'${folder.name}' 폴더와 안에 있는 이미지 ${folder.images.length}장이 함께 삭제됩니다. 되돌릴 수 없습니다.`
-        : `'${folder.name}' 폴더를 삭제합니다.`;
+      warn.innerText = ctx.deleteWarn(folder);
       warn.style.display='block';
       return;
     }
-    post.galleryFolders = post.galleryFolders.filter(f=>f!==folder);
     unlockedFolders.delete(folder.id);
-    if(currentGalleryFolderId===folder.id){
-      currentGalleryFolderId = post.galleryFolders[0].id;
-      galleryPage = 1;
-    }
-    await storageSet('pairPosts', state.pairPosts);
+    await ctx.onDelete(folder);
+    await ctx.save();
     closeModal('modalGalleryFolder');
-    renderGallery(post);
+    ctx.rerender();
   });
 }
 
@@ -1314,13 +1803,6 @@ function openFolderUnlock(folder, onOk){
 function initFolderUnlock(){
   const pw=document.getElementById('fuPw'), btn=document.getElementById('fuSubmitBtn'), err=document.getElementById('fuError');
   if(!pw || !btn) return;
-  // 잠김 화면의 '비밀번호 입력' 버튼
-  const unlockBtn=document.getElementById('galleryUnlockBtn');
-  if(unlockBtn) unlockBtn.addEventListener('click', ()=>{
-    const p=getCurrentPost(); if(!p) return;
-    const f=getFolder(p, currentGalleryFolderId); if(!f) return;
-    openFolderUnlock(f, ()=> renderGallery(p));
-  });
   const submit = async ()=>{
     if(!fuTarget) return;
     const h = await hashPw(pw.value);
@@ -1341,7 +1823,7 @@ function initFolderUnlock(){
 }
 
 function renderGalleryFolderBar(p){
-  const bar=document.getElementById('galleryFolderBar');
+  const bar=gq('.gallery-folder-bar');
   bar.innerHTML='';
   p.galleryFolders.forEach(f=>{
     const btn=document.createElement('button');
@@ -1367,7 +1849,7 @@ function renderGalleryFolderBar(p){
       renameBtn.type='button'; renameBtn.className='gallery-folder-rename'; renameBtn.innerText='✎'; renameBtn.title='폴더 설정';
       renameBtn.addEventListener('click', (e)=>{
         e.stopPropagation();
-        openFolderModal(p, f);
+        openFolderModal(galleryFolderCtx(p), f);
       });
       btn.appendChild(renameBtn);
 
@@ -1396,7 +1878,7 @@ function renderGalleryFolderBar(p){
           if(removed) movedSrcs.push(removed);
         });
         targetFolder.images.push(...movedSrcs);
-        await storageSet('pairPosts', state.pairPosts);
+        await gallerySave();
         gallerySelectedIdx.clear();
         draggedGalleryKey = null;
         renderGallery(p);
@@ -1408,7 +1890,7 @@ function renderGalleryFolderBar(p){
     const addBtn=document.createElement('button');
     addBtn.type='button'; addBtn.className='gallery-folder-add';
     addBtn.innerText='＋ 폴더';
-    addBtn.addEventListener('click', ()=> openFolderModal(p, null));
+    addBtn.addEventListener('click', ()=> openFolderModal(galleryFolderCtx(p), null));
     bar.appendChild(addBtn);
   }
 }
@@ -1456,8 +1938,8 @@ function galleryTotalPages(folder){
 function animateGalleryPageChange(direction, applyChange){
   if(galleryTransitioning) return;
   galleryTransitioning = true;
-  const grid = document.getElementById('galleryGrid');
-  const wrap = document.getElementById('galleryGridWrap');
+  const grid = gq('.gallery-grid');
+  const wrap = gq('.gallery-grid-wrap');
 
   // 나가는 페이지를 복제해 같은 자리에 겹쳐 둡니다
   const gridRect = grid.getBoundingClientRect();
@@ -1472,11 +1954,17 @@ function animateGalleryPageChange(direction, applyChange){
 
   applyChange();  // 새 페이지를 실제 그리드에 렌더
 
-  const dist = Math.max(120, wrap.clientHeight || gridRect.height || 320);
+  /* PAIR 는 위아래로, OC 는 좌우로 밀립니다 —
+     OC 창은 세로 스크롤을 프로필/갤러리/로그 페이지 넘김에 쓰기 때문입니다. */
+  const horiz = !!(galleryHost && galleryHost.horizontal);
+  const axis = horiz ? 'X' : 'Y';
+  const dist = horiz
+    ? Math.max(120, wrap.clientWidth  || gridRect.width  || 320)
+    : Math.max(120, wrap.clientHeight || gridRect.height || 320);
   grid.style.transition  = 'none';
-  grid.style.transform   = `translateY(${direction*dist}px)`;
+  grid.style.transform   = `translate${axis}(${direction*dist}px)`;
   ghost.style.transition = 'none';
-  ghost.style.transform  = 'translateY(0)';
+  ghost.style.transform  = `translate${axis}(0)`;
   void wrap.offsetWidth;  // 강제 리플로우로 트랜지션 재적용
 
   const tr = `transform ${GALLERY_SLIDE_MS}ms ${GALLERY_EASE}`;
@@ -1484,8 +1972,8 @@ function animateGalleryPageChange(direction, applyChange){
   ghost.style.willChange = 'transform';
   grid.style.transition  = tr;
   ghost.style.transition = tr;
-  grid.style.transform   = 'translateY(0)';
-  ghost.style.transform  = `translateY(${direction*-dist}px)`;
+  grid.style.transform   = `translate${axis}(0)`;
+  ghost.style.transform  = `translate${axis}(${direction*-dist}px)`;
 
   setTimeout(()=>{
     ghost.remove();
@@ -1495,28 +1983,14 @@ function animateGalleryPageChange(direction, applyChange){
     galleryTransitioning = false;
   }, GALLERY_SLIDE_MS);
 }
-const galleryGridWrapEl = document.getElementById('galleryGridWrap');
-galleryGridWrapEl.addEventListener('wheel', (e)=>{
-  if(galleryTransitioning) return;
-  const p = getCurrentPost(); if(!p) return;
-  const folder = getFolder(p, currentGalleryFolderId); if(!folder) return;
-  const totalPages = galleryTotalPages(folder);
-  if(totalPages<=1) return;
-  if(e.deltaY>0 && galleryPage<totalPages){
-    animateGalleryPageChange(1, ()=>{ galleryPage++; renderGallery(p); });
-  }else if(e.deltaY<0 && galleryPage>1){
-    animateGalleryPageChange(-1, ()=>{ galleryPage--; renderGallery(p); });
-  }
-}, {passive:true});
-
 function renderGallery(p){
   if(!currentGalleryFolderId) currentGalleryFolderId = p.galleryFolders[0].id;
   renderGalleryFolderBar(p);
 
-  const grid=document.getElementById('galleryGrid'); grid.innerHTML='';
-  const hint = document.getElementById('galleryScrollHint');
-  const hintUp = document.getElementById('galleryScrollHintUp');
-  const emptyMsg = document.getElementById('galleryEmptyMsg');
+  const grid=gq('.gallery-grid'); grid.innerHTML='';
+  const hint = gq('.gallery-scroll-hint:not(.up)');
+  const hintUp = gq('.gallery-scroll-hint.up');
+  const emptyMsg = gq('.gallery-empty-msg');
   const folder = getFolder(p, currentGalleryFolderId);
 
   /* 이미지 수와 무관하게 격자 크기를 일정하게 유지하는 빈 자리.
@@ -1531,7 +2005,7 @@ function renderGallery(p){
 
   /* 잠긴 비밀 폴더는 썸네일을 아예 그리지 않는다.
      (폴더 탭을 거치지 않고 들어오는 경로가 있어 여기서도 막는다) */
-  const locked = document.getElementById('galleryLocked');
+  const locked = gq('.gallery-locked');
   if(folderLocked(folder)){
     fillSlots(galleryPerPage());
     if(emptyMsg) emptyMsg.style.display='none';
@@ -1608,7 +2082,7 @@ function renderGallery(p){
             if(stillSameFolder && sameSet){
               const reordered = pageIdx.map(i=> folder.images[i]);
               folder.images.splice(start, reordered.length, ...reordered);
-              await storageSet('pairPosts', state.pairPosts);
+              await gallerySave();
             }
           }
           draggedGalleryKey=null; draggedGalleryEl=null;
@@ -1671,7 +2145,7 @@ const HINT_DWELL_MS = 450;
 function flipGalleryPageDuringDrag(dir){
   if(!draggedGalleryKey) return false;
   if(galleryTransitioning) return false;
-  const p = getCurrentPost(); if(!p) return false;
+  const p = galleryPost(); if(!p) return false;
   const folder = getFolder(p, currentGalleryFolderId); if(!folder) return false;
   const targetPage = galleryPage + dir;
   if(targetPage < 1 || targetPage > galleryTotalPages(folder)) return false;
@@ -1688,7 +2162,7 @@ function flipGalleryPageDuringDrag(dir){
 
 /* 끌고 있던 썸네일을 현재 격자에 다시 만들어 붙인다(이동 중 표시용) */
 function attachDraggedThumbToGrid(folder){
-  const grid = document.getElementById('galleryGrid');
+  const grid = gq('.gallery-grid');
   if(!grid || !draggedGalleryKey) return;
   const idx = Number(draggedGalleryKey.split('::')[1]);
   const src = folder.images[idx];
@@ -1718,7 +2192,7 @@ let galleryDragCommitting = false;
 async function finishGalleryDrag(){
   if(galleryDragCommitting || !galleryDragPageMoved) return;
   galleryDragCommitting = true;
-  const p = getCurrentPost();
+  const p = galleryPost();
   const folder = p ? getFolder(p, currentGalleryFolderId) : null;
   try{
     if(p && folder) await commitCrossPageDrag(p, folder);
@@ -1738,7 +2212,7 @@ async function finishGalleryDrag(){
 /* 드롭이 끝났을 때: 화면(DOM) 순서를 그대로 배열에 반영한다.
    다른 페이지에서 끌고 온 이미지는 DOM 에 놓인 그 자리에 들어간다. */
 async function commitCrossPageDrag(p, folder){
-  const grid = document.getElementById('galleryGrid');
+  const grid = gq('.gallery-grid');
   const perPage = galleryPerPage();
   const order = Array.from(grid.querySelectorAll('.gallery-thumb')).map(el=> el.dataset.key);
 
@@ -1773,18 +2247,21 @@ async function commitCrossPageDrag(p, folder){
   rest.splice(startRest, existingCount, ...pageImgs);
   folder.images = rest;
 
-  await storageSet('pairPosts', state.pairPosts);
+  await gallerySave();
   return true;
 }
 
-function initGalleryPageDrop(){
+function initGalleryPageDrop(host){
+  const root = host.root;
   const bind = (el, dir)=>{
     if(!el) return;
+    const use = ()=>{ galleryHost = host; };
     let dwell = null;
     const clear = ()=>{ if(dwell){ clearTimeout(dwell); dwell=null; } el.classList.remove('drop-target'); };
     el.addEventListener('dragover', (e)=>{
       if(!draggedGalleryKey || el.classList.contains('disabled')) return;
       e.preventDefault();
+      use();
       el.classList.add('drop-target');
       if(!dwell) dwell = setTimeout(()=>{ dwell=null; clear(); flipGalleryPageDuringDrag(dir); }, HINT_DWELL_MS);
     });
@@ -1793,65 +2270,129 @@ function initGalleryPageDrop(){
     el.addEventListener('drop', (e)=>{
       if(!draggedGalleryKey || el.classList.contains('disabled')) return;
       e.preventDefault();
+      use();
       clear();
       flipGalleryPageDuringDrag(dir);
     });
   };
-  bind(document.getElementById('galleryScrollHint'), 1);
-  bind(document.getElementById('galleryScrollHintUp'), -1);
+  bind(root.querySelector('.gallery-scroll-hint:not(.up)'), 1);
+  bind(root.querySelector('.gallery-scroll-hint.up'), -1);
 
   /* 격자 안에서 놓았을 때 확정 — 원본 요소가 사라져 dragend 가 오지 않는 경우를 대비 */
-  const wrap = document.getElementById('galleryGridWrap');
+  const wrap = root.querySelector('.gallery-grid-wrap');
   if(wrap) wrap.addEventListener('drop', (e)=>{
     if(!galleryDragPageMoved) return;
     e.preventDefault();
+    galleryHost = host;
     finishGalleryDrag();
   });
 }
 function updateGallerySelectCount(){
-  const info=document.getElementById('gallerySelectInfo');
+  const info=gq('.gallery-select-info');
   if(gallerySelectedIdx.size>0){ info.style.display='block'; info.innerText=`${gallerySelectedIdx.size}개 선택됨`; }
   else{ info.style.display='none'; }
 }
-document.getElementById('gallerySelectBtn').addEventListener('click', ()=>{
-  gallerySelectMode = !gallerySelectMode;
-  gallerySelectedIdx.clear();
-  const btn = document.getElementById('gallerySelectBtn');
-  btn.innerText = gallerySelectMode ? '✕' : '✓';
-  btn.classList.toggle('active', gallerySelectMode);
-  updateGallerySelectCount();
-  document.getElementById('gallerySelectDeleteBtn').style.display = (gallerySelectMode && isLoggedIn) ? 'flex' : 'none';
-  renderGallery(getCurrentPost());
-});
-document.getElementById('gallerySelectDeleteBtn').addEventListener('click', async ()=>{
-  if(gallerySelectedIdx.size===0) return;
-  if(!confirm(`선택한 ${gallerySelectedIdx.size}장의 이미지를 삭제할까요?`)) return;
-  const p = getCurrentPost();
-  const bySrc = [];
-  gallerySelectedIdx.forEach(key=>{
-    const [folderId, idxStr] = key.split('::');
-    const folder = getFolder(p, folderId);
-    if(folder) bySrc.push({ folder, idx:Number(idxStr) });
+/* ---- 갤러리 조각 하나에 조작을 붙입니다 (PAIR 상세 / OC 상세가 각각 한 번씩) ---- */
+function initGalleryRoot(host){
+  const root = host.root;
+  if(!root) return;
+  const use = ()=>{ galleryHost = host; };   // 어느 창인지 확정하고 시작
+
+  const selBtn = root.querySelector('.gallery-select-toggle');
+  const delBtn = root.querySelector('.gallery-select-delete');
+  const addBtn = root.querySelector('.gallery-add');
+  const unlockBtn = root.querySelector('.gallery-unlock-btn');
+
+  if(selBtn) selBtn.addEventListener('click', ()=>{
+    use();
+    gallerySelectMode = !gallerySelectMode;
+    gallerySelectedIdx.clear();
+    selBtn.innerText = gallerySelectMode ? '✕' : '✓';
+    selBtn.classList.toggle('active', gallerySelectMode);
+    updateGallerySelectCount();
+    if(delBtn) delBtn.style.display = (gallerySelectMode && isLoggedIn) ? 'flex' : 'none';
+    renderGallery(galleryPost());
   });
-  bySrc.sort((a,b)=> b.idx-a.idx);
-  bySrc.forEach(({folder, idx})=>{ folder.images.splice(idx,1); });
-  await storageSet('pairPosts', state.pairPosts);
-  gallerySelectedIdx.clear();
-  updateGallerySelectCount();
-  renderGallery(p);
-});
-document.getElementById('addGalleryBtn').addEventListener('click', ()=>{
-  if(!isLoggedIn) return;
-  const input=document.createElement('input'); input.type='file'; input.accept='image/*';
-  input.addEventListener('change', async ()=>{
-    const f=input.files[0]; if(!f) return;
-    const url=await fileToDataUrl(f); const p=getCurrentPost();
-    const folder = getFolder(p, currentGalleryFolderId) || p.galleryFolders[0];
-    folder.images.push(url);
-    await storageSet('pairPosts', state.pairPosts); renderGallery(p);
+
+  if(delBtn) delBtn.addEventListener('click', async ()=>{
+    use();
+    if(gallerySelectedIdx.size===0) return;
+    if(!confirm(`선택한 ${gallerySelectedIdx.size}장의 이미지를 삭제할까요?`)) return;
+    const p = galleryPost();
+    const bySrc = [];
+    gallerySelectedIdx.forEach(key=>{
+      const [folderId, idxStr] = key.split('::');
+      const folder = getFolder(p, folderId);
+      if(folder) bySrc.push({ folder, idx:Number(idxStr) });
+    });
+    bySrc.sort((a,b)=> b.idx-a.idx);
+    bySrc.forEach(({folder, idx})=>{ folder.images.splice(idx,1); });
+    await gallerySave();
+    gallerySelectedIdx.clear();
+    updateGallerySelectCount();
+    renderGallery(p);
   });
-  input.click();
-});
+
+  if(addBtn) addBtn.addEventListener('click', ()=>{
+    use();
+    if(!isLoggedIn) return;
+    const input=document.createElement('input'); input.type='file'; input.accept='image/*';
+    input.addEventListener('change', async ()=>{
+      const f=input.files[0]; if(!f) return;
+      const url=await fileToDataUrl(f); const p=galleryPost();
+      const folder = getFolder(p, currentGalleryFolderId) || p.galleryFolders[0];
+      folder.images.push(url);
+      await gallerySave(); renderGallery(p);
+    });
+    input.click();
+  });
+
+  if(unlockBtn) unlockBtn.addEventListener('click', ()=>{
+    use();
+    const p=galleryPost(); if(!p) return;
+    const f=getFolder(p, currentGalleryFolderId); if(!f) return;
+    openFolderUnlock(f, ()=> renderGallery(p));
+  });
+
+  /* 페이지 넘기기.
+     PAIR 는 세로(휠/위아래 스와이프), OC 는 가로입니다 —
+     OC 창은 세로 스크롤을 프로필/갤러리/로그 페이지 넘김에 쓰기 때문입니다. */
+  const wrap = root.querySelector('.gallery-grid-wrap');
+  const next = root.querySelector('.gallery-scroll-hint:not(.up)');
+  const prev = root.querySelector('.gallery-scroll-hint.up');
+
+  const step = (dir)=>{ use(); galleryStepPage(dir); };
+  if(next) next.addEventListener('click', ()=>{ if(!next.classList.contains('disabled')) step(1); });
+  if(prev) prev.addEventListener('click', ()=>{ if(!prev.classList.contains('disabled')) step(-1); });
+
+  if(wrap && !host.horizontal){
+    wrap.addEventListener('wheel', (e)=>{ step(e.deltaY>0 ? 1 : -1); }, {passive:true});
+  }
+
+  /* 손가락 스와이프 — 넘기는 방향에 맞춰 가로/세로를 봅니다 */
+  if(wrap){
+    let x0=null, y0=0;
+    wrap.addEventListener('touchstart', (e)=>{
+      if(e.touches.length!==1 || document.body.classList.contains('touch-dragging')){ x0=null; return; }
+      x0=e.touches[0].clientX; y0=e.touches[0].clientY;
+    }, {passive:true});
+    wrap.addEventListener('touchend', (e)=>{
+      if(x0===null) return;
+      const dx=e.changedTouches[0].clientX-x0, dy=e.changedTouches[0].clientY-y0;
+      x0=null;
+      if(document.body.classList.contains('touch-dragging')) return;
+      if(host.horizontal){
+        if(Math.abs(dx)<45 || Math.abs(dx)<Math.abs(dy)) return;
+        step(dx<0 ? 1 : -1);
+      }else{
+        if(Math.abs(dy)<45 || Math.abs(dy)<Math.abs(dx)) return;
+        step(dy<0 ? 1 : -1);
+      }
+    }, {passive:true});
+  }
+
+  initGalleryPageDrop(host);
+}
 document.getElementById('lightbox').addEventListener('click', (e)=>{ if(e.target.id==='lightbox') document.getElementById('lightbox').classList.remove('open'); });
 document.getElementById('lbPrev').addEventListener('click', (e)=>{ e.stopPropagation(); stepGalleryLightbox(-1); });
 document.getElementById('lbNext').addEventListener('click', (e)=>{ e.stopPropagation(); stepGalleryLightbox(1); });
@@ -1923,6 +2464,386 @@ document.getElementById('addTimelineBtn').addEventListener('click', async ()=>{
 });
 
 /* ============================================================
+   OC
+   ------------------------------------------------------------
+   목록은 PAIR 과 같은 4열 x 2행 격자 + 폴더 탭(PROMPT 방식),
+   상세 창은 인덱스 탭 없이 프로필 / 갤러리 / 로그 세 장이
+   위아래로 넘어갑니다. 갤러리·로그는 PAIR 상세와 같은 코드를 씁니다.
+   ============================================================ */
+const OC_PER_PAGE = 8;
+let ocPage = 1;
+let currentOcFolderId = OC_DEFAULT_FOLDER;
+let ocSelectMode = false;
+let ocSelectedIds = new Set();
+let draggedOcId = null;
+let currentOcId = null;
+
+function getCurrentOc(){ return state.ocPosts.find(x=>x.id===currentOcId); }
+function saveOc(){ return storageSet('ocPosts', state.ocPosts); }
+
+function ocFolderCtx(){
+  const countIn = (f)=> state.ocPosts.filter(x=> ocFolderIdOf(x)===f.id).length;
+  return {
+    getList: ()=> state.ocFolders,
+    hideBlur: true,          // OC 는 '썸네일 흐리게'를 쓰지 않습니다
+    blurHint: '',
+    canDelete: (f)=> f.id !== OC_DEFAULT_FOLDER,
+    deleteWarn: (f)=>{
+      const n = countIn(f);
+      return n>0
+        ? `'${f.name}' 폴더를 삭제합니다. 안에 있는 글 ${n}개는 지워지지 않고 '기본' 폴더로 옮겨집니다.`
+        : `'${f.name}' 폴더를 삭제합니다.`;
+    },
+    newFolder: (base)=> ({ ...base, id:'ocf'+Date.now(), blur:false }),
+    onCreate: (f)=>{ currentOcFolderId = f.id; ocPage = 1; },
+    onDelete: async (f)=>{
+      state.ocPosts.forEach(x=>{ if(x.folderId===f.id) x.folderId = OC_DEFAULT_FOLDER; });
+      state.ocFolders = state.ocFolders.filter(x=>x!==f);
+      if(currentOcFolderId===f.id){ currentOcFolderId = OC_DEFAULT_FOLDER; ocPage = 1; }
+      await saveOc();
+    },
+    save: ()=> storageSet('ocFolders', state.ocFolders),
+    rerender: ()=> renderOcPosts()
+  };
+}
+
+function renderOcFolderBar(){
+  const bar = document.getElementById('ocFolderBar');
+  if(!bar) return;
+  bar.innerHTML='';
+  state.ocFolders.forEach(f=>{
+    const btn=document.createElement('button');
+    btn.type='button'; btn.className='gallery-folder-tab'+(f.id===currentOcFolderId?' active':'');
+    if(f.secret){
+      const lock=document.createElement('span');
+      lock.className='gf-lock'; lock.innerText='🔒'; lock.title='비밀 폴더';
+      btn.appendChild(lock);
+    }
+    const nameSpan=document.createElement('span'); nameSpan.innerText=f.name;
+    btn.appendChild(nameSpan);
+    btn.addEventListener('click', (e)=>{
+      if(e.target.closest('.gallery-folder-rename')) return;
+      const open = ()=>{ currentOcFolderId=f.id; ocPage=1; ocSelectedIds.clear(); renderOcPosts(); };
+      if(folderLocked(f)) openFolderUnlock(f, open); else open();
+    });
+    if(isLoggedIn){
+      const renameBtn=document.createElement('button');
+      renameBtn.type='button'; renameBtn.className='gallery-folder-rename';
+      renameBtn.innerText='✎'; renameBtn.title='폴더 설정';
+      renameBtn.addEventListener('click', (e)=>{ e.stopPropagation(); openFolderModal(ocFolderCtx(), f); });
+      btn.appendChild(renameBtn);
+
+      // 선택 모드에서 끌어다 놓으면 그 폴더로 옮겨집니다 (PROMPT 와 같은 방식)
+      btn.addEventListener('dragover', (e)=>{
+        if(draggedOcId==null) return;
+        e.preventDefault(); btn.classList.add('drop-target');
+      });
+      btn.addEventListener('dragleave', ()=> btn.classList.remove('drop-target'));
+      btn.addEventListener('drop', async (e)=>{
+        e.preventDefault(); btn.classList.remove('drop-target');
+        if(draggedOcId==null) return;
+        const ids = new Set(ocSelectedIds); ids.add(draggedOcId);
+        state.ocPosts.forEach(x=>{ if(ids.has(x.id)) x.folderId = f.id; });
+        draggedOcId=null; ocSelectedIds.clear();
+        await saveOc();
+        renderOcPosts();
+      });
+    }
+    bar.appendChild(btn);
+  });
+  if(isLoggedIn){
+    const addBtn=document.createElement('button');
+    addBtn.type='button'; addBtn.className='gallery-folder-add'; addBtn.innerText='＋ 폴더';
+    addBtn.addEventListener('click', ()=> openFolderModal(ocFolderCtx(), null));
+    bar.appendChild(addBtn);
+  }
+}
+
+function renderOcPosts(){
+  const grid=document.getElementById('ocGrid');
+  if(!grid) return;
+  grid.innerHTML='';
+  const pagSlot=document.getElementById('ocPagination');
+  if(pagSlot) pagSlot.innerHTML='';
+  const locked=document.getElementById('ocLockedPanel');
+  if(locked) locked.remove();
+
+  const selBtn=document.getElementById('ocSelectBtn');
+  const delBtn=document.getElementById('ocSelectDeleteBtn');
+  if(selBtn){ selBtn.innerText = ocSelectMode ? '선택 취소' : '선택'; selBtn.classList.toggle('active', ocSelectMode); }
+  if(delBtn) delBtn.style.display = ocSelectMode ? 'inline-flex' : 'none';
+
+  if(!state.ocFolders.length) state.ocFolders = normalizeOcFolders(null);
+  const folder = state.ocFolders.find(f=>f.id===currentOcFolderId) || state.ocFolders[0];
+  currentOcFolderId = folder.id;
+  renderOcFolderBar();
+
+  /* 잠긴 비밀 폴더는 목록을 그리지 않습니다 */
+  if(folderLocked(folder)){
+    const panel=document.createElement('div');
+    panel.className='gallery-locked'; panel.id='ocLockedPanel';
+    panel.innerHTML='<div class="gl-icon">🔒</div><div class="gl-text">비밀 폴더입니다.</div>'
+      + '<button type="button" class="btn-ghost">비밀번호 입력</button>';
+    panel.querySelector('button').addEventListener('click', ()=> openFolderUnlock(folder, ()=> renderOcPosts()));
+    document.querySelector('.oc-body').appendChild(panel);
+    return;
+  }
+
+  const list = state.ocPosts.filter(x=> ocFolderIdOf(x)===folder.id);
+  if(list.length===0){ grid.innerHTML='<div class="empty-note">아직 만들어진 캐릭터가 없어요.</div>'; return; }
+
+  const totalPages = Math.max(1, Math.ceil(list.length/OC_PER_PAGE));
+  if(ocPage>totalPages) ocPage=totalPages;
+  if(ocPage<1) ocPage=1;
+  const start=(ocPage-1)*OC_PER_PAGE;
+  const pageItems = list.slice(start, start+OC_PER_PAGE);
+
+  pageItems.forEach(o=>{
+    const el=document.createElement('div');
+    el.className='post-card oc-card'+(ocSelectMode?' selectable':'');
+    el.dataset.id = o.id;
+    const checked = ocSelectedIds.has(o.id);
+    /* PAIR 카드와 같은 모양이되 분류 줄(AI CHAT/DREAM)은 빼고 제목만 둡니다 */
+    el.innerHTML = `${ocSelectMode?`<div class="post-check ${checked?'checked':''}">${checked?'✓':''}</div>`:''}
+      <div class="post-thumb"></div>
+      <div class="post-info"><div class="post-title">${escapeHtml(o.title)}</div>
+        <div class="oc-catch">${escapeHtml(o.subtitle||'')}</div></div>`;
+    el.addEventListener('click', ()=>{
+      if(ocSelectMode){
+        if(ocSelectedIds.has(o.id)) ocSelectedIds.delete(o.id); else ocSelectedIds.add(o.id);
+        renderOcPosts();
+      }else{
+        openOcDetail(o.id);
+      }
+    });
+    if(ocSelectMode && isLoggedIn){
+      el.draggable = true;
+      el.addEventListener('dragstart', ()=>{ draggedOcId=o.id; el.classList.add('dragging'); });
+      el.addEventListener('dragend', ()=>{ el.classList.remove('dragging'); draggedOcId=null; });
+    }
+    grid.appendChild(el);
+    const src = o.headerImage && o.headerImage.src;
+    if(src){
+      const thumb = el.querySelector('.post-thumb');
+      thumb.style.backgroundImage = `url('${src}')`;
+      applyThumbBg(thumb, src);
+    }
+  });
+
+  // 마지막 페이지가 덜 차도 격자 높이가 유지되도록
+  for(let i=pageItems.length;i<OC_PER_PAGE;i++){
+    const slot=document.createElement('div'); slot.className='post-slot';
+    grid.appendChild(slot);
+  }
+
+  if(pagSlot && totalPages>1){
+    let pag = `<button class="log-pg-btn" data-pg="prev" ${ocPage===1?'disabled':''}>&lt;</button>`;
+    for(let i=1;i<=totalPages;i++){ pag += `<button class="log-pg-btn ${i===ocPage?'active':''}" data-pg="${i}">${i}</button>`; }
+    pag += `<button class="log-pg-btn" data-pg="next" ${ocPage===totalPages?'disabled':''}>&gt;</button>`;
+    pagSlot.innerHTML = `<div class="log-pagination">${pag}</div>`;
+    pagSlot.querySelectorAll('.log-pg-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        if(btn.dataset.pg==='prev') ocPage=Math.max(1,ocPage-1);
+        else if(btn.dataset.pg==='next') ocPage=Math.min(totalPages,ocPage+1);
+        else ocPage=Number(btn.dataset.pg);
+        renderOcPosts();
+      });
+    });
+  }
+}
+
+/* ---- OC 상세 창 ---- */
+let ocHeaderAdj=null, ocProfileAdj=null, ocSideAdj=null;
+let ocPageIdx = 0;
+
+function setOcPage(idx, animate){
+  const pages = Array.from(document.querySelectorAll('#ocPages .oc-page'));
+  if(!pages.length) return;
+  ocPageIdx = clamp(idx, 0, pages.length-1);
+  pages.forEach((el,i)=>{
+    el.style.transition = (animate===false) ? 'none' : '';
+    el.style.transform = `translateY(${(i-ocPageIdx)*100}%)`;
+    el.classList.toggle('active', i===ocPageIdx);
+  });
+  if(animate===false){
+    // 다음 프레임부터 다시 애니메이션이 걸리도록 되돌립니다
+    void pages[0].offsetWidth;
+    pages.forEach(el=>{ el.style.transition=''; });
+  }
+  // 지금 몇 번째 장인지 점으로 알려줍니다 (인덱스 탭이 없으므로).
+  // 넘기는 것은 스크롤 / 스와이프로만 합니다 — 점은 표시용입니다.
+  const dots=document.getElementById('ocPageDots');
+  if(dots){
+    dots.innerHTML='';
+    pages.forEach((_,i)=>{
+      const d=document.createElement('span');
+      d.className='oc-page-dot'+(i===ocPageIdx?' active':'');
+      dots.appendChild(d);
+    });
+  }
+}
+
+function renderOcKeywords(o){
+  const row=document.getElementById('ocKwRow');
+  if(!row) return;
+  row.innerHTML='';
+  o.keywords.forEach((kw,i)=>{
+    const cell=document.createElement('div');
+    cell.className='oc-kw';
+    cell.contentEditable = isLoggedIn ? 'true' : 'false';
+    cell.innerText = kw || '';
+    cell.addEventListener('blur', ()=>{
+      if(!isLoggedIn) return;
+      if(o.keywords[i] === cell.innerText) return;
+      o.keywords[i] = cell.innerText;
+      saveOc();
+    });
+    cell.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); cell.blur(); } });
+    row.appendChild(cell);
+  });
+}
+
+function fillOcDetail(o){
+  const title=document.getElementById('ocTitleInput');
+  title.value=o.title; title.readOnly=!isLoggedIn;
+  title.oninput=()=>{ if(!isLoggedIn)return; o.title=title.value; saveOc(); renderOcPosts(); };
+
+  const sub=document.getElementById('ocSubtitleInput');
+  sub.value=o.subtitle; sub.readOnly=!isLoggedIn;
+  // 캐치프레이즈는 목록 카드에도 나오므로 함께 다시 그립니다
+  sub.oninput=()=>{ if(!isLoggedIn)return; o.subtitle=sub.value; saveOc(); renderOcPosts(); };
+
+  bindMeta('ocProfileName','name',o.profile, saveOc);
+  bindMetaContainer('ocMeta', o.profile, saveOc);
+  bindBodyText('ocIntro', o.profile, saveOc);
+  renderOcKeywords(o);
+
+  const free=document.getElementById('ocFree');
+  free.innerHTML = o.freeText || '';
+  free.contentEditable = isLoggedIn ? 'true' : 'false';
+  free.onblur=()=>{ if(!isLoggedIn)return; o.freeText=free.innerHTML; saveOc(); };
+
+  if(ocHeaderAdj) ocHeaderAdj.paint();
+  if(ocProfileAdj) ocProfileAdj.paint();
+  if(ocSideAdj) ocSideAdj.paint();
+  bindRichTextToolbars();
+
+  /* 갤러리·로그 엔진을 OC 창 쪽으로 돌려놓습니다 */
+  galleryHost = OC_GALLERY_HOST;
+  logHost = OC_LOG_HOST;
+  pdLogPage = 1;
+  currentGalleryFolderId = o.galleryFolders[0].id;
+  galleryPage = 1;
+  gallerySelectMode = false;
+  gallerySelectedIdx.clear();
+  const g = OC_GALLERY_HOST.root;
+  if(g){
+    g.querySelector('.gallery-select-info').style.display='none';
+    g.querySelector('.gallery-select-delete').style.display='none';
+    const st=g.querySelector('.gallery-select-toggle');
+    st.innerText='✓'; st.classList.remove('active');
+  }
+  setOcPage(0, false);
+  renderLogList(o);
+  renderGallery(o);
+}
+
+function openOcDetail(id){
+  currentOcId = id;
+  const o = getCurrentOc();
+  if(!o) return;
+  fillOcDetail(o);
+  openModal('modalOcDetail');
+  // 창이 열려 크기가 잡힌 뒤 한 번 더 그립니다 (숨은 상태에서는 폭이 0)
+  setTimeout(()=>{
+    if(ocProfileAdj) ocProfileAdj.paint();
+    if(ocSideAdj) ocSideAdj.paint();
+    if(ocHeaderAdj) ocHeaderAdj.paint();
+  });
+}
+
+function initOcDetail(){
+  ocHeaderAdj = createAdjustable(document.getElementById('ocHeaderImgBox'),
+    ()=>{ const o=getCurrentOc(); return o ? o.headerImage : blankImg(); },
+    (v)=>{ const o=getCurrentOc(); if(!o) return; o.headerImage=v; saveOc(); renderOcPosts(); });
+  ocProfileAdj = createAdjustable(document.getElementById('ocProfileImgBox'),
+    ()=>{ const o=getCurrentOc(); return o ? o.profile.image : blankImg(); },
+    (v)=>{ const o=getCurrentOc(); if(!o) return; o.profile.image=v; saveOc(); });
+  ocSideAdj = createAdjustable(document.getElementById('ocSideImgBox'),
+    ()=>{ const o=getCurrentOc(); return o ? o.sideImage : blankImg(); },
+    (v)=>{ const o=getCurrentOc(); if(!o) return; o.sideImage=v; saveOc(); });
+
+  const pages = document.getElementById('ocPages');
+  if(!pages) return;
+
+  /* 안에서 따로 스크롤되는 칸(자유 텍스트 / LOG 표) 위에서는
+     그 칸이 끝까지 내려간 뒤에야 페이지를 넘깁니다. */
+  const consumedByInnerScroll = (target, down)=>{
+    if(!target || !target.closest) return false;
+    // 좁은 화면에서는 장 자체도 스크롤됩니다 (.oc-page)
+    const box = target.closest('.oc-free-box, .log-table-scroll, .oc-page');
+    if(!box) return false;
+    if(box.scrollHeight <= box.clientHeight + 1) return false;
+    const atTop = box.scrollTop <= 0;
+    const atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 1;
+    return down ? !atBottom : !atTop;
+  };
+  let wheelLock = 0;
+  pages.addEventListener('wheel', (e)=>{
+    if(Math.abs(e.deltaY) < 4) return;
+    if(consumedByInnerScroll(e.target, e.deltaY>0)) return;
+    const now = Date.now();
+    if(now < wheelLock) return;
+    wheelLock = now + 600;      // 한 번 굴릴 때 한 장만 넘어가게
+    setOcPage(ocPageIdx + (e.deltaY>0 ? 1 : -1));
+  }, {passive:true});
+
+  /* 손가락 위아래 스와이프. 갤러리의 좌우 스와이프와는 방향으로 구분됩니다. */
+  let y0=null, x0=0, startTarget=null;
+  pages.addEventListener('touchstart', (e)=>{
+    if(e.touches.length!==1 || document.body.classList.contains('touch-dragging')){ y0=null; return; }
+    y0=e.touches[0].clientY; x0=e.touches[0].clientX; startTarget=e.target;
+  }, {passive:true});
+  pages.addEventListener('touchend', (e)=>{
+    if(y0===null) return;
+    const dy=e.changedTouches[0].clientY-y0, dx=e.changedTouches[0].clientX-x0;
+    y0=null;
+    if(document.body.classList.contains('touch-dragging')) return;
+    if(Math.abs(dy)<50 || Math.abs(dy)<Math.abs(dx)) return;
+    // 안에서 아직 더 스크롤될 곳이 남았으면 페이지를 넘기지 않습니다
+    if(consumedByInnerScroll(startTarget, dy<0)) return;
+    setOcPage(ocPageIdx + (dy<0 ? 1 : -1));
+  }, {passive:true});
+}
+
+/* ---- OC 목록 버튼 ---- */
+bindOnce(document.getElementById('ocWriteBtn'), async ()=>{
+  if(!isLoggedIn) return;
+  const post = migrateOcPost({ id:Date.now(), folderId:currentOcFolderId });
+  state.ocPosts.unshift(post);     // 새 글은 맨 앞에
+  await saveOc();
+  ocPage = 1;
+  renderOcPosts();
+  openOcDetail(post.id);
+});
+const ocSelectBtnEl = document.getElementById('ocSelectBtn');
+if(ocSelectBtnEl) ocSelectBtnEl.addEventListener('click', ()=>{
+  ocSelectMode = !ocSelectMode;
+  ocSelectedIds.clear();
+  renderOcPosts();
+});
+const ocSelectDeleteBtnEl = document.getElementById('ocSelectDeleteBtn');
+if(ocSelectDeleteBtnEl) ocSelectDeleteBtnEl.addEventListener('click', async ()=>{
+  if(!isLoggedIn) return;
+  if(ocSelectedIds.size===0){ alert('삭제할 글을 먼저 선택해주세요.'); return; }
+  if(!confirm(`선택한 ${ocSelectedIds.size}개 글을 삭제할까요? 되돌릴 수 없습니다.`)) return;
+  state.ocPosts = state.ocPosts.filter(x=> !ocSelectedIds.has(x.id));
+  ocSelectedIds.clear();
+  await saveOc();
+  renderOcPosts();
+});
+
+/* ============================================================
    ARCHIVE
    ============================================================ */
 let editingArcId = null;
@@ -1933,7 +2854,10 @@ function openArcWriteModal(existingItem){
   document.getElementById('arcWriteHeading').innerText = existingItem ? '게시글 수정' : '글쓰기';
   document.getElementById('arcCategoryInput').value = existingItem ? (existingItem.category||'ooc') : currentArchiveCategory;
   document.getElementById('arcTitleInput').value = existingItem ? existingItem.title : '';
-  document.getElementById('arcContentEditor').innerHTML = existingItem ? existingItem.content : '';
+  const editorEl = document.getElementById('arcContentEditor');
+  editorEl.innerHTML = existingItem ? existingItem.content : '';
+  // 예전에 넣은 코드 상자에도 복사 버튼이 생기도록
+  ensureCodeEmbedCopy(editorEl);
   arcAttachments = existingItem && existingItem.files ? existingItem.files.slice() : [];
   renderArcAttachList();
   openModal('modalArcWrite');
@@ -1970,6 +2894,12 @@ if(arcDividerBtn){
     editor.focus();
     document.execCommand('insertHTML', false, '<hr><br>');
   });
+}
+
+const arcFoldBtn = document.getElementById('arcFoldBtn');
+if(arcFoldBtn){
+  arcFoldBtn.addEventListener('mousedown', e=> e.preventDefault());
+  arcFoldBtn.addEventListener('click', ()=> insertFoldBlock('arcContentEditor'));
 }
 
 /* 이미지 삽입 + 삽입 후 삭제/이동 툴바 */
@@ -2096,6 +3026,7 @@ document.getElementById('arcCodeInsertBtn').addEventListener('click', ()=>{
     <div class="code-embed-toolbar">
       <button type="button" class="ce-tab active" data-mode="preview">미리보기</button>
       <button type="button" class="ce-tab" data-mode="code">&lt;/&gt; 코드</button>
+      <button type="button" class="code-embed-copy" title="코드 복사">⧉</button>
       <button type="button" class="code-embed-download" title="이미지 다운로드">⬇</button>
     </div>
     <div class="code-embed-preview-live">${code}</div>
@@ -2133,17 +3064,25 @@ document.addEventListener('click', async (e)=>{
   }
 });
 
+function arcEditorHtml(){ return editorHtml('arcContentEditor').trim(); }
+
 bindOnce(document.getElementById('saveArcBtn'), async ()=>{
   const title=document.getElementById('arcTitleInput').value.trim();
   const category=document.getElementById('arcCategoryInput').value;
-  const content=document.getElementById('arcContentEditor').innerHTML.trim();
+  const content=arcEditorHtml();
   if(!title){ alert('제목을 입력해주세요.'); return; }
+  /* PROMPT 글은 폴더에 들어갑니다 — 지금 보고 있는 폴더에 넣고,
+     다른 카테고리를 보다가 PROMPT 로 바꿔 쓴 경우엔 기본 폴더에 넣습니다. */
+  const folderId = (currentArchiveCategory==='nai') ? currentArcFolderId : ARC_DEFAULT_FOLDER;
   if(editingArcId){
     const item = state.archive.find(x=>x.id===editingArcId);
-    if(item){ item.title=title; item.category=category; item.content=content; item.files=arcAttachments.slice(); }
+    if(item){
+      item.title=title; item.category=category; item.content=content; item.files=arcAttachments.slice();
+      if(!item.folderId) item.folderId = folderId;
+    }
   }else{
     state.archiveSeqCounter = (state.archiveSeqCounter||0) + 1;
-    state.archive.push({ id:Date.now(), seq:state.archiveSeqCounter, category, title, content, date:nowStamp(), files:arcAttachments.slice(), pinned:false });
+    state.archive.push({ id:Date.now(), seq:state.archiveSeqCounter, category, title, content, date:nowStamp(), files:arcAttachments.slice(), pinned:false, folderId });
     await storageSet('archiveSeqCounter', state.archiveSeqCounter);
   }
   await storageSet('archive', state.archive);
@@ -2188,7 +3127,7 @@ document.getElementById('arcPinBtn').addEventListener('click', async ()=>{
 });
 function updateArcPinBtn(item){
   const btn=document.getElementById('arcPinBtn');
-  btn.innerText = item.pinned ? '📌 고정 해제' : '📌 고정';
+  btn.innerText = item.pinned ? '해제' : '고정';
 }
 document.getElementById('arcDeleteBtn').addEventListener('click', async ()=>{
   arcKebabMenu.classList.remove('open');
@@ -2202,11 +3141,20 @@ document.getElementById('arcDeleteBtn').addEventListener('click', async ()=>{
 
 let arcPage=1;
 let currentArcViewId=null;
+/* PROMPT 전용 상태 */
+let currentArcFolderId = ARC_DEFAULT_FOLDER;
+let arcSelectMode = false;
+let arcSelectedIds = new Set();
+/* 👁 로 잠깐 선명하게 본 글. 페이지·폴더를 옮기면 다시 흐려지도록 비웁니다. */
+let arcUnblurred = new Set();
+let draggedArcId = null;
 function openArcView(item){
   currentArcViewId = item.id;
   document.getElementById('arcViewTitle').innerText=item.title;
   document.getElementById('arcViewDate').innerText=item.date||'';
-  document.getElementById('arcViewContent').innerHTML=item.content;
+  const viewEl = document.getElementById('arcViewContent');
+  viewEl.innerHTML=item.content;
+  decorateContent(viewEl);
   updateArcPinBtn(item);
   const attachSection = document.getElementById('arcViewAttachSection');
   const attachList = document.getElementById('arcViewAttachList');
@@ -2263,19 +3211,131 @@ function filterArchiveItems(items){
   });
 })();
 
+/* PROMPT 폴더 탭 — 갤러리 폴더바와 같은 모양(같은 CSS 클래스)입니다.
+   선택 모드에서 글을 끌어다 놓으면 그 폴더로 옮겨집니다. */
+function renderArcFolderBar(){
+  const bar = document.getElementById('arcFolderBar');
+  if(!bar) return;
+  bar.innerHTML='';
+  state.archiveFolders.forEach(f=>{
+    const btn=document.createElement('button');
+    btn.type='button'; btn.className='gallery-folder-tab'+(f.id===currentArcFolderId?' active':'');
+    if(f.secret){
+      const lock=document.createElement('span');
+      lock.className='gf-lock'; lock.innerText='🔒'; lock.title='비밀 폴더';
+      btn.appendChild(lock);
+    }
+    const nameSpan=document.createElement('span');
+    nameSpan.innerText=f.name;
+    btn.appendChild(nameSpan);
+    btn.addEventListener('click', (e)=>{
+      if(e.target.closest('.gallery-folder-rename')) return;
+      const open = ()=>{
+        currentArcFolderId=f.id; arcPage=1;
+        arcUnblurred.clear(); arcSelectedIds.clear();
+        renderArchive();
+      };
+      if(folderLocked(f)) openFolderUnlock(f, open);
+      else open();
+    });
+    if(isLoggedIn){
+      const renameBtn=document.createElement('button');
+      renameBtn.type='button'; renameBtn.className='gallery-folder-rename';
+      renameBtn.innerText='✎'; renameBtn.title='폴더 설정';
+      renameBtn.addEventListener('click', (e)=>{ e.stopPropagation(); openFolderModal(archiveFolderCtx(), f); });
+      btn.appendChild(renameBtn);
+
+      btn.addEventListener('dragover', (e)=>{
+        if(draggedArcId==null) return;
+        e.preventDefault();
+        btn.classList.add('drop-target');
+      });
+      btn.addEventListener('dragleave', ()=> btn.classList.remove('drop-target'));
+      btn.addEventListener('drop', async (e)=>{
+        e.preventDefault();
+        btn.classList.remove('drop-target');
+        if(draggedArcId==null) return;
+        // 선택해 둔 글이 있으면 함께, 없으면 끌던 글 하나만 옮깁니다
+        const ids = new Set(arcSelectedIds);
+        ids.add(draggedArcId);
+        state.archive.forEach(x=>{ if(ids.has(x.id)) x.folderId = f.id; });
+        draggedArcId=null;
+        arcSelectedIds.clear();
+        arcUnblurred.clear();
+        await storageSet('archive', state.archive);
+        renderArchive();
+      });
+    }
+    bar.appendChild(btn);
+  });
+  if(isLoggedIn){
+    const addBtn=document.createElement('button');
+    addBtn.type='button'; addBtn.className='gallery-folder-add';
+    addBtn.innerText='＋ 폴더';
+    addBtn.addEventListener('click', ()=> openFolderModal(archiveFolderCtx(), null));
+    bar.appendChild(addBtn);
+  }
+}
+
 function renderArchive(){
   const wrap=document.getElementById('archiveBody');
   // PAIR 처럼 상단에 현재 카테고리를 함께 표기
   const titleEl=document.getElementById('archiveTitle');
   if(titleEl) titleEl.innerText = 'Archive · ' + (ARCHIVE_CAT_LABEL[currentArchiveCategory] || currentArchiveCategory);
   const isGallery = currentArchiveCategory==='nai';
+
+  /* 선택 / 일괄 삭제는 PROMPT 에서만 씁니다 */
+  if(!isGallery && arcSelectMode){ arcSelectMode=false; arcSelectedIds.clear(); }
+  const selBtn=document.getElementById('arcSelectBtn');
+  const selDelBtn=document.getElementById('arcSelectDeleteBtn');
+  if(selBtn){
+    selBtn.style.display = isGallery ? 'inline-flex' : 'none';
+    selBtn.innerText = arcSelectMode ? '선택 취소' : '선택';
+    selBtn.classList.toggle('active', arcSelectMode);
+  }
+  if(selDelBtn) selDelBtn.style.display = (isGallery && arcSelectMode) ? 'inline-flex' : 'none';
+
   // PROMPT 는 4열 x 2행(모바일은 2열 x 4행)으로 8개 고정,
   // OOC/ETC 는 데스크톱 15줄 / 모바일 10줄
   const perPage = isGallery ? 8 : (isMobileWidth() ? 10 : 15);
-  const catItems = state.archive.filter(x=>(x.category||'ooc')===currentArchiveCategory);
-  if(catItems.length===0){ wrap.innerHTML='<div class="empty-note">아직 백업된 항목이 없어요.</div>'; return; }
+
+  /* PROMPT 는 폴더로 한 번 더 걸러서 보여줍니다 */
+  let folder = null;
+  const folderBarHtml = isGallery ? '<div class="gallery-folder-bar arc-folder-bar" id="arcFolderBar"></div>' : '';
+  let catItems = state.archive.filter(x=>(x.category||'ooc')===currentArchiveCategory);
+  if(isGallery){
+    // 폴더 목록이 어떤 이유로든 비어 있으면 기본 폴더를 만들어 둡니다
+    if(!state.archiveFolders.length) state.archiveFolders = normalizeArcFolders(null);
+    folder = state.archiveFolders.find(f=>f.id===currentArcFolderId) || state.archiveFolders[0];
+    currentArcFolderId = folder.id;
+    catItems = catItems.filter(x=> arcFolderIdOf(x)===folder.id);
+
+    /* 잠긴 비밀 폴더는 썸네일을 아예 그리지 않습니다 */
+    if(folderLocked(folder)){
+      wrap.innerHTML = folderBarHtml
+        + `<div class="arc-nai-grid">${'<div class="arc-nai-slot"></div>'.repeat(8)}</div>`
+        + '<div class="gallery-locked"><div class="gl-icon">🔒</div>'
+        + '<div class="gl-text">비밀 폴더입니다.</div>'
+        + '<button type="button" class="btn-ghost" id="arcUnlockBtn">비밀번호 입력</button></div>'
+        + '<div class="log-pagination-slot"></div>';
+      renderArcFolderBar();
+      const ub = document.getElementById('arcUnlockBtn');
+      if(ub) ub.addEventListener('click', ()=> openFolderUnlock(folder, ()=> renderArchive()));
+      return;
+    }
+  }
+
+  if(catItems.length===0){
+    wrap.innerHTML = folderBarHtml + '<div class="empty-note">아직 백업된 항목이 없어요.</div>';
+    renderArcFolderBar();
+    return;
+  }
   const found = filterArchiveItems(catItems);
-  if(found.length===0){ wrap.innerHTML='<div class="empty-note">검색 결과가 없어요.</div>'; return; }
+  if(found.length===0){
+    wrap.innerHTML = folderBarHtml + '<div class="empty-note">검색 결과가 없어요.</div>';
+    renderArcFolderBar();
+    return;
+  }
   const pinned = found.filter(x=>x.pinned).slice(0,3).sort((a,b)=>(a.seq||0)-(b.seq||0));
   const rest = found.filter(x=>!x.pinned).slice().sort((a,b)=>(b.seq||0)-(a.seq||0));
   const items = [...pinned, ...rest];
@@ -2301,20 +3361,45 @@ function renderArchive(){
   }
 
   if(isGallery){
+    const folderBlur = !!(folder && folder.blur);
     let cells='';
     pageItems.forEach((item,i)=>{
       const thumb = extractFirstImage(item.content);
-      cells += `<div class="arc-nai-thumb" data-abs="${start+i}" style="${thumb?`background-image:url('${thumb}')`:'background:var(--surface);'}">
-        ${item.pinned?'<span class="arc-nai-pin">📌</span>':''}
+      const blurred = folderBlur && !arcUnblurred.has(item.id);
+      const checked = arcSelectedIds.has(item.id);
+      /* 이미지는 안쪽 레이어에 깝니다 — 흐림 효과가 제목/버튼까지 번지지 않게 */
+      cells += `<div class="arc-nai-thumb${blurred?' blurred':''}" data-abs="${start+i}">
+        <div class="an-img"${thumb?` style="background-image:url('${thumb}')"`:''}></div>
+        ${(item.pinned && !arcSelectMode)?'<span class="arc-nai-pin">📌</span>':''}
+        ${folderBlur?'<button type="button" class="an-eye" title="흐림 해제">👁︎</button>':''}
+        ${arcSelectMode?`<div class="gallery-check${checked?' checked':''}">${checked?'✓':''}</div>`:''}
         <div class="arc-nai-overlay ${thumb?'':'arc-nai-overlay-static'}"><div class="arc-nai-title">${escapeHtml(item.title)}</div></div>
       </div>`;
     });
     /* 페이지 버튼 자리는 항상 비워두고(하단 중앙 고정),
        다음 페이지가 있을 때만 버튼을 그린다 — 격자 높이가 흔들리지 않게 */
-    wrap.innerHTML = `<div class="arc-nai-grid">${cells}</div>`
+    wrap.innerHTML = folderBarHtml + `<div class="arc-nai-grid">${cells}</div>`
       + `<div class="log-pagination-slot">${totalPages>1?`<div class="log-pagination">${pag}</div>`:''}</div>`;
+    renderArcFolderBar();
     wrap.querySelectorAll('.arc-nai-thumb[data-abs]').forEach(el=>{
+      const item = items[Number(el.dataset.abs)];
+
+      /* 👁 — 이 글만 잠깐 선명하게. 페이지나 폴더를 옮기면 다시 흐려집니다. */
+      const eye = el.querySelector('.an-eye');
+      if(eye) eye.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        if(arcUnblurred.has(item.id)) arcUnblurred.delete(item.id);
+        else arcUnblurred.add(item.id);
+        el.classList.toggle('blurred', !arcUnblurred.has(item.id));
+      });
+
       el.addEventListener('click', ()=>{
+        if(arcSelectMode){
+          if(arcSelectedIds.has(item.id)) arcSelectedIds.delete(item.id);
+          else arcSelectedIds.add(item.id);
+          renderArchive();
+          return;
+        }
         /* 터치 기기에는 hover 가 없습니다. 사진이 있는 칸은 첫 탭에서 반투명
            레이어와 제목이 뜨고, 두 번째 탭에서 글이 열립니다 — 마우스를 올려
            제목을 확인하고 누르던 흐름과 같습니다.
@@ -2327,11 +3412,20 @@ function renderArchive(){
           el.classList.add('revealed');
           return;
         }
-        openArcView(items[Number(el.dataset.abs)]);
+        openArcView(item);
       });
-      // 6열 격자라 칸이 100px 안팎인데 원본은 800px대다 — 표시용 축소본으로 교체
-      const src = extractFirstImage(items[Number(el.dataset.abs)].content);
-      if(src) applyThumbBg(el, src);
+
+      /* 선택 모드에서는 폴더 탭으로 끌어다 옮길 수 있습니다.
+         순서 바꾸기는 하지 않으므로 칸끼리는 서로 받지 않습니다. */
+      if(arcSelectMode && isLoggedIn){
+        el.draggable = true;
+        el.addEventListener('dragstart', ()=>{ draggedArcId=item.id; el.classList.add('dragging'); });
+        el.addEventListener('dragend', ()=>{ el.classList.remove('dragging'); draggedArcId=null; });
+      }
+
+      // 4열 격자라 칸이 작은데 원본은 800px대다 — 표시용 축소본으로 교체
+      const src = extractFirstImage(item.content);
+      if(src) applyThumbBg(el.querySelector('.an-img'), src);
     });
   }else{
     let rows='';
@@ -2349,10 +3443,29 @@ function renderArchive(){
       if(btn.dataset.pg==='prev') arcPage=Math.max(1,arcPage-1);
       else if(btn.dataset.pg==='next') arcPage=Math.min(totalPages,arcPage+1);
       else arcPage=Number(btn.dataset.pg);
+      arcUnblurred.clear();   // 페이지를 옮기면 흐림 상태로 되돌립니다
       renderArchive();
     });
   });
 }
+
+/* ---- PROMPT 선택 모드 ---- */
+const arcSelectBtnEl = document.getElementById('arcSelectBtn');
+if(arcSelectBtnEl) arcSelectBtnEl.addEventListener('click', ()=>{
+  arcSelectMode = !arcSelectMode;
+  arcSelectedIds.clear();
+  renderArchive();
+});
+const arcSelectDeleteBtnEl = document.getElementById('arcSelectDeleteBtn');
+if(arcSelectDeleteBtnEl) arcSelectDeleteBtnEl.addEventListener('click', async ()=>{
+  if(!isLoggedIn) return;
+  if(arcSelectedIds.size===0){ alert('삭제할 글을 먼저 선택해주세요.'); return; }
+  if(!confirm(`선택한 ${arcSelectedIds.size}개 글을 삭제할까요? 되돌릴 수 없습니다.`)) return;
+  state.archive = state.archive.filter(x=> !arcSelectedIds.has(x.id));
+  arcSelectedIds.clear();
+  await storageSet('archive', state.archive);
+  renderArchive();
+});
 
 /* ============================================================
    INIT
@@ -2426,7 +3539,7 @@ function initHomeTouchNav(){
 /* ---- 갤러리 페이지 전환 (휠 대체) ---- */
 function galleryStepPage(dir){
   if(galleryTransitioning) return;
-  const p = getCurrentPost(); if(!p) return;
+  const p = galleryPost(); if(!p) return;
   const folder = getFolder(p, currentGalleryFolderId); if(!folder) return;
   const total = galleryTotalPages(folder);
   if(dir > 0 && galleryPage < total){
@@ -2435,39 +3548,6 @@ function galleryStepPage(dir){
     animateGalleryPageChange(-1, ()=>{ galleryPage--; renderGallery(p); });
   }
 }
-function initGalleryTouchNav(){
-  /* 화살표는 평소 pointer-events:none 이라 못 눌렀습니다.
-     모바일 CSS 에서 auto 로 열어두고 여기서 탭을 받습니다. */
-  const bindHint = (id, dir)=>{
-    const el = document.getElementById(id);
-    if(!el) return;
-    el.addEventListener('click', ()=>{
-      if(el.classList.contains('disabled')) return;
-      galleryStepPage(dir);
-    });
-  };
-  bindHint('galleryScrollHint', 1);
-  bindHint('galleryScrollHintUp', -1);
-
-  const wrap = document.getElementById('galleryGridWrap');
-  if(!wrap) return;
-  let y0 = null, x0 = 0;
-  wrap.addEventListener('touchstart', (e)=>{
-    // 길게 눌러 드래그 중이면 스와이프로 해석하지 않습니다
-    if(e.touches.length !== 1 || document.body.classList.contains('touch-dragging')){ y0 = null; return; }
-    y0 = e.touches[0].clientY; x0 = e.touches[0].clientX;
-  }, {passive:true});
-  wrap.addEventListener('touchend', (e)=>{
-    if(y0 === null) return;
-    const dy = e.changedTouches[0].clientY - y0;
-    const dx = e.changedTouches[0].clientX - x0;
-    y0 = null;
-    if(document.body.classList.contains('touch-dragging')) return;
-    if(Math.abs(dy) < 45 || Math.abs(dy) < Math.abs(dx)) return;
-    galleryStepPage(dy < 0 ? 1 : -1);
-  }, {passive:true});
-}
-
 /* ---- 길게 눌러 드래그 ----------------------------------------
    HTML5 드래그앤드롭은 터치에서 아예 동작하지 않습니다.
    기존 dragstart/dragover/dragleave/drop/dragend 핸들러들은 전부 평범한
@@ -2625,7 +3705,10 @@ function initResponsiveWatch(){
     galleryPage = 1;
     const p = getCurrentPost();
     if(p && document.getElementById('modalPairDetail').classList.contains('open')) renderGallery(p);
+    const o = getCurrentOc();
+    if(o && document.getElementById('modalOcDetail').classList.contains('open')) renderGallery(o);
     if(document.getElementById('view-archive').classList.contains('active')) renderArchive();
+    if(document.getElementById('view-oc').classList.contains('active')) renderOcPosts();
   };
   window.matchMedia(MOBILE_MQ).addEventListener('change', onChange);
   window.matchMedia(SHORT_MQ).addEventListener('change', onChange);
@@ -2636,13 +3719,18 @@ async function boot(){
   initSaveIndicator();
   initFolderModal();
   initFolderUnlock();
-  initGalleryPageDrop();
+  /* 갤러리·LOG 는 PAIR 상세와 OC 상세 두 곳에서 같은 코드로 돕니다 */
+  initGalleryRoot(PAIR_GALLERY_HOST);
+  initGalleryRoot(OC_GALLERY_HOST);
+  initLogRoot(PAIR_LOG_HOST);
+  initLogRoot(OC_LOG_HOST);
+  initOcDetail();
   initMobileDrawer();
   initHomeTouchNav();
-  initGalleryTouchNav();
   initLightboxSwipe();
   initTouchDrag();
   initResponsiveWatch();
+  initContentBlocks();
 
   window.SiteStore.onAuthChange((admin)=>{
     isLoggedIn = admin;
@@ -2652,6 +3740,8 @@ async function boot(){
     applyEditMode();
     const post = getCurrentPost();
     if(post && document.getElementById('modalPairDetail').classList.contains('open')) renderGallery(post);
+    const oc = getCurrentOc();
+    if(oc && document.getElementById('modalOcDetail').classList.contains('open')) renderGallery(oc);
   });
 
   try{

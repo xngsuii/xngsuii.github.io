@@ -11,7 +11,7 @@
      css/js를 고칠 때마다 이 숫자를 함께 올려주세요.
      올리지 않으면 브라우저가 옛 파일을 계속 써서
      새 HTML과 짝이 맞지 않아 화면이 깨질 수 있습니다. -->
-<link rel="stylesheet" href="css/style.css?v=8" />
+<link rel="stylesheet" href="css/style.css?v=19" />
 </head>
 <body>
 <div class="app-window">
@@ -37,10 +37,11 @@
         <button class="nav-sub-item" data-pairsub="aichat">Ai chat</button>
         <button class="nav-sub-item" data-pairsub="dream">Dream</button>
       </div>
+      <button class="nav-item" data-view="oc">OC</button>
       <button class="nav-item" data-view="archive">Archive</button>
       <div class="nav-sub" id="archiveSub">
-        <button class="nav-sub-item active" data-archivesub="ooc">OOC</button>
-        <button class="nav-sub-item" data-archivesub="nai">PROMPT</button>
+        <button class="nav-sub-item active" data-archivesub="nai">PROMPT</button>
+        <button class="nav-sub-item" data-archivesub="ooc">OOC</button>
         <button class="nav-sub-item" data-archivesub="etc">ETC</button>
       </div>
     </nav>
@@ -100,18 +101,42 @@
         <span id="selectCountLabel">0개 선택됨</span>
         <button class="btn-ghost" id="moveToAichatBtn">AI CHAT로 이동</button>
         <button class="btn-ghost" id="moveToDreamBtn">DREAM으로 이동</button>
-        <button class="btn-ghost" id="deleteSelectedBtn">🗑 삭제</button>
+        <button class="btn-ghost gf-danger" id="deleteSelectedBtn">삭제</button>
       </div>
       <div class="pair-body">
         <div class="post-grid" id="postGrid"></div>
+        <!-- 페이지 버튼 자리는 늘 비워둡니다 — 글 수에 따라 격자 높이가 흔들리지 않게 -->
+        <div class="log-pagination-slot" id="pairPagination"></div>
+      </div>
+    </section>
+
+    <!-- ---------- OC ---------- -->
+    <section class="view" id="view-oc">
+      <div class="topbar">
+        <h2>OC</h2>
+        <div class="pair-header-actions" data-editonly>
+          <button class="btn-ghost gf-danger" id="ocSelectDeleteBtn" style="display:none;">삭제</button>
+          <button class="btn-ghost" id="ocSelectBtn">선택</button>
+          <button class="btn-primary" id="ocWriteBtn">＋ 글쓰기</button>
+        </div>
+      </div>
+      <div class="oc-body">
+        <div class="gallery-folder-bar arc-folder-bar" id="ocFolderBar"></div>
+        <div class="post-grid" id="ocGrid"></div>
+        <div class="log-pagination-slot" id="ocPagination"></div>
       </div>
     </section>
 
     <!-- ---------- ARCHIVE ---------- -->
     <section class="view" id="view-archive">
       <div class="topbar">
-        <h2 id="archiveTitle">Archive · OOC</h2>
-        <button class="btn-primary" id="addArchiveBtn" data-editonly>＋ 글쓰기</button>
+        <h2 id="archiveTitle">Archive · PROMPT</h2>
+        <!-- 선택/삭제는 PROMPT 에서만 씁니다 — 카테고리에 따라 JS 가 보였다 숨깁니다 -->
+        <div class="pair-header-actions" data-editonly>
+          <button class="btn-ghost gf-danger" id="arcSelectDeleteBtn" style="display:none;">삭제</button>
+          <button class="btn-ghost" id="arcSelectBtn" style="display:none;">선택</button>
+          <button class="btn-primary" id="addArchiveBtn">＋ 글쓰기</button>
+        </div>
       </div>
       <div class="archive-body" id="archiveBody"></div>
       <!-- 검색은 페이지 버튼 아래 (보기 모드 전용) -->
@@ -137,7 +162,7 @@
   <div class="modal login-modal">
     <button class="modal-close" data-close>✕</button>
     <h3>로그인</h3>
-    <div class="form-row"><label>이메일</label><input type="email" id="loginId" autocomplete="username" /></div>
+    <div class="form-row"><label>Email ID</label><input type="email" id="loginId" autocomplete="username" /></div>
     <div class="form-row"><label>Password</label><input type="password" id="loginPw" autocomplete="off" /></div>
     <div class="login-error" id="loginError">ID 또는 비밀번호가 일치하지 않습니다.</div>
     <div class="form-actions"><button class="btn-ghost" data-close>취소</button><button class="btn-primary" id="loginSubmitBtn">로그인</button></div>
@@ -239,7 +264,7 @@
                 <!-- 제목과 추가 버튼을 한 줄에 (버튼은 오른쪽 끝) -->
                 <div class="pd-section-head">
                   <h4>TIMELINE</h4>
-                  <button class="add-mini-btn" id="addTimelineBtn" data-editonly>＋ 타임라인 추가</button>
+                  <button class="add-mini-btn" id="addTimelineBtn" data-editonly title="타임라인 추가">＋</button>
                 </div>
                 <div class="timeline-list" id="timelineList"></div>
               </div>
@@ -257,29 +282,29 @@
             <div class="gallery-locked" id="galleryLocked" style="display:none;">
               <div class="gl-icon">🔒</div>
               <div class="gl-text">비밀 폴더입니다.</div>
-              <button type="button" class="btn-ghost" id="galleryUnlockBtn">비밀번호 입력</button>
+              <button type="button" class="btn-ghost gallery-unlock-btn" id="galleryUnlockBtn">비밀번호 입력</button>
             </div>
             <div class="gallery-scroll-hint" id="galleryScrollHint" style="display:none;">︾</div>
           </div>
           <div class="gallery-fab-row">
-            <button class="gallery-fab" id="gallerySelectDeleteBtn" data-editonly title="선택 삭제" style="display:none;">🗑</button>
-            <button class="gallery-fab" id="gallerySelectBtn" data-editonly title="선택">✓</button>
-            <button class="gallery-fab" id="addGalleryBtn" data-editonly title="이미지 추가">＋</button>
+            <button class="gallery-fab gallery-select-delete" id="gallerySelectDeleteBtn" data-editonly title="선택 삭제" style="display:none;">🗑</button>
+            <button class="gallery-fab gallery-select-toggle" id="gallerySelectBtn" data-editonly title="선택">✓</button>
+            <button class="gallery-fab gallery-add" id="addGalleryBtn" data-editonly title="이미지 추가">＋</button>
           </div>
         </div>
 
         <div class="pd-tab-pane pd-tab-pane-log" data-pdpane="log">
-          <div class="log-pane-toolbar"><button class="add-mini-btn" id="addLogBtn" data-editonly>＋ 게시글 추가</button></div>
+          <div class="log-pane-toolbar"><button class="add-mini-btn log-add-btn" id="addLogBtn" data-editonly>＋ 게시글 추가</button></div>
           <div class="log-list" id="logList"></div>
           <!-- 검색은 페이지 버튼 아래에 둡니다 (보기 모드 전용) -->
           <div class="log-search" id="logSearchBar">
-            <input type="date" id="logSearchDate" title="게시일" />
-            <select id="logSearchField">
+            <input type="date" class="log-search-date" id="logSearchDate" title="게시일" />
+            <select class="log-search-field" id="logSearchField">
               <option value="title">제목</option>
               <option value="content">내용</option>
             </select>
-            <input type="text" id="logSearchInput" placeholder="검색어를 입력하세요" />
-            <button type="button" id="logSearchClear" title="검색 초기화">✕</button>
+            <input type="text" class="log-search-input" id="logSearchInput" placeholder="검색어를 입력하세요" />
+            <button type="button" class="log-search-clear" id="logSearchClear" title="검색 초기화">✕</button>
           </div>
         </div>
 
@@ -290,6 +315,115 @@
     <button type="button" class="pd-index-tab active" data-pdtab="info">INFO</button>
     <button type="button" class="pd-index-tab" data-pdtab="gallery">GALLERY</button>
     <button type="button" class="pd-index-tab" data-pdtab="log">LOG</button>
+  </div>
+  </div>
+</div>
+
+<!-- OC 상세 — 인덱스 탭 없이 세로로 세 장(프로필/갤러리/로그)이 넘어갑니다 -->
+<div class="modal-overlay" id="modalOcDetail">
+  <div class="oc-modal-wrap">
+  <!-- 몇 번째 장인지 알려주는 점. 창 바깥 왼쪽에 세로로 놓입니다 -->
+  <div class="oc-page-dots" id="ocPageDots"></div>
+  <div class="modal wide oc-modal">
+    <button class="modal-close" data-close>✕</button>
+
+    <div class="adjustable-img pd-header-banner" id="ocHeaderImgBox">
+      <div class="adj-layer"></div>
+      <button class="adj-empty" data-editonly>＋ 헤더 이미지</button>
+      <button class="adj-change" data-editonly>📷</button>
+    </div>
+    <div class="pd-header-fade"></div>
+
+    <div class="pd-modal-body">
+      <input class="pd-title-input" id="ocTitleInput" placeholder="이름" readonly />
+      <input class="pd-subtitle-input" id="ocSubtitleInput" placeholder="캐치프레이즈" readonly />
+
+      <div class="oc-pages" id="ocPages">
+
+        <div class="oc-page" data-ocpage="profile">
+          <div class="oc-info-grid">
+            <div class="oc-info-main">
+              <div class="pd-section">
+                <div class="pd-profile char-layout">
+                  <div class="adjustable-img pd-profile-img" id="ocProfileImgBox">
+                    <div class="adj-layer"></div>
+                    <button class="adj-empty" data-editonly>＋ 사진 추가</button>
+                    <button class="adj-change" data-editonly>📷</button>
+                  </div>
+                  <div class="pd-profile-info">
+                    <div class="pd-meta-row">
+                      <input class="pd-input pd-name-input" id="ocProfileName" placeholder="이름" readonly />
+                    </div>
+                    <div class="pd-profile-divider"></div>
+                    <div class="rt-toolbar" data-editonly data-target="ocIntro" data-meta-target="ocMeta">
+                      <button type="button" class="rt-add-row" title="정보 행 추가">＋</button>
+                      <button type="button" data-cmd="bold"><b>B</b></button>
+                      <button type="button" data-cmd="italic"><i>I</i></button>
+                      <input type="color" class="rt-color" value="#1b1b1f" title="글자색" />
+                    </div>
+                    <div class="pd-desc-box">
+                      <div class="meta-container" id="ocMeta"></div>
+                      <div class="profile-view-text" id="ocIntro" contenteditable="false"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <!-- 키워드 3등분 칸 -->
+              <div class="oc-kw-row" id="ocKwRow"></div>
+              <!-- 자유 텍스트 — 길어지면 이 안에서만 스크롤됩니다 -->
+              <div class="oc-free-box">
+                <div class="profile-view-text oc-free" id="ocFree" contenteditable="false"></div>
+              </div>
+            </div>
+            <div class="oc-info-side">
+              <div class="adjustable-img oc-side-img" id="ocSideImgBox">
+                <div class="adj-layer"></div>
+                <button class="adj-empty" data-editonly>＋ 이미지</button>
+                <button class="adj-change" data-editonly>📷</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="oc-page oc-page-gallery" data-ocpage="gallery">
+          <div class="gallery-folder-bar" id="ocGalleryFolderBar"></div>
+          <div class="gallery-select-info" style="display:none;"></div>
+          <!-- .horiz: 이미지 페이지를 가로로 넘깁니다 (세로 스크롤은 창 페이지 넘김에 씁니다) -->
+          <div class="gallery-grid-wrap horiz">
+            <div class="gallery-scroll-hint up" style="display:none;">《</div>
+            <div class="gallery-grid"></div>
+            <div class="gallery-empty-msg" style="display:none;">등록된 이미지가 없어요.</div>
+            <div class="gallery-locked" style="display:none;">
+              <div class="gl-icon">🔒</div>
+              <div class="gl-text">비밀 폴더입니다.</div>
+              <button type="button" class="btn-ghost gallery-unlock-btn">비밀번호 입력</button>
+            </div>
+            <div class="gallery-scroll-hint" style="display:none;">》</div>
+          </div>
+          <div class="gallery-fab-row">
+            <button class="gallery-fab gallery-select-delete" data-editonly title="선택 삭제" style="display:none;">🗑</button>
+            <button class="gallery-fab gallery-select-toggle" data-editonly title="선택">✓</button>
+            <button class="gallery-fab gallery-add" data-editonly title="이미지 추가">＋</button>
+          </div>
+        </div>
+
+        <div class="oc-page oc-page-log" data-ocpage="log">
+          <div class="log-pane-toolbar"><button class="add-mini-btn log-add-btn" data-editonly>＋ 게시글 추가</button></div>
+          <div class="log-list"></div>
+          <div class="log-search">
+            <input type="date" class="log-search-date" title="게시일" />
+            <select class="log-search-field">
+              <option value="title">제목</option>
+              <option value="content">내용</option>
+            </select>
+            <input type="text" class="log-search-input" placeholder="검색어를 입력하세요" />
+            <button type="button" class="log-search-clear" title="검색 초기화">✕</button>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
   </div>
   </div>
 </div>
@@ -307,6 +441,8 @@
         <button type="button" id="logSubColorBtn" title="보조색 적용">A</button>
         <button type="button" id="logHighlightBtn" title="형광펜">✎</button>
         <button type="button" id="logDividerBtn" title="구분선">―</button>
+        <button type="button" id="logFoldBtn" title="접기">▾</button>
+        <button type="button" id="logInsertImageBtn" title="사진 삽입">🖼</button>
         <span class="rt-sep"></span>
         <div class="rt-colorbar">
           <label class="rt-colorcell"><input type="color" id="logTextColor" value="#1a1a1a" /><span>글자색</span></label>
@@ -327,8 +463,8 @@
     <button class="modal-close" data-close>✕</button>
     <button class="arc-kebab-btn" id="logKebabBtn" data-editonly title="더보기">⋮</button>
     <div class="arc-kebab-menu" id="logKebabMenu">
-      <button type="button" id="logEditBtn">✎ 수정</button>
-      <button type="button" id="logDeleteBtn">🗑 삭제</button>
+      <button type="button" id="logEditBtn">수정</button>
+      <button type="button" id="logDeleteBtn">삭제</button>
     </div>
     <h3 id="logViewTitle"></h3>
     <div style="font-size:10.5px;color:var(--text-muted);margin-bottom:28px;" id="logViewDate"></div>
@@ -356,9 +492,12 @@
       <button type="button" data-cmd="strikeThrough"><s>S</s></button>
       <input type="color" class="rt-color" id="arcColorInput" value="#1a1a1a" title="글자색" />
       <span class="rt-sep"></span>
-      <button type="button" data-cmd="justifyLeft" title="왼쪽 정렬">⯇</button>
-      <button type="button" data-cmd="justifyCenter" title="가운데 정렬">≡</button>
-      <button type="button" data-cmd="justifyRight" title="오른쪽 정렬">⯈</button>
+      <!-- 정렬 아이콘: 맞는 기호가 없어 얇은 선 네 줄로 직접 그립니다.
+           긴 줄/짧은 줄이 번갈아 나오고, 짧은 줄이 붙는 쪽이 정렬 방향입니다. -->
+      <button type="button" data-cmd="justifyLeft" title="왼쪽 정렬"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3h13M1.5 6.5h8M1.5 10h13M1.5 13.5h8"/></svg></button>
+      <button type="button" data-cmd="justifyCenter" title="가운데 정렬"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3h13M4 6.5h8M1.5 10h13M4 13.5h8"/></svg></button>
+      <button type="button" data-cmd="justifyRight" title="오른쪽 정렬"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3h13M6.5 6.5h8M1.5 10h13M6.5 13.5h8"/></svg></button>
+      <button type="button" id="arcFoldBtn" title="접기">▾</button>
       <button type="button" data-cmd="blockquote" title="인용구">❝</button>
       <button type="button" id="arcDividerBtn" title="구분선">―</button>
       <span class="rt-sep"></span>
@@ -411,13 +550,13 @@
         <span class="gf-switch-track"><span class="gf-switch-knob"></span></span>
         <span class="gf-switch-label">썸네일 흐리게</span>
       </label>
-      <div class="gf-hint">썸네일이 흐리게 보이고, 커서를 올리면 선명해집니다.</div>
+      <div class="gf-hint" id="gfBlurHint">썸네일이 흐리게 보이고, 커서를 올리면 선명해집니다.</div>
     </div>
 
     <div class="login-error" id="gfError">폴더 이름을 입력해주세요.</div>
     <div class="gf-delete-warn" id="gfDeleteWarn" style="display:none;"></div>
     <div class="form-actions gf-actions">
-      <button class="btn-ghost gf-danger" id="gfDeleteBtn" style="display:none;">🗑 폴더 삭제</button>
+      <button class="btn-ghost gf-danger" id="gfDeleteBtn" style="display:none;">폴더 삭제</button>
       <span class="gf-actions-spacer"></span>
       <button class="btn-ghost" data-close>취소</button>
       <button class="btn-primary" id="gfSaveBtn">저장</button>
@@ -441,9 +580,9 @@
     <button class="modal-close" data-close>✕</button>
     <button class="arc-kebab-btn" id="arcKebabBtn" data-editonly title="더보기">⋮</button>
     <div class="arc-kebab-menu" id="arcKebabMenu">
-      <button type="button" id="arcPinBtn">📌 고정</button>
-      <button type="button" id="arcEditBtn">✎ 수정</button>
-      <button type="button" id="arcDeleteBtn">🗑 삭제</button>
+      <button type="button" id="arcPinBtn">고정</button>
+      <button type="button" id="arcEditBtn">수정</button>
+      <button type="button" id="arcDeleteBtn">삭제</button>
     </div>
     <div class="arc-view-head">
       <h3 id="arcViewTitle"></h3>
@@ -472,7 +611,7 @@
 </div>
 
 
-<script src="js/main.js?v=8"></script>
-<script type="module" src="js/firebase-store.js?v=8"></script>
+<script src="js/main.js?v=19"></script>
+<script type="module" src="js/firebase-store.js?v=19"></script>
 </body>
 </html>
