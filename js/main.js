@@ -156,9 +156,11 @@ function migrateOcPost(o){
   o.sideImage   = normalizeImg(o.sideImage);
   o.profile = o.profile || {};
   if(o.profile.name == null) o.profile.name = '';
+  if(o.profile.subtitle == null) o.profile.subtitle = '';
   if(o.profile.intro == null) o.profile.intro = '';
   if(o.profile.metaHtml == null) o.profile.metaHtml = '';
   o.profile.image = normalizeImg(o.profile.image);
+  if(o.quote == null) o.quote = '';
   if(!Array.isArray(o.keywords) || o.keywords.length !== 3) o.keywords = ['키워드','키워드','키워드'];
   if(o.freeText == null) o.freeText = '';
   if(!o.folderId) o.folderId = OC_DEFAULT_FOLDER;
@@ -209,6 +211,8 @@ function migratePost(old){
     old.persona.keywords = old.persona.keywords && old.persona.keywords.length===3 ? old.persona.keywords : defaultKw();
     if(old.relLabelCharToPersona===undefined) old.relLabelCharToPersona='Relationship';
     if(old.relLabelPersonaToChar===undefined) old.relLabelPersonaToChar='Relationship';
+    if(old.char.subtitle == null) old.char.subtitle = '';
+    if(old.persona.subtitle == null) old.persona.subtitle = '';
     splitLegacyIntro(old.char);
     splitLegacyIntro(old.persona);
     migrateGalleryFolders(old);
@@ -218,8 +222,8 @@ function migratePost(old){
   const migrated = {
     id: old.id, type: old.type, title: old.title||'',
     headerImage: normalizeImg(old.thumb),
-    char:{ name:'', gender:'', age:'', height:'', keywords:defaultKw(), intro: old.charProfile||'', metaHtml:'', image: normalizeImg(old.charImg) },
-    persona:{ name:'', gender:'', age:'', height:'', keywords:defaultKw(), intro: old.personaProfile||'', metaHtml:'', image: normalizeImg(old.personaImg) },
+    char:{ name:'', subtitle:'', gender:'', age:'', height:'', keywords:defaultKw(), intro: old.charProfile||'', metaHtml:'', image: normalizeImg(old.charImg) },
+    persona:{ name:'', subtitle:'', gender:'', age:'', height:'', keywords:defaultKw(), intro: old.personaProfile||'', metaHtml:'', image: normalizeImg(old.personaImg) },
     relCharToPersona:'', relPersonaToChar:'',
     relLabelCharToPersona:'Relationship', relLabelPersonaToChar:'Relationship',
     log: old.log||[], gallery: old.gallery||[], timeline: old.timeline||[]
@@ -878,7 +882,9 @@ function fillPairDetail(p){
   subtitleInput.oninput=()=>{ if(!isLoggedIn)return; p.subtitle=subtitleInput.value; storageSet('pairPosts',state.pairPosts); };
 
   bindMeta('pdCharName','name',p.char);
+  bindMeta('pdCharSub','subtitle',p.char);
   bindMeta('pdPersonaName','name',p.persona);
+  bindMeta('pdPersonaSub','subtitle',p.persona);
 
   bindMetaContainer('pdCharMeta', p.char);
   bindBodyText('pdCharIntro', p.char);
@@ -1012,6 +1018,7 @@ function bindRichTextToolbars(){
     // 아카이브·LOG 에디터 툴바는 각자 전용 로직으로 바인딩됨
     if(tb.classList.contains('rt-toolbar-arc')) return;
     if(tb.classList.contains('rt-toolbar-log')) return;
+    if(tb.classList.contains('rt-toolbar-ocfree')) return;
     const targetEl = document.getElementById(tb.dataset.target); // 본문 영역 (B/I/색상 적용 대상)
     const metaEl = document.getElementById(tb.dataset.metaTarget); // 라벨 컨테이너 (+ 버튼 대상)
     if(!targetEl) return;  // 대상이 없는 툴바는 건너뜀
@@ -1386,9 +1393,15 @@ function renderLogList(p){
   const wrap=lq('.log-list');
   const perPage=15;
   const all = p.log.slice().reverse();
-  const items = filterLogItems(all);
-  if(all.length===0){ wrap.innerHTML='<div class="empty-note">등록된 게시글이 없어요.</div>'; return; }
-  if(items.length===0){ wrap.innerHTML='<div class="empty-note">검색 결과가 없어요.</div>'; return; }
+  const found = filterLogItems(all);
+  /* 안내글은 목록 칸 한가운데에 놓습니다 (갤러리의 '이미지가 없어요' 와 같은 자리) */
+  if(all.length===0){ wrap.innerHTML='<div class="empty-note log-empty-note">등록된 게시글이 없어요.</div>'; return; }
+  if(found.length===0){ wrap.innerHTML='<div class="empty-note log-empty-note">검색 결과가 없어요.</div>'; return; }
+  /* 고정한 글이 맨 위로 올라옵니다 (ARCHIVE 와 같은 방식, 최대 3개) */
+  const items = [...found.filter(x=>x.pinned).slice(0,3), ...found.filter(x=>!x.pinned)];
+  /* 화면에 보이는 No 는 등록 순서로 매깁니다 —
+     그래야 고정하거나 검색해도 같은 글의 번호가 바뀌지 않습니다. */
+  const displayNo = new Map(p.log.map((it,i)=>[it, i+1]));
   const totalPages = Math.max(1, Math.ceil(items.length/perPage));
   if(pdLogPage>totalPages) pdLogPage=totalPages;
   if(pdLogPage<1) pdLogPage=1;
@@ -1397,8 +1410,7 @@ function renderLogList(p){
 
   let rows='';
   pageItems.forEach((entry, i)=>{
-    const num = items.length - (start+i);
-    rows += `<tr data-abs="${start+i}"><td>${num}</td><td class="log-td-title">${escapeHtml(entry.title)}</td><td>${entry.date||''}</td></tr>`;
+    rows += `<tr data-abs="${start+i}"><td>${displayNo.get(entry)||''}</td><td class="log-td-title">${entry.pinned?'<span class="arc-pin-tag">📌</span> ':''}${escapeHtml(entry.title)}</td><td>${entry.date||''}</td></tr>`;
   });
   let pag='';
   if(totalPages>1){
@@ -1540,13 +1552,36 @@ function openLogView(entry){
   document.getElementById('logViewTitle').innerText=entry.title;
   document.getElementById('logViewDate').innerText=entry.date||'';
   renderLogContentInto(document.getElementById('logViewContent'), entry);
+  updateLogPinBtn(entry);
   openModal('modalLogView');
+}
+function updateLogPinBtn(entry){
+  const btn=document.getElementById('logPinBtn');
+  if(btn) btn.innerText = entry.pinned ? '해제' : '고정';
 }
 const logKebabBtn = document.getElementById('logKebabBtn');
 const logKebabMenu = document.getElementById('logKebabMenu');
 logKebabBtn.addEventListener('click', (e)=>{ e.stopPropagation(); logKebabMenu.classList.toggle('open'); });
 document.addEventListener('click', (e)=>{
   if(!e.target.closest('#logKebabMenu') && !e.target.closest('#logKebabBtn')) logKebabMenu.classList.remove('open');
+});
+/* 고정 — ARCHIVE 와 같은 규칙입니다 (한 게시글 묶음당 최대 3개) */
+const logPinBtnEl = document.getElementById('logPinBtn');
+if(logPinBtnEl) logPinBtnEl.addEventListener('click', async ()=>{
+  logKebabMenu.classList.remove('open');
+  if(!isLoggedIn || currentLogViewId==null) return;
+  const p=logPost(); if(!p) return;
+  const entry = p.log.find(x=>x.id===currentLogViewId);
+  if(!entry) return;
+  if(!entry.pinned){
+    if(p.log.filter(x=>x.pinned).length>=3){ alert('고정은 최대 3개까지 가능해요.'); return; }
+    entry.pinned = true;
+  }else{
+    entry.pinned = false;
+  }
+  await logHost.save();
+  updateLogPinBtn(entry);
+  renderLogList(p);
 });
 document.getElementById('logEditBtn').addEventListener('click', ()=>{
   logKebabMenu.classList.remove('open');
@@ -1822,6 +1857,53 @@ function initFolderUnlock(){
   pw.addEventListener('keydown', (e)=>{ if(e.key==='Enter') submit(); });
 }
 
+/* ---- 폴더 탭 순서 바꾸기 (갤러리 / PROMPT / OC 공용) ----
+   탭을 끌어 다른 탭 위에 놓으면 그 자리로 들어갑니다.
+   글·이미지를 폴더로 끌어다 놓는 기존 기능과 같은 버튼에 걸리므로,
+   양쪽 모두 자기 쪽 표시(draggedFolderId / draggedGalleryKey ...)가
+   있을 때만 반응하도록 해서 섞이지 않게 합니다. */
+let draggedFolderId = null;
+let draggedFolderBar = null;
+function bindFolderTabReorder(btn, folder, ctx, bar){
+  // 속성으로 넣어야 터치 드래그(initTouchDrag)도 같이 걸립니다
+  btn.setAttribute('draggable','true');
+  btn.addEventListener('dragstart', (e)=>{
+    draggedFolderId = folder.id;
+    draggedFolderBar = bar;
+    btn.classList.add('dragging');
+    if(e.dataTransfer){
+      e.dataTransfer.effectAllowed='move';
+      e.dataTransfer.setData('text/plain', String(folder.id));
+    }
+  });
+  btn.addEventListener('dragend', ()=>{
+    btn.classList.remove('dragging');
+    draggedFolderId=null; draggedFolderBar=null;
+    bar.querySelectorAll('.drop-target').forEach(el=> el.classList.remove('drop-target'));
+  });
+  btn.addEventListener('dragover', (e)=>{
+    if(draggedFolderId==null || draggedFolderBar!==bar) return;
+    if(draggedFolderId===folder.id) return;
+    e.preventDefault();
+    btn.classList.add('drop-target');
+  });
+  btn.addEventListener('dragleave', ()=> btn.classList.remove('drop-target'));
+  btn.addEventListener('drop', async (e)=>{
+    if(draggedFolderId==null || draggedFolderBar!==bar) return;
+    e.preventDefault();
+    btn.classList.remove('drop-target');
+    const list = ctx.getList();
+    const from = list.findIndex(x=>x.id===draggedFolderId);
+    const to   = list.findIndex(x=>x.id===folder.id);
+    draggedFolderId=null; draggedFolderBar=null;
+    if(from<0 || to<0 || from===to) return;
+    const [moved] = list.splice(from,1);
+    list.splice(to,0,moved);
+    await ctx.save();
+    ctx.rerender();
+  });
+}
+
 function renderGalleryFolderBar(p){
   const bar=gq('.gallery-folder-bar');
   bar.innerHTML='';
@@ -1883,6 +1965,8 @@ function renderGalleryFolderBar(p){
         draggedGalleryKey = null;
         renderGallery(p);
       });
+
+      bindFolderTabReorder(btn, f, galleryFolderCtx(p), bar);
     }
     bar.appendChild(btn);
   });
@@ -2548,6 +2632,8 @@ function renderOcFolderBar(){
         await saveOc();
         renderOcPosts();
       });
+
+      bindFolderTabReorder(btn, f, ocFolderCtx(), bar);
     }
     bar.appendChild(btn);
   });
@@ -2703,6 +2789,102 @@ function renderOcKeywords(o){
   });
 }
 
+/* ---- OC 자유 텍스트 서식 ---- */
+function saveOcFree(){
+  const o=getCurrentOc();
+  const el=document.getElementById('ocFree');
+  if(!o || !el || !isLoggedIn) return;
+  const html=editorHtml('ocFree');
+  if(o.freeText===html) return;
+  o.freeText=html;
+  saveOc();
+}
+/* 지금 커서(선택 시작점)에 실제로 걸려 있는 글자 크기 */
+function selectionFontSize(editor){
+  const sel=window.getSelection();
+  if(!sel || !sel.rangeCount) return null;
+  const range=sel.getRangeAt(0);
+  let node=range.startContainer;
+  // selectNodeContents 로 잡으면 startContainer 가 요소입니다 — 안으로 한 칸 들어갑니다
+  if(node.nodeType===1) node=node.childNodes[range.startOffset] || node;
+  if(node && node.nodeType===3) node=node.parentNode;
+  if(!node || !editor.contains(node)) node=editor;
+  return parseFloat(getComputedStyle(node).fontSize) || null;
+}
+
+/* 글자 크기를 1px 씩 올리고 내립니다.
+   execCommand('fontSize') 는 1~7 단계뿐이라 px 을 직접 못 넣습니다. 그래서
+   7 로 한 번 감싸 브라우저가 선택 영역을 알아서 잘라주게 한 뒤,
+   그 껍데기를 실제 크기를 적은 span 으로 바꿔 답니다.
+   기준 크기는 execCommand 를 부르기 *전에* 재둬야 합니다 —
+   크롬이 이미 걸려 있던 span 을 <font> 로 통째로 바꿔버리기 때문입니다. */
+function stepFontSize(editorId, delta){
+  const editor=document.getElementById(editorId);
+  if(!editor) return;
+  const sel=window.getSelection();
+  if(!sel || !sel.rangeCount || sel.isCollapsed) return;
+  if(!editor.contains(sel.getRangeAt(0).commonAncestorContainer)) return;
+  const base=selectionFontSize(editor) || 12.5;
+  const next=clamp(base+delta, 8, 40);
+  document.execCommand('styleWithCSS', false, false);
+  document.execCommand('fontSize', false, '7');
+  const made=[];
+  editor.querySelectorAll('font[size="7"]').forEach(f=>{
+    const span=document.createElement('span');
+    span.style.fontSize=next+'px';
+    while(f.firstChild) span.appendChild(f.firstChild);
+    // 안쪽에 따로 지정돼 있던 크기는 걷어냅니다 —
+    // 겹겹이 쌓이면 다음에 누를 때 기준이 흔들립니다
+    span.querySelectorAll('[style*="font-size"]').forEach(el=>{
+      el.style.fontSize='';
+      if(!el.getAttribute('style')) el.removeAttribute('style');
+    });
+    f.replaceWith(span);
+    made.push(span);
+  });
+  // 이어서 한 번 더 누를 수 있게 방금 바꾼 자리를 다시 선택해 둡니다
+  if(made.length){
+    const r=document.createRange();
+    r.setStartBefore(made[0]);
+    r.setEndAfter(made[made.length-1]);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
+}
+(function initOcFreeToolbar(){
+  const toolbar=document.querySelector('.rt-toolbar-ocfree');
+  const editor=document.getElementById('ocFree');
+  if(!toolbar || !editor) return;
+  // 버튼을 눌러도 본문 선택이 풀리지 않도록
+  toolbar.querySelectorAll('button').forEach(b=> b.addEventListener('mousedown', e=> e.preventDefault()));
+  toolbar.querySelectorAll('button[data-cmd]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      editor.focus();
+      if(btn.dataset.cmd==='blockquote') document.execCommand('formatBlock', false, 'blockquote');
+      else document.execCommand(btn.dataset.cmd, false, null);
+      saveOcFree();
+    });
+  });
+  const color=document.getElementById('ocFreeColor');
+  if(color) color.addEventListener('input', (e)=>{
+    editor.focus();
+    document.execCommand('foreColor', false, e.target.value);
+    saveOcFree();
+  });
+  const up=document.getElementById('ocFreeSizeUp');
+  if(up) up.addEventListener('click', ()=>{ stepFontSize('ocFree', 1); saveOcFree(); });
+  const down=document.getElementById('ocFreeSizeDown');
+  if(down) down.addEventListener('click', ()=>{ stepFontSize('ocFree', -1); saveOcFree(); });
+  const fold=document.getElementById('ocFreeFoldBtn');
+  if(fold) fold.addEventListener('click', ()=>{ insertFoldBlock('ocFree'); saveOcFree(); });
+  const divider=document.getElementById('ocFreeDividerBtn');
+  if(divider) divider.addEventListener('click', ()=>{
+    editor.focus();
+    document.execCommand('insertHTML', false, '<hr><br>');
+    saveOcFree();
+  });
+})();
+
 function fillOcDetail(o){
   const title=document.getElementById('ocTitleInput');
   title.value=o.title; title.readOnly=!isLoggedIn;
@@ -2713,7 +2895,19 @@ function fillOcDetail(o){
   // 캐치프레이즈는 목록 카드에도 나오므로 함께 다시 그립니다
   sub.oninput=()=>{ if(!isLoggedIn)return; o.subtitle=sub.value; saveOc(); renderOcPosts(); };
 
+  /* 대사 한 줄 — 보기 모드에서 비어 있으면 따옴표만 남으므로 줄째로 감춥니다 */
+  const quote=document.getElementById('ocQuote');
+  if(quote){
+    quote.innerText = o.quote || '';
+    quote.contentEditable = isLoggedIn ? 'true' : 'false';
+    quote.onblur=()=>{ if(!isLoggedIn) return; if(o.quote===quote.innerText) return; o.quote=quote.innerText; saveOc(); };
+    quote.onkeydown=(e)=>{ if(e.key==='Enter'){ e.preventDefault(); quote.blur(); } };
+    const row=quote.closest('.oc-quote');
+    if(row) row.style.display = (!isLoggedIn && !(o.quote||'').trim()) ? 'none' : '';
+  }
+
   bindMeta('ocProfileName','name',o.profile, saveOc);
+  bindMeta('ocProfileSub','subtitle',o.profile, saveOc);
   bindMetaContainer('ocMeta', o.profile, saveOc);
   bindBodyText('ocIntro', o.profile, saveOc);
   renderOcKeywords(o);
@@ -2721,7 +2915,8 @@ function fillOcDetail(o){
   const free=document.getElementById('ocFree');
   free.innerHTML = o.freeText || '';
   free.contentEditable = isLoggedIn ? 'true' : 'false';
-  free.onblur=()=>{ if(!isLoggedIn)return; o.freeText=free.innerHTML; saveOc(); };
+  // 접기 블록이 들어갈 수 있으므로 editorHtml 로 꺼냅니다 (펼친 상태는 떼고 저장)
+  free.onblur=()=> saveOcFree();
 
   if(ocHeaderAdj) ocHeaderAdj.paint();
   if(ocProfileAdj) ocProfileAdj.paint();
@@ -3265,6 +3460,8 @@ function renderArcFolderBar(){
         await storageSet('archive', state.archive);
         renderArchive();
       });
+
+      bindFolderTabReorder(btn, f, archiveFolderCtx(), bar);
     }
     bar.appendChild(btn);
   });

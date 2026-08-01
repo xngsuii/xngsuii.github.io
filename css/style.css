@@ -169,6 +169,12 @@
   .post-type{font-family:var(--mono);font-size:9.5px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.05em;}
   .post-title{font-size:13px;font-weight:700;margin-top:2px;}
   .empty-note{color:var(--text-muted);font-size:12.5px;padding:30px 0;text-align:center;}
+  /* LOG 목록이 비었을 때 — 남은 칸 한가운데에 놓습니다.
+     아래 34px 은 페이지 버튼 자리라 빼고 잽니다. 그래야 글이 있을 때
+     표가 차지하는 영역의 한가운데가 되어 갤러리보다 살짝 위로 옵니다
+     (갤러리는 위아래 화살표 띠 때문에 썸네일이 더 내려가 있습니다). */
+  .log-empty-note{flex:1;display:flex;align-items:center;justify-content:center;
+    padding:0 0 34px;}
 
   /* ---- OC 목록 ----
      PAIR 목록과 같은 4열 x 2행 격자 + PROMPT 방식 폴더 탭.
@@ -183,19 +189,39 @@
   /* ---- OC 상세 ----
      인덱스 탭이 없고 프로필/갤러리/로그 세 장이 위아래로 넘어갑니다. */
   .modal.wide.oc-modal{width:720px;max-width:96vw;max-height:calc(100vh - 24px);padding:0;}
-  /* PAIR 상세(.pd-tab-content)와 같은 580px — 갤러리 격자 크기가 같아집니다 */
-  .oc-pages{position:relative;height:580px;overflow:hidden;margin-top:10px;}
+  /* PAIR 상세(.pd-tab-content)와 완전히 같은 상자입니다 — 높이 580px 에
+     안쪽 여백 8px/4px 까지 같아야 창 전체 높이와 갤러리 격자가 일치합니다.
+     (여백은 .oc-pages 가 아니라 각 장에 줍니다. 장은 inset:0 이라
+      100% 만큼 밀면 정확히 창 밖으로 나가야 하기 때문입니다.) */
+  .oc-pages{position:relative;height:580px;overflow:hidden;}
   .oc-page{position:absolute;inset:0;display:flex;flex-direction:column;min-height:0;
+    padding:8px 4px 8px 0;box-sizing:border-box;
     background:var(--bg);transition:transform .45s cubic-bezier(.4,0,.2,1);}
+  /* 프로필 장만 아래를 조금 더 띄웁니다 — 자유 텍스트/세로 이미지의 아래 보더가
+     창 보더에 붙어 보이지 않도록 (칸이 flex:1 이라 높이가 그만큼 줄어듭니다) */
+  .oc-page[data-ocpage="profile"]{padding-bottom:16px;}
   /* 몇 번째 장인지 알려주는 점 — 창 바깥 왼쪽, 세로 가운데.
      넘기는 것은 스크롤/스와이프로만 하므로 누를 수 없습니다. */
   .oc-modal-wrap{position:relative;display:flex;align-items:flex-start;}
   .oc-page-dots{position:absolute;right:100%;top:50%;transform:translateY(-50%);
     margin-right:14px;display:flex;flex-direction:column;gap:5px;pointer-events:none;z-index:12;}
-  /* 어두운 배경 위에 놓이므로 흰 점 + 얇은 검은 테두리로 어디서든 보이게 합니다 */
-  .oc-page-dot{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.5);
-    box-shadow:0 0 0 1px rgba(0,0,0,.4);}
-  .oc-page-dot.active{background:#fff;}
+  /* 지금 장은 주황, 나머지는 흰색. 테두리는 없습니다.
+     바탕(빨강 위 검정 45%)이 어두워 --accent(#c1440e)로는 잘 보이지 않으므로
+     같은 계열의 밝은 주황을 씁니다. */
+  .oc-page-dot{width:5px;height:5px;border-radius:50%;background:#fff;}
+  .oc-page-dot.active{background:#FF8A3D;}
+
+  /* 프로필 바로 위의 대사 한 줄 — PAIR_INFO 의 PROFILE 머리줄과 같은 자리입니다.
+     상자 없이 따옴표와 글자만 놓고, 색은 정보 행의 라벨과 같은 --accent(#c1440e).
+     왼쪽 칸 안에 있으므로 오른쪽 세로 이미지의 높이는 건드리지 않습니다.
+     여기서 쓴 높이는 아래 자유 텍스트 칸(flex:1)이 내줍니다. */
+  .oc-quote{flex:none;text-align:center;color:var(--accent);font-size:12.5px;font-style:italic;
+    line-height:1.6;margin:0 0 12px;}
+  .oc-quote .ocq-mark{opacity:.7;}
+  .oc-quote-text{outline:none;}
+  body.logged-in .oc-quote-text:empty:before{content:'대사';color:var(--text-muted);}
+  body.logged-in .oc-quote-text:hover{background:var(--surface);}
+  body.logged-in .oc-quote-text:focus{background:var(--surface);outline:1px solid var(--accent);}
 
   /* 왼쪽은 프로필 + 키워드 + 자유 글, 오른쪽은 세로로 긴 이미지 한 장 */
   .oc-info-grid{display:grid;grid-template-columns:1fr 260px;gap:20px;flex:1;min-height:0;}
@@ -218,6 +244,12 @@
   .oc-kw:last-child{border-right:none;}
   body.logged-in .oc-kw:hover{background:var(--surface);}
   body.logged-in .oc-kw:focus{background:var(--surface);outline:1px solid var(--accent);}
+  /* 자유 텍스트 서식 툴바 — 키워드 줄과 글 상자 사이. 여기서 쓴 높이는
+     아래 상자(flex:1)가 내주므로 창 높이는 그대로입니다. */
+  .rt-toolbar-ocfree{flex:none;margin:14px 0 6px;}
+  body.logged-in .rt-toolbar-ocfree[data-editonly]{display:flex;}
+  /* 툴바가 보이는 편집 모드에서는 위 여백을 툴바가 갖습니다 */
+  body.logged-in .oc-free-box{margin-top:0;}
   /* 자유 텍스트 — 길어지면 이 박스 안에서만 스크롤됩니다 */
   .oc-free-box{flex:1;min-height:90px;margin-top:14px;border:1px solid var(--border);
     padding:10px;overflow-y:auto;overscroll-behavior:contain;}
@@ -230,16 +262,21 @@
      격자 크기는 PAIR 과 똑같이 두려고 좌우 여백을 주지 않고(위아래 38px 만),
      화살표는 격자 위아래 빈 띠의 양 끝 — 《 는 좌상단, 》 는 우하단에 둡니다. */
   .gallery-grid-wrap.horiz{padding:38px 0;}
-  .gallery-grid-wrap.horiz .gallery-scroll-hint{left:auto;right:2px;top:auto;bottom:4px;
+  /* 위아래 자리는 PAIR 의 ︽ ︾ 와 눈에 보이는 높이가 같아야 합니다.
+     같은 26px 상자라도 글자가 그려지는 위치가 달라서(︽ ︾ 는 상자 안에서 13px,
+     《 》 는 25px) 상자를 똑같이 두면 어긋납니다. PAIR 은 위아래 22px 씩 띄운
+     자리에 그려지므로, 글자 한가운데가 거기에 오도록 17px / 14px 로 맞췄습니다. */
+  .gallery-grid-wrap.horiz .gallery-scroll-hint{left:auto;right:2px;top:auto;bottom:14px;
     transform:none;animation:gallery-bounce-right 1.4s infinite;pointer-events:auto;}
-  .gallery-grid-wrap.horiz .gallery-scroll-hint.up{left:2px;right:auto;top:4px;bottom:auto;
+  .gallery-grid-wrap.horiz .gallery-scroll-hint.up{left:2px;right:auto;top:17px;bottom:auto;
     transform:none;animation:gallery-bounce-left 1.4s infinite;}
   @keyframes gallery-bounce-right{0%,100%{transform:translateX(0);}50%{transform:translateX(4px);}}
   @keyframes gallery-bounce-left{0%,100%{transform:translateX(0);}50%{transform:translateX(-4px);}}
   .gallery-grid-wrap.horiz .gallery-scroll-hint.drop-target{transform:scale(1.35);}
   .gallery-grid-wrap.horiz .gallery-scroll-hint.disabled{pointer-events:none;}
-  /* 오른쪽 아래는 》 자리이므로 선택/추가 버튼은 왼쪽으로 보냅니다 */
-  .oc-page-gallery .gallery-fab-row{left:2px;right:auto;justify-content:flex-start;}
+  /* bottom 은 16px — PAIR 은 .pd-tab-content 의 안쪽 여백(8px) 위에서 다시 8px 이지만
+     여기서는 기준 상자가 .oc-page(여백 바깥)라 그 둘을 더한 값이어야 같은 자리입니다. */
+  .oc-page-gallery .gallery-fab-row{bottom:16px;}
 
   /* ---- Archive ---- */
   .archive-toolbar{display:flex;gap:8px;padding:16px 28px 0;}
@@ -317,7 +354,9 @@
   .archive-search{margin:0 28px 20px;}
   .log-search button{border:1px solid var(--border);background:var(--bg);color:var(--text-muted);font-size:10px;padding:0 8px;flex:none;}
   .log-search button:hover{background:var(--surface-2);color:var(--text);}
-  .pd-tab-pane-log .log-list{flex:1;min-height:0;display:flex;flex-direction:column;}
+  /* 목록이 남은 높이를 다 쓰게 해야 페이지 버튼(과 보기 모드의 검색줄)이
+     글 개수와 상관없이 늘 아래에 붙습니다. OC 의 LOG 장도 같습니다. */
+  .pd-tab-pane-log .log-list, .oc-page-log .log-list{flex:1;min-height:0;display:flex;flex-direction:column;}
   .log-table-scroll{flex:1;min-height:0;overflow-y:auto;}
   .log-table-scroll table{width:100%;}
   /* 보기 모드의 LOG 탭에서 제목 아래 표 머리글(NO/LOG/DATE)까지의 간격과 같게 맞춥니다.
@@ -347,6 +386,18 @@
   .pd-profile.persona-layout .pd-profile-img{order:2;}
   .pd-profile-img{aspect-ratio:3/4;border-radius:var(--radius);border:1px solid var(--border);}
   .pd-meta-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;}
+  /* 이름 아래 서브타이틀 한 줄 (PAIR 캐릭터·페르소나, OC 공용).
+     줄 간격은 글줄 머리에서 다음 글줄 머리까지 31px -> 25px (0.8배).
+     이름 칸의 아래 안쪽 여백 4px 과 줄 사이 여백 2px 을 걷어낸 값입니다.
+     편집 모드 규칙(body.logged-in .pd-input)이 padding 을 통째로 다시 쓰므로
+     같은 굵기로 한 번 더 지정해야 두 모드에서 간격이 같습니다. */
+  .pd-profile-info .pd-meta-row{margin-bottom:2px;}
+  .pd-profile-info .pd-name-input,
+  body.logged-in .pd-profile-info .pd-name-input{padding-bottom:0;}
+  /* display:block 이어야 합니다 — input 은 기본이 inline-block 이라
+     블록 흐름에 놓이면 줄 상자의 여유 높이가 위에 4px 쯤 더 붙습니다. */
+  .pd-sub-input{display:block;width:100%;border:none;outline:none;background:transparent;
+    padding:0;margin:0;font-family:var(--mono);font-size:10.5px;color:var(--text-muted);}
   .pd-input{border:1px solid transparent;border-radius:0;padding:4px 0;font-size:12.5px;background:transparent;outline:none;color:var(--text);}
   body.logged-in .pd-input{border-color:var(--border);background:var(--surface);padding:4px 6px;}
   .pd-name-input{font-family:var(--mono);font-weight:700;font-size:16.7px;width:150px;}
@@ -522,6 +573,8 @@
   .gallery-folder-tab:hover{background:var(--surface-2);}
   .gallery-folder-tab.active:hover{background:var(--text);}
   .gallery-folder-tab.drop-target{background:var(--accent);color:#fff;border-color:var(--accent);}
+  /* 순서를 바꾸려고 끌고 있는 탭 (썸네일 드래그와 같은 표시) */
+  .gallery-folder-tab.dragging{opacity:.4;}
   .gallery-folder-rename{border:none;background:none;color:inherit;font-size:10px;opacity:.7;padding:0 2px;}
   .gallery-folder-rename:hover{opacity:1;}
   .gallery-folder-add{font-family:var(--mono);font-size:10.5px;font-weight:700;border:1px dashed var(--accent);background:var(--bg);color:var(--accent);padding:5px 10px;}
@@ -582,7 +635,8 @@
   /* will-change 를 상시 걸어두면 레이어가 미리 래스터화되어
      썸네일 배경 이미지가 거칠게(계단처럼) 보입니다.
      페이지 전환 중에만 JS에서 붙입니다. */
-  .gallery-fab-row{position:absolute;bottom:8px;right:2px;display:flex;align-items:center;justify-content:flex-end;gap:10px;}
+  /* 왼쪽 아래. 마크업 순서가 ＋ ✓ 휴지통이고, 휴지통은 선택 모드에서만 나옵니다. */
+  .gallery-fab-row{position:absolute;bottom:8px;left:2px;display:flex;align-items:center;justify-content:flex-start;gap:10px;}
   .gallery-fab[data-editonly]{display:none;}
   body.logged-in .gallery-fab[data-editonly]{display:flex;}
   .gallery-fab{width:36px;height:36px;flex:none;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;color:var(--text);box-shadow:0 2px 8px rgba(0,0,0,.12);}
@@ -814,13 +868,28 @@
     /* ---------- OC ---------- */
     .oc-body{padding:16px 14px 10px;}
     .modal.wide.oc-modal{width:100%;max-width:100%;}
-    /* 세 장의 높이를 화면에 맞춥니다 (배너 + 제목 + 넘김 줄을 뺀 나머지) */
-    .oc-pages{height:calc(100dvh - 218px);min-height:260px;}
+    /* 세 장의 높이를 화면에 맞춥니다 (배너 + 제목 + 넘김 줄을 뺀 나머지).
+       데스크톱에서 .oc-pages 의 margin-top 10px 을 걷어낸 만큼 여기서도 줄입니다. */
+    .oc-pages{height:calc(100dvh - 208px);min-height:260px;}
+    /* 좁은 화면에서는 좌우 여백까지 아까우므로 안쪽 여백을 줄입니다 */
+    .oc-page,.oc-page[data-ocpage="profile"]{padding:8px 2px 8px 0;}
+    .oc-page-gallery .gallery-fab-row{bottom:8px;}
+    /* 좁은 화면에서는 격자가 위아래로 꽉 차서, 데스크톱에서 PAIR 에 맞춰 안으로
+       들여놓은 만큼이면 화살표가 첫/마지막 줄 썸네일을 덮습니다. 가장자리로 되돌립니다. */
+    .gallery-grid-wrap.horiz .gallery-scroll-hint{bottom:4px;}
+    .gallery-grid-wrap.horiz .gallery-scroll-hint.up{top:4px;}
     /* 창이 화면을 꽉 채워 바깥에 둘 자리가 없으므로 왼쪽 안쪽으로 들입니다 */
     .oc-page-dots{right:auto;left:3px;margin-right:0;}
     /* 한 칸으로 세우면 사진 높이에 맞출 이유가 없습니다 */
     .oc-info-main .pd-profile{height:auto;}
     .oc-info-main .pd-desc-box{max-height:200px;}
+    /* OC 프로필만은 좁은 화면에서도 [사진 | 글] 로 나란히 둡니다.
+       위의 PAIR 규칙(절을 2열로 쪼개고 프로필을 한 줄로 세우는 것)을 되돌립니다.
+       PAIR 은 카드가 둘(캐릭터/페르소나)이라 그대로 둡니다. */
+    .oc-info-main .pd-section:not(.pd-section-nohead){display:block;}
+    .oc-info-main .pd-profile.char-layout{grid-column:auto;grid-row:auto;}
+    .oc-info-main .pd-profile{grid-template-columns:100px 1fr;gap:10px;margin:0;}
+    .oc-info-main .pd-profile-img{width:100%;max-width:none;justify-self:stretch;}
     /* 좌우 두 칸을 위아래로 세웁니다. 이 화면은 내용이 넘치면 장 안에서 스크롤되고,
        페이지는 아래 ︽ ︾ 로 넘깁니다. */
     .oc-page{overflow-y:auto;overscroll-behavior:contain;}
@@ -950,7 +1019,7 @@
     .gallery-scroll-hint.up{top:7px;}
     .gallery-scroll-hint{bottom:0;}
     .gallery-fab{width:44px;height:44px;font-size:18px;}
-    .gallery-fab-row{bottom:4px;right:4px;gap:8px;}
+    .gallery-fab-row{bottom:4px;left:4px;gap:8px;}
     .gallery-check{width:22px;height:22px;font-size:12px;}
     /* 폴더가 여러 개면 줄바꿈되어 격자 높이를 잡아먹습니다.
        한 줄로 고정하고 좌우로 밀어 보게 합니다 (스크롤바는 숨김). */

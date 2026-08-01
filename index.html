@@ -11,7 +11,7 @@
      css/js를 고칠 때마다 이 숫자를 함께 올려주세요.
      올리지 않으면 브라우저가 옛 파일을 계속 써서
      새 HTML과 짝이 맞지 않아 화면이 깨질 수 있습니다. -->
-<link rel="stylesheet" href="css/style.css?v=19" />
+<link rel="stylesheet" href="css/style.css?v=24" />
 </head>
 <body>
 <div class="app-window">
@@ -204,6 +204,7 @@
                     <div class="pd-meta-row">
                       <input class="pd-input pd-name-input" id="pdCharName" placeholder="이름" readonly />
                     </div>
+                    <input class="pd-sub-input" id="pdCharSub" placeholder="서브타이틀" readonly />
                     <div class="pd-profile-divider"></div>
                     <div class="rt-toolbar" data-editonly data-target="pdCharIntro" data-meta-target="pdCharMeta">
                       <button type="button" class="rt-add-row" title="정보 행 추가">＋</button>
@@ -226,6 +227,7 @@
                     <div class="pd-meta-row">
                       <input class="pd-input pd-name-input" id="pdPersonaName" placeholder="이름" readonly />
                     </div>
+                    <input class="pd-sub-input" id="pdPersonaSub" placeholder="서브타이틀" readonly />
                     <div class="pd-profile-divider"></div>
                     <div class="rt-toolbar" data-editonly data-target="pdPersonaIntro" data-meta-target="pdPersonaMeta">
                       <button type="button" class="rt-add-row" title="정보 행 추가">＋</button>
@@ -286,10 +288,11 @@
             </div>
             <div class="gallery-scroll-hint" id="galleryScrollHint" style="display:none;">︾</div>
           </div>
+          <!-- 왼쪽 아래, ＋ ✓ 순서. 휴지통은 선택 모드에서만 ✓ 오른쪽에 나옵니다 -->
           <div class="gallery-fab-row">
-            <button class="gallery-fab gallery-select-delete" id="gallerySelectDeleteBtn" data-editonly title="선택 삭제" style="display:none;">🗑</button>
-            <button class="gallery-fab gallery-select-toggle" id="gallerySelectBtn" data-editonly title="선택">✓</button>
             <button class="gallery-fab gallery-add" id="addGalleryBtn" data-editonly title="이미지 추가">＋</button>
+            <button class="gallery-fab gallery-select-toggle" id="gallerySelectBtn" data-editonly title="선택">✓</button>
+            <button class="gallery-fab gallery-select-delete" id="gallerySelectDeleteBtn" data-editonly title="선택 삭제" style="display:none;">🗑</button>
           </div>
         </div>
 
@@ -343,6 +346,9 @@
         <div class="oc-page" data-ocpage="profile">
           <div class="oc-info-grid">
             <div class="oc-info-main">
+              <!-- 프로필 바로 위 — 따옴표로 감싼 대사 한 줄 (상자 없이 글자만).
+                   PAIR_INFO 의 PROFILE 머리줄이 있던 자리입니다. -->
+              <div class="oc-quote"><span class="ocq-mark">"</span><span class="oc-quote-text" id="ocQuote" contenteditable="false"></span><span class="ocq-mark">"</span></div>
               <div class="pd-section">
                 <div class="pd-profile char-layout">
                   <div class="adjustable-img pd-profile-img" id="ocProfileImgBox">
@@ -354,6 +360,8 @@
                     <div class="pd-meta-row">
                       <input class="pd-input pd-name-input" id="ocProfileName" placeholder="이름" readonly />
                     </div>
+                    <!-- 이름 아래 한 줄 — 회색 작은 글씨 -->
+                    <input class="pd-sub-input" id="ocProfileSub" placeholder="서브타이틀" readonly />
                     <div class="pd-profile-divider"></div>
                     <div class="rt-toolbar" data-editonly data-target="ocIntro" data-meta-target="ocMeta">
                       <button type="button" class="rt-add-row" title="정보 행 추가">＋</button>
@@ -370,6 +378,20 @@
               </div>
               <!-- 키워드 3등분 칸 -->
               <div class="oc-kw-row" id="ocKwRow"></div>
+              <!-- 자유 텍스트 서식 — ˄ ˅ 는 글자 크기를 1px 씩 올리고 내립니다 -->
+              <div class="rt-toolbar rt-toolbar-ocfree" data-editonly>
+                <button type="button" data-cmd="bold" title="볼드"><b>B</b></button>
+                <button type="button" data-cmd="italic" title="이탤릭"><i>I</i></button>
+                <button type="button" data-cmd="underline" title="밑줄"><u>U</u></button>
+                <button type="button" data-cmd="strikeThrough" title="취소선"><s>S</s></button>
+                <input type="color" class="rt-color" id="ocFreeColor" value="#1a1a1a" title="글자색" />
+                <span class="rt-sep"></span>
+                <button type="button" id="ocFreeSizeUp" title="글자 크게"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 10.5 8 5.5l5 5"/></svg></button>
+                <button type="button" id="ocFreeSizeDown" title="글자 작게"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5.5 8 10.5l5-5"/></svg></button>
+                <button type="button" id="ocFreeFoldBtn" title="접기">▾</button>
+                <button type="button" data-cmd="blockquote" title="인용구">❝</button>
+                <button type="button" id="ocFreeDividerBtn" title="구분선">―</button>
+              </div>
               <!-- 자유 텍스트 — 길어지면 이 안에서만 스크롤됩니다 -->
               <div class="oc-free-box">
                 <div class="profile-view-text oc-free" id="ocFree" contenteditable="false"></div>
@@ -401,9 +423,9 @@
             <div class="gallery-scroll-hint" style="display:none;">》</div>
           </div>
           <div class="gallery-fab-row">
-            <button class="gallery-fab gallery-select-delete" data-editonly title="선택 삭제" style="display:none;">🗑</button>
-            <button class="gallery-fab gallery-select-toggle" data-editonly title="선택">✓</button>
             <button class="gallery-fab gallery-add" data-editonly title="이미지 추가">＋</button>
+            <button class="gallery-fab gallery-select-toggle" data-editonly title="선택">✓</button>
+            <button class="gallery-fab gallery-select-delete" data-editonly title="선택 삭제" style="display:none;">🗑</button>
           </div>
         </div>
 
@@ -463,6 +485,7 @@
     <button class="modal-close" data-close>✕</button>
     <button class="arc-kebab-btn" id="logKebabBtn" data-editonly title="더보기">⋮</button>
     <div class="arc-kebab-menu" id="logKebabMenu">
+      <button type="button" id="logPinBtn">고정</button>
       <button type="button" id="logEditBtn">수정</button>
       <button type="button" id="logDeleteBtn">삭제</button>
     </div>
@@ -611,7 +634,7 @@
 </div>
 
 
-<script src="js/main.js?v=19"></script>
-<script type="module" src="js/firebase-store.js?v=19"></script>
+<script src="js/main.js?v=24"></script>
+<script type="module" src="js/firebase-store.js?v=24"></script>
 </body>
 </html>
