@@ -11,7 +11,7 @@
      css/js를 고칠 때마다 이 숫자를 함께 올려주세요.
      올리지 않으면 브라우저가 옛 파일을 계속 써서
      새 HTML과 짝이 맞지 않아 화면이 깨질 수 있습니다. -->
-<link rel="stylesheet" href="css/style.css?v=24" />
+<link rel="stylesheet" href="css/style.css?v=31" />
 </head>
 <body>
 <div class="app-window">
@@ -204,7 +204,7 @@
                     <div class="pd-meta-row">
                       <input class="pd-input pd-name-input" id="pdCharName" placeholder="이름" readonly />
                     </div>
-                    <input class="pd-sub-input" id="pdCharSub" placeholder="서브타이틀" readonly />
+                    <input class="pd-sub-input" id="pdCharSub" placeholder="소개" readonly />
                     <div class="pd-profile-divider"></div>
                     <div class="rt-toolbar" data-editonly data-target="pdCharIntro" data-meta-target="pdCharMeta">
                       <button type="button" class="rt-add-row" title="정보 행 추가">＋</button>
@@ -219,15 +219,12 @@
                   </div>
                 </div>
 
-                <div class="speech-bubble char-bubble" id="pdCharBubble" contenteditable="false"></div>
-                <div class="speech-bubble persona-bubble" id="pdPersonaBubble" contenteditable="false"></div>
-
                 <div class="pd-profile persona-layout">
                   <div class="pd-profile-info">
                     <div class="pd-meta-row">
                       <input class="pd-input pd-name-input" id="pdPersonaName" placeholder="이름" readonly />
                     </div>
-                    <input class="pd-sub-input" id="pdPersonaSub" placeholder="서브타이틀" readonly />
+                    <input class="pd-sub-input" id="pdPersonaSub" placeholder="소개" readonly />
                     <div class="pd-profile-divider"></div>
                     <div class="rt-toolbar" data-editonly data-target="pdPersonaIntro" data-meta-target="pdPersonaMeta">
                       <button type="button" class="rt-add-row" title="정보 행 추가">＋</button>
@@ -261,14 +258,52 @@
               </div>
             </div>
 
+            <!-- 오른쪽 칸은 네 장입니다 — 세로 이미지 / TIMELINE / 테마곡 / 메시지.
+                 옆으로 밀거나(터치·가로 휠) 아래 점을 눌러 넘깁니다. -->
             <div class="pd-info-side">
-              <div class="pd-section pd-section-nohead">
-                <!-- 제목과 추가 버튼을 한 줄에 (버튼은 오른쪽 끝) -->
-                <div class="pd-section-head">
-                  <h4>TIMELINE</h4>
-                  <button class="add-mini-btn" id="addTimelineBtn" data-editonly title="타임라인 추가">＋</button>
+              <div class="side-pages" id="pdSidePages">
+                <div class="side-page active" data-sidepage="image">
+                  <div class="adjustable-img oc-side-img" id="pdSideImgBox">
+                    <div class="adj-layer"></div>
+                    <button class="adj-empty" data-editonly>＋ 이미지</button>
+                    <button class="adj-change" data-editonly>📷</button>
+                  </div>
                 </div>
-                <div class="timeline-list" id="timelineList"></div>
+                <div class="side-page" data-sidepage="timeline">
+                  <div class="pd-section pd-section-nohead">
+                    <!-- 제목과 추가 버튼을 한 줄에 (버튼은 오른쪽 끝) -->
+                    <div class="pd-section-head">
+                      <h4>TIMELINE</h4>
+                      <button class="add-mini-btn" id="addTimelineBtn" data-editonly title="타임라인 추가">＋</button>
+                    </div>
+                    <div class="timeline-list" id="timelineList"></div>
+                  </div>
+                </div>
+                <!-- 메시지 — 캐릭터는 왼쪽, 페르소나는 오른쪽에서 시작합니다.
+                     제목줄은 TIMELINE 과 같은 모양입니다. -->
+                <div class="side-page" data-sidepage="message">
+                  <div class="pd-section pd-section-nohead msg-section">
+                    <div class="pd-section-head"><h4>DIALOGUE</h4></div>
+                    <div class="msg-list" id="pdMsgList"></div>
+                  </div>
+                </div>
+                <div class="side-page" data-sidepage="theme">
+                  <div class="oc-theme">
+                    <div class="oc-theme-now">
+                      <div class="oc-theme-now-art"></div>
+                      <div class="oc-theme-now-body">
+                        <div class="oc-theme-label">NOW PLAYING</div>
+                        <div class="oc-theme-now-title">테마곡</div>
+                        <div class="oc-theme-now-artist"></div>
+                        <div class="oc-theme-bar"><span></span></div>
+                      </div>
+                    </div>
+                    <div class="oc-theme-list"></div>
+                    <div class="oc-theme-foot"></div>
+                  </div>
+                </div>
+                <!-- 점은 칸 안쪽 아래에 겹쳐 놓습니다 -->
+                <div class="side-dots" id="pdSideDots"></div>
               </div>
             </div>
           </div>
@@ -346,9 +381,8 @@
         <div class="oc-page" data-ocpage="profile">
           <div class="oc-info-grid">
             <div class="oc-info-main">
-              <!-- 프로필 바로 위 — 따옴표로 감싼 대사 한 줄 (상자 없이 글자만).
-                   PAIR_INFO 의 PROFILE 머리줄이 있던 자리입니다. -->
-              <div class="oc-quote"><span class="ocq-mark">"</span><span class="oc-quote-text" id="ocQuote" contenteditable="false"></span><span class="ocq-mark">"</span></div>
+              <!-- 키워드 3등분 칸 -->
+              <div class="oc-kw-row" id="ocKwRow"></div>
               <div class="pd-section">
                 <div class="pd-profile char-layout">
                   <div class="adjustable-img pd-profile-img" id="ocProfileImgBox">
@@ -361,23 +395,20 @@
                       <input class="pd-input pd-name-input" id="ocProfileName" placeholder="이름" readonly />
                     </div>
                     <!-- 이름 아래 한 줄 — 회색 작은 글씨 -->
-                    <input class="pd-sub-input" id="ocProfileSub" placeholder="서브타이틀" readonly />
+                    <input class="pd-sub-input" id="ocProfileSub" placeholder="소개" readonly />
                     <div class="pd-profile-divider"></div>
-                    <div class="rt-toolbar" data-editonly data-target="ocIntro" data-meta-target="ocMeta">
-                      <button type="button" class="rt-add-row" title="정보 행 추가">＋</button>
-                      <button type="button" data-cmd="bold"><b>B</b></button>
-                      <button type="button" data-cmd="italic"><i>I</i></button>
-                      <input type="color" class="rt-color" value="#1b1b1f" title="글자색" />
+                    <!-- 이 칸은 라벨만 넣습니다 (최대 7줄, 스크롤 없음) -->
+                    <div class="rt-toolbar" data-editonly data-meta-target="ocMeta" data-max-rows="7">
+                      <button type="button" class="rt-add-row" title="라벨 추가">＋</button>
                     </div>
-                    <div class="pd-desc-box">
+                    <div class="pd-desc-box oc-label-box">
                       <div class="meta-container" id="ocMeta"></div>
-                      <div class="profile-view-text" id="ocIntro" contenteditable="false"></div>
                     </div>
                   </div>
                 </div>
               </div>
-              <!-- 키워드 3등분 칸 -->
-              <div class="oc-kw-row" id="ocKwRow"></div>
+              <!-- 프로필 아래 — 따옴표로 감싼 대사 한 줄 (상자 없이 글자만) -->
+              <div class="oc-quote"><span class="ocq-mark">"</span><span class="oc-quote-text" id="ocQuote" contenteditable="false"></span><span class="ocq-mark">"</span></div>
               <!-- 자유 텍스트 서식 — ˄ ˅ 는 글자 크기를 1px 씩 올리고 내립니다 -->
               <div class="rt-toolbar rt-toolbar-ocfree" data-editonly>
                 <button type="button" data-cmd="bold" title="볼드"><b>B</b></button>
@@ -397,11 +428,37 @@
                 <div class="profile-view-text oc-free" id="ocFree" contenteditable="false"></div>
               </div>
             </div>
+            <!-- 세로 이미지 ↔ 테마곡. 옆으로 밀거나 아래 점을 눌러 넘깁니다.
+                 안쪽 조각은 id 가 아니라 클래스로 찾습니다 — PAIR 쪽에도 같은
+                 테마곡 칸이 있어서 같은 id 를 둘 수 없기 때문입니다. -->
             <div class="oc-info-side">
-              <div class="adjustable-img oc-side-img" id="ocSideImgBox">
-                <div class="adj-layer"></div>
-                <button class="adj-empty" data-editonly>＋ 이미지</button>
-                <button class="adj-change" data-editonly>📷</button>
+              <div class="side-pages" id="ocSidePages">
+                <div class="side-page active" data-sidepage="image">
+                  <div class="adjustable-img oc-side-img" id="ocSideImgBox">
+                    <div class="adj-layer"></div>
+                    <button class="adj-empty" data-editonly>＋ 이미지</button>
+                    <button class="adj-change" data-editonly>📷</button>
+                  </div>
+                </div>
+                <div class="side-page" data-sidepage="theme">
+                  <div class="oc-theme">
+                    <div class="oc-theme-now">
+                      <div class="oc-theme-now-art"></div>
+                      <div class="oc-theme-now-body">
+                        <div class="oc-theme-label">NOW PLAYING</div>
+                        <div class="oc-theme-now-title">테마곡</div>
+                        <div class="oc-theme-now-artist"></div>
+                        <div class="oc-theme-bar"><span></span></div>
+                      </div>
+                    </div>
+                    <!-- ＋ 곡 추가는 목록 안(마지막 곡 아래)에 그립니다 -->
+                    <div class="oc-theme-list"></div>
+                    <!-- 아래 띠는 점이 앉을 자리입니다 -->
+                    <div class="oc-theme-foot"></div>
+                  </div>
+                </div>
+                <!-- 점은 칸 안쪽 아래에 겹쳐 놓습니다 (이미지 장에서는 사진 위로) -->
+                <div class="side-dots" id="ocSideDots"></div>
               </div>
             </div>
           </div>
@@ -634,7 +691,7 @@
 </div>
 
 
-<script src="js/main.js?v=24"></script>
-<script type="module" src="js/firebase-store.js?v=24"></script>
+<script src="js/main.js?v=31"></script>
+<script type="module" src="js/firebase-store.js?v=31"></script>
 </body>
 </html>

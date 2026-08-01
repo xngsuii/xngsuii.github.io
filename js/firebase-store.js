@@ -22,7 +22,7 @@ import {
   getFirestore, doc, getDoc, setDoc, deleteDoc,
   collection, getDocs, writeBatch
 } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
-import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=24';
+import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=31';
 
 const app  = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -469,7 +469,17 @@ const SiteStore = {
     return true;
   },
 
-  async signOut() { await flushNow().catch(() => {}); await signOut(auth); },
+  /* 나가기 전에 남은 변경분을 저장하되, 저장이 끝나기를 무한정 기다리지는
+     않습니다. 쓰기가 밀려 있으면(오프라인이거나 대기열이 막힌 경우)
+     flushNow() 가 영영 끝나지 않아 로그아웃 버튼이 아무 반응도 하지 않는
+     것처럼 보입니다. 3초만 기다렸다가 그냥 로그아웃합니다. */
+  async signOut() {
+    await Promise.race([
+      flushNow().catch(() => {}),
+      new Promise(res => setTimeout(res, 3000))
+    ]);
+    await signOut(auth);
+  },
 
   async load() { await loadAll(); },
 

@@ -216,7 +216,7 @@
      왼쪽 칸 안에 있으므로 오른쪽 세로 이미지의 높이는 건드리지 않습니다.
      여기서 쓴 높이는 아래 자유 텍스트 칸(flex:1)이 내줍니다. */
   .oc-quote{flex:none;text-align:center;color:var(--accent);font-size:12.5px;font-style:italic;
-    line-height:1.6;margin:0 0 12px;}
+    line-height:1.6;margin:0;}
   .oc-quote .ocq-mark{opacity:.7;}
   .oc-quote-text{outline:none;}
   body.logged-in .oc-quote-text:empty:before{content:'대사';color:var(--text-muted);}
@@ -229,34 +229,178 @@
   /* 사진 - 키워드 - 자유 글 사이 간격을 14px 로 똑같이 맞춥니다
      (원래 프로필 줄이 갖고 있던 32px + 절 여백 22px 을 걷어냅니다) */
   .oc-info-main .pd-section{margin-bottom:0;}
-  /* 높이를 사진 칸에 맞춰 고정합니다 — 144px 열에 3:4 비율이므로 192px.
-     설명이 길어지면 아래 .pd-desc-box 안에서만 스크롤됩니다. */
-  .oc-info-main .pd-profile{height:192px;margin-bottom:14px;}
+  /* 사진 칸 높이(144px 열에 3:4 이므로 192px)를 바닥으로 두되,
+     라벨이 늘면 그만큼 함께 자랍니다 — 라벨 칸에는 스크롤을 두지 않습니다. */
+  .oc-info-main .pd-profile{min-height:192px;margin-bottom:14px;}
+  /* 라벨이 늘어 칸이 길어져도 사진은 따라 늘어나지 않게 (3:4 비율 그대로) */
+  .oc-info-main .pd-profile-img{align-self:start;}
   .oc-info-main .pd-profile-info{display:flex;flex-direction:column;min-height:0;}
-  .oc-info-main .pd-desc-box{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;}
-  .oc-info-side{min-height:0;}
+  /* 이 칸은 라벨만 담습니다 (본문 글 없음) */
+  .oc-info-main .pd-desc-box{flex:none;overflow:visible;}
+  .oc-label-box .meta-container{margin-bottom:0;}
+  /* 이름은 서브타이틀처럼 상자 없이 바탕 위에 바로 올립니다 */
+  .oc-info-main .pd-name-input,
+  body.logged-in .oc-info-main .pd-name-input{width:100%;border-color:transparent;
+    background:transparent;padding-left:0;padding-right:0;}
+  body.logged-in .oc-info-main .pd-name-input:hover,
+  body.logged-in .oc-info-main .pd-name-input:focus{background:var(--surface);}
+  /* 오른쪽 칸은 여러 장짜리입니다 — OC 는 세로 이미지 / 테마곡,
+     PAIR 는 세로 이미지 / TIMELINE / 테마곡 / 메시지.
+     옆으로 밀거나(터치·가로 휠) 아래 점을 눌러 넘깁니다. */
+  .oc-info-side,.pd-info-side{min-height:0;display:flex;flex-direction:column;}
+  .side-pages{position:relative;flex:1;min-height:0;overflow:hidden;}
+  .side-page{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--bg);
+    transition:transform .35s cubic-bezier(.4,0,.2,1);}
+  /* 점은 칸 안쪽 아래에 겹쳐 놓습니다 — 테마곡 장에서는 아래 띠 위에,
+     이미지 장에서는 사진 위에 올라옵니다. 두 바탕 모두에서 보이도록
+     지금 장은 주황(#c1440e)+흰 테, 나머지는 흰색+옅은 검은 테로 둡니다. */
+  /* TIMELINE 장은 제목이 고정이고 목록만 스크롤됩니다. 아래 26px 은 점 자리라 비웁니다. */
+  .side-page[data-sidepage="timeline"] > .pd-section{display:flex;flex-direction:column;
+    min-height:0;height:100%;margin-bottom:0;}
+  .side-page[data-sidepage="timeline"] .pd-section-head{flex:none;}
+  .side-page[data-sidepage="timeline"] .timeline-list{flex:1;min-height:0;overflow-y:auto;
+    overscroll-behavior:contain;padding-bottom:26px;scrollbar-width:none;}
+  .side-page[data-sidepage="timeline"] .timeline-list::-webkit-scrollbar{width:0;}
+  .side-dots{position:absolute;left:0;right:0;bottom:0;height:26px;z-index:5;
+    display:flex;align-items:center;justify-content:center;gap:6px;pointer-events:none;}
+  .side-dot{width:5px;height:5px;border-radius:50%;pointer-events:auto;cursor:pointer;
+    background:rgba(255,255,255,.9);box-shadow:0 0 0 1px rgba(0,0,0,.3);}
+  .side-dot.active{background:var(--accent);box-shadow:0 0 0 1.5px rgba(255,255,255,.9);}
   .oc-side-img{height:100%;border:1px solid var(--border);}
-  /* 키워드 3등분 칸 */
-  .oc-kw-row{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--border);flex:none;}
+  /* 키워드 3등분 칸 — 프로필 바로 위 */
+  .oc-kw-row{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--border);
+    flex:none;margin-bottom:14px;}
   .oc-kw{padding:9px 8px;text-align:center;font-size:11.5px;font-weight:700;color:var(--text);
     border-right:1px solid var(--border);outline:none;min-width:0;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .oc-kw:last-child{border-right:none;}
   body.logged-in .oc-kw:hover{background:var(--surface);}
   body.logged-in .oc-kw:focus{background:var(--surface);outline:1px solid var(--accent);}
-  /* 자유 텍스트 서식 툴바 — 키워드 줄과 글 상자 사이. 여기서 쓴 높이는
+  /* 자유 텍스트 서식 툴바 — 대사 줄과 글 상자 사이. 여기서 쓴 높이는
      아래 상자(flex:1)가 내주므로 창 높이는 그대로입니다. */
   .rt-toolbar-ocfree{flex:none;margin:14px 0 6px;}
   body.logged-in .rt-toolbar-ocfree[data-editonly]{display:flex;}
   /* 툴바가 보이는 편집 모드에서는 위 여백을 툴바가 갖습니다 */
   body.logged-in .oc-free-box{margin-top:0;}
   /* 자유 텍스트 — 길어지면 이 박스 안에서만 스크롤됩니다 */
-  .oc-free-box{flex:1;min-height:90px;margin-top:14px;border:1px solid var(--border);
+  .oc-free-box{flex:1;min-width:0;min-height:90px;margin-top:14px;border:1px solid var(--border);
     padding:10px;overflow-y:auto;overscroll-behavior:contain;}
   .oc-free-box .oc-free{min-height:100%;border:none;padding:0;}
   body.logged-in .oc-free-box .oc-free{border:none;padding:0;}
   .oc-free-box .oc-free:empty:before{content:'자유롭게 적어보세요...';color:var(--text-muted);}
   .oc-free-box img{max-width:100%;display:block;margin:8px 0;}
+
+  /* ---- 테마곡 ----
+     위쪽은 지금 곡의 표지 위에 제목을 얹은 칸, 아래는 곡 목록입니다.
+     곡을 누르면 위 칸으로 올라오고 가사가 펼쳐집니다. */
+  .oc-theme{flex:1;min-width:0;display:flex;flex-direction:column;
+    border:1px solid var(--border);background:var(--surface);min-height:0;}
+  .oc-theme-now{position:relative;flex:none;height:130px;overflow:hidden;background:#2e2b27;}
+  .oc-theme-now-art{position:absolute;inset:0;background:center/cover no-repeat;}
+  .oc-theme-now-body{position:absolute;left:0;right:0;bottom:0;padding:7px 9px;
+    background:linear-gradient(to bottom, rgba(20,18,16,0), rgba(20,18,16,.85) 55%);color:#fff;}
+  .oc-theme-label{font-family:var(--mono);font-size:7.5px;font-weight:700;letter-spacing:.14em;
+    color:rgba(255,255,255,.75);}
+  .oc-theme-now-title{font-size:11.5px;font-weight:700;margin-top:1px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .oc-theme-now-artist{font-size:9.5px;color:rgba(255,255,255,.72);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .oc-theme-bar{height:2px;background:rgba(255,255,255,.3);margin-top:6px;}
+  .oc-theme-bar span{display:block;height:100%;width:45%;background:#fff;}
+  .oc-theme-list{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:6px;
+    display:flex;flex-direction:column;gap:6px;}
+  .oc-theme-list::-webkit-scrollbar{width:0;}
+  .oc-theme-list{scrollbar-width:none;}
+  .oc-theme-empty{margin:auto;font-size:10.5px;color:var(--text-muted);}
+  .oc-theme-row{display:flex;align-items:center;gap:7px;background:var(--bg);
+    border:1px solid var(--border);padding:6px 7px;min-width:0;flex-wrap:wrap;cursor:pointer;}
+  .oc-theme-row.current{border-color:var(--accent);}
+  /* 가사는 고른 곡에서만 펼쳐집니다 (칸이 좁아 모두 펼치면 목록이 안 보입니다) */
+  .oc-theme-lyrics{display:none;}
+  .oc-theme-row.current .oc-theme-lyrics{display:block;width:100%;margin-top:7px;
+    font-size:9.5px;line-height:1.6;
+    color:var(--text-muted);white-space:pre-wrap;max-height:120px;overflow-y:auto;outline:none;}
+  body.logged-in .oc-theme-row.current .oc-theme-lyrics:empty:before{
+    content:'가사를 적어보세요';color:var(--text-muted);opacity:.7;}
+  body.logged-in .oc-theme-row.current .oc-theme-lyrics:hover,
+  body.logged-in .oc-theme-row.current .oc-theme-lyrics:focus{background:var(--surface);}
+  .oc-theme-art{width:30px;height:30px;flex:none;background:var(--surface-2) center/cover no-repeat;
+    border:1px solid var(--border);display:flex;align-items:center;justify-content:center;}
+  /* 표지가 없을 때 — 어두운 칸(--border #1a1a1a) 한가운데에 주황 ▶ (#c1440e) */
+  .oc-theme-art.no-cover{background:var(--border);}
+  .oc-theme-art.no-cover:before{content:'▶';color:var(--accent);font-size:10px;line-height:1;
+    display:block;transform:translateX(1px);}
+  body.logged-in .oc-theme-art{cursor:pointer;}
+  .oc-theme-meta{flex:1;min-width:0;}
+  .oc-theme-title{font-size:10.5px;font-weight:700;color:var(--text);outline:none;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .oc-theme-artist{font-size:9px;color:var(--text-muted);outline:none;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  body.logged-in .oc-theme-title:hover,body.logged-in .oc-theme-artist:hover,
+  body.logged-in .oc-theme-title:focus,body.logged-in .oc-theme-artist:focus{background:var(--surface);}
+  .oc-theme-btn{width:24px;height:24px;flex:none;border:1px solid var(--border);background:var(--bg);
+    color:var(--text);font-size:9px;line-height:1;display:flex;align-items:center;justify-content:center;}
+  .oc-theme-btn:hover{background:var(--surface-2);}
+  .oc-theme-mini{flex:none;border:1px solid var(--border);background:var(--bg);color:var(--text-muted);
+    font-family:var(--mono);font-size:8.5px;padding:2px 5px;line-height:1.3;}
+  .oc-theme-mini:hover{background:var(--surface-2);color:var(--text);}
+  .oc-theme-mini.oc-theme-del{color:var(--accent);border-color:var(--accent);}
+  .oc-theme-mini.oc-theme-del:hover{background:var(--accent);color:#fff;}
+  /* 마지막 곡 아래에 놓입니다 (목록 안쪽) */
+  .oc-theme-add{flex:none;border:1px dashed var(--border);background:var(--bg);
+    color:var(--accent);font-family:var(--mono);font-size:10px;padding:7px 0;width:100%;}
+  .oc-theme-add:hover{background:var(--surface-2);}
+  .oc-theme-add[data-editonly]{display:none;}
+  body.logged-in .oc-theme-add[data-editonly]{display:block;}
+  /* 점이 앉을 아래 띠 — 예전 '곡 추가' 버튼이 있던 자리입니다 */
+  .oc-theme-foot{flex:none;height:26px;border-top:1px solid var(--border);background:var(--bg);}
+
+  /* ---- 메시지 ----
+     캐릭터(상대)는 왼쪽, 페르소나(나)는 오른쪽에서 시작합니다.
+     사진·파일 버튼은 그 말풍선을 고치는 동안에만 말풍선 위에 뜹니다. */
+  /* 상자 없이 TIMELINE 처럼 제목줄 + 구분선만 두고, 목록만 스크롤됩니다 */
+  .msg-section{display:flex;flex-direction:column;min-height:0;height:100%;margin-bottom:0;}
+  .msg-section > .pd-section-head{flex:none;}
+  .msg-list{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+    padding:0 0 26px;display:flex;flex-direction:column;gap:12px;scrollbar-width:none;}
+  .msg-list::-webkit-scrollbar{width:0;}
+  .msg-empty{margin:auto;font-size:10.5px;color:var(--text-muted);}
+  .msg-row{position:relative;display:flex;align-items:flex-start;gap:5px;max-width:100%;}
+  .msg-row.char{justify-content:flex-start;}
+  .msg-row.persona{justify-content:flex-end;}
+  .msg-bubble{position:relative;max-width:80%;min-width:38px;border:1px solid var(--border);
+    padding:7px 9px;font-size:10.5px;line-height:1.6;}
+  .msg-row.char .msg-bubble{background:var(--bg);color:var(--text);border-radius:0 8px 8px 8px;}
+  .msg-row.persona .msg-bubble{background:var(--page-bg);color:#fff;border-radius:8px 0 8px 8px;}
+  .msg-text{outline:none;white-space:pre-wrap;word-break:break-word;}
+  /* 안내 문구는 편집 모드에서만. 보기 모드에서 빈 줄은 아예 그리지 않으므로
+     사진만 있는 말풍선은 사진에 딱 맞게 붙습니다. */
+  body.logged-in .msg-text{min-height:1.4em;}
+  body.logged-in .msg-row.char .msg-text:empty:before{content:'내용을 입력하세요';color:var(--text-muted);}
+  body.logged-in .msg-row.persona .msg-text:empty:before{content:'내용을 입력하세요';color:rgba(255,255,255,.7);}
+  /* 사진은 한 말풍선에 한 장입니다 */
+  .msg-imgs img{max-width:100%;display:block;border:1px solid var(--border);margin:0;}
+  .msg-imgs:not(:empty) + .msg-text{margin-top:6px;}
+  .msg-del{flex:none;align-self:center;border:none;background:none;color:var(--text-muted);
+    font-size:10px;padding:0 2px;display:none;}
+  body.logged-in .msg-del{display:block;}
+  .msg-del:hover{color:var(--accent);}
+  /* 말풍선 위에 뜨는 사진·파일 버튼 */
+  .msg-tools{position:absolute;top:-23px;display:none;gap:4px;z-index:3;}
+  .msg-row.char .msg-tools{left:0;}
+  .msg-row.persona .msg-tools{right:0;}
+  body.logged-in .msg-row.editing .msg-tools{display:flex;}
+  .msg-tool{border:1px solid var(--border);background:var(--bg);color:var(--text);
+    font-size:9.5px;padding:2px 6px;line-height:1.4;}
+  .msg-tool:hover{background:var(--surface-2);}
+  .msg-tool.msg-img-del{color:var(--accent);border-color:var(--accent);}
+  .msg-tool.msg-img-del:hover{background:var(--accent);color:#fff;}
+  /* 목록 끝에 놓이는 추가 버튼 두 개 */
+  .msg-add-row{flex:none;display:none;gap:6px;}
+  body.logged-in .msg-add-row{display:flex;}
+  .msg-add{flex:1;border:1px dashed var(--border);background:var(--bg);color:var(--accent);
+    font-family:var(--mono);font-size:9.5px;padding:6px 0;}
+  .msg-add:hover{background:var(--surface-2);}
 
   /* 가로로 넘기는 갤러리(OC).
      격자 크기는 PAIR 과 똑같이 두려고 좌우 여백을 주지 않고(위아래 38px 만),
@@ -361,7 +505,24 @@
   .log-table-scroll table{width:100%;}
   /* 보기 모드의 LOG 탭에서 제목 아래 표 머리글(NO/LOG/DATE)까지의 간격과 같게 맞춥니다.
      (LOG 는 ＋게시글 추가 줄이 보기 모드에서 사라지고 아래 여백 10px 만 남습니다) */
-  .pd-info-grid{display:grid;grid-template-columns:1fr 260px;gap:20px;align-items:start;margin-top:10px;}
+  /* INFO 는 스크롤 없이 한 화면에 들어갑니다 — 남는 높이는 라벨+본문 칸이 가져가고,
+     넘치는 글은 그 칸 안에서만 스크롤됩니다. */
+  .pd-tab-pane[data-pdpane="info"].active{display:flex;flex-direction:column;height:100%;}
+  .pd-info-grid{display:grid;grid-template-columns:1fr 260px;gap:20px;align-items:stretch;
+    margin-top:10px;flex:1;min-height:0;}
+  .pd-info-main{display:flex;flex-direction:column;min-height:0;}
+  .pd-info-main > .pd-section{flex:1;min-height:0;display:flex;flex-direction:column;margin-bottom:0;}
+  .pd-info-main > .pd-section > h4{flex:none;margin-bottom:14px;}
+  /* 두 프로필이 남은 높이를 반씩 나눠 씁니다 (사진 높이 192px 이 바닥) */
+  .pd-info-main .pd-profile{flex:1;min-height:0;margin-bottom:14px;}
+  .pd-info-main .pd-profile.persona-layout{margin-bottom:14px;}
+  .pd-info-main .pd-profile-img{align-self:stretch;height:auto;aspect-ratio:auto;min-height:0;}
+  .pd-info-main .pd-profile-info{display:flex;flex-direction:column;min-height:0;}
+  /* 사진 아래 보더까지만 늘어나고, 더 길면 이 안에서만 스크롤됩니다 */
+  .pd-info-main .pd-desc-box{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;}
+  /* 아래 여백은 OC 의 자유 텍스트 칸과 같게 (칸 밖 8px + 안쪽 여백 8px = 16px) */
+  .pd-info-main .pd-relationship{flex:none;margin-bottom:8px;}
+  .pd-info-side{margin-bottom:8px;}
   .pd-section{margin-bottom:22px;}
   .pd-section h4{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin:0 0 24px;padding-bottom:8px;border-bottom:1px solid var(--border);}
   /* 제목과 추가 버튼을 한 줄에 놓는 머리줄.
@@ -531,13 +692,6 @@
   body.logged-in .profile-view-text{border:1px solid var(--border);border-radius:0;padding:8px;}
   .pd-profile-divider{height:1px;background:#f0b89a;margin:8px 0 10px;}
   /* 말풍선: 인덱스 탭(INFO/GALLERY/LOG)과 동일한 오렌지 #EF3921 + 흰 글자 */
-  .speech-bubble{position:relative;border:1px solid var(--border);background:var(--page-bg);color:#fff;padding:10px 16px;font-size:11.5px;line-height:1.5;outline:none;min-height:1.5em;}
-  .speech-bubble:empty:before{content:'대사를 입력하세요...';color:rgba(255,255,255,.75);}
-  .speech-bubble.char-bubble{text-align:left;margin:14px 0 4px;}
-  .speech-bubble.char-bubble::before{content:'';position:absolute;top:-5px;left:22px;width:8px;height:8px;background:var(--page-bg);border-left:1px solid var(--border);border-top:1px solid var(--border);transform:rotate(45deg);}
-  .speech-bubble.persona-bubble{text-align:right;margin:4px 0 32px;}
-  .speech-bubble.persona-bubble::before{content:'';position:absolute;bottom:-5px;right:22px;width:8px;height:8px;background:var(--page-bg);border-right:1px solid var(--border);border-bottom:1px solid var(--border);transform:rotate(45deg);}
-  body.logged-in .speech-bubble{border-style:solid;}
   .meta-row{display:flex;align-items:baseline;gap:8px;padding:2px 0;font-size:11px;line-height:1.4;}
   .meta-row.dragging-meta{opacity:.4;}
   .meta-drag{cursor:grab;color:var(--text-muted);font-size:10px;flex:none;user-select:none;}
@@ -881,8 +1035,11 @@
     /* 창이 화면을 꽉 채워 바깥에 둘 자리가 없으므로 왼쪽 안쪽으로 들입니다 */
     .oc-page-dots{right:auto;left:3px;margin-right:0;}
     /* 한 칸으로 세우면 사진 높이에 맞출 이유가 없습니다 */
-    .oc-info-main .pd-profile{height:auto;}
-    .oc-info-main .pd-desc-box{max-height:200px;}
+    .oc-info-main .pd-profile{height:auto;min-height:0;}
+    /* 라벨만 담는 칸이라 잘라내지 않습니다 (스크롤 없이 7줄까지) */
+    .oc-info-main .pd-desc-box{max-height:none;}
+    /* 좁은 화면에서도 오른쪽 칸은 두 장 그대로 두되, 손가락으로 넘길 높이를 줍니다 */
+    .side-pages{min-height:280px;}
     /* OC 프로필만은 좁은 화면에서도 [사진 | 글] 로 나란히 둡니다.
        위의 PAIR 규칙(절을 2열로 쪼개고 프로필을 한 줄로 세우는 것)을 되돌립니다.
        PAIR 은 카드가 둘(캐릭터/페르소나)이라 그대로 둡니다. */
@@ -959,7 +1116,20 @@
        모달의 나머지 요소(탭 40 + 배너 113 + 제목 62 + 여백 32)를 뺀 값으로 고정. */
     .pd-tab-content{height:calc(100dvh - 268px);min-height:280px;padding:8px 2px 8px 0;
       overscroll-behavior:contain;}
-    .pd-info-grid{grid-template-columns:1fr;gap:0;}
+    /* 좁은 화면에서는 INFO 를 한 화면에 우겨넣지 않고 그냥 스크롤합니다 —
+       데스크톱에서 쓰는 '높이 고정 + 칸 안에서만 스크롤'을 여기서 되돌립니다. */
+    .pd-tab-pane[data-pdpane="info"].active{display:block;height:auto;}
+    .pd-info-grid{grid-template-columns:1fr;gap:0;flex:none;min-height:auto;}
+    .pd-info-main{display:block;min-height:auto;}
+    .pd-info-main > .pd-section{display:grid;flex:none;min-height:auto;margin-bottom:22px;}
+    .pd-info-main .pd-profile{flex:none;min-height:auto;}
+    .pd-info-main .pd-profile-info{display:block;}
+    .pd-info-main .pd-desc-box{flex:none;max-height:200px;}
+    /* aspect-ratio 를 데스크톱에서 풀었으므로 여기서 다시 3:4 로 돌려놓습니다 */
+    .pd-info-main .pd-profile-img{align-self:auto;aspect-ratio:3/4;height:auto;}
+    .pd-info-main .pd-relationship{margin-bottom:18px;}
+    .pd-info-side{margin-bottom:0;}
+    .side-pages{min-height:280px;}
     /* 직계 자식만 — TIMELINE 의 제목은 .pd-section-head 안에 있고
        아래 여백을 머리줄 쪽이 갖습니다(둘의 값을 같게 맞춥니다). */
     .pd-section > h4{margin-bottom:18px;}
@@ -976,8 +1146,6 @@
     .pd-section:not(.pd-section-nohead) > h4{grid-column:1/-1;}
     .pd-profile.char-layout{grid-column:1;grid-row:2;}
     .pd-profile.persona-layout{grid-column:2;grid-row:2;}
-    .speech-bubble.char-bubble{grid-column:1;grid-row:3;}
-    .speech-bubble.persona-bubble{grid-column:2;grid-row:3;}
 
     /* 두 카드 모두 사진이 위로 오게 합니다.
        페르소나는 마크업이 [정보][사진] 순서라 order:0 으로는 정보가 위로 갑니다.
@@ -987,15 +1155,6 @@
     /* 전체폭이면 3:4 비율 때문에 세로로 너무 길어집니다 */
     .pd-profile-img{width:100%;max-width:150px;justify-self:center;}
     .pd-name-input{width:100%;font-size:14px;}
-
-    /* 말풍선: 왼쪽은 꼬리가 좌상단, 오른쪽은 우상단.
-       기본 규칙이 .speech-bubble.char-bubble 처럼 두 겹이라 여백을 되돌리려면
-       같은 굵기로 지정해야 합니다 (안 그러면 위아래로 10px 어긋납니다). */
-    .speech-bubble{padding:9px 12px;font-size:11px;}
-    .speech-bubble.char-bubble,
-    .speech-bubble.persona-bubble{margin:0;text-align:left;}
-    .speech-bubble.persona-bubble::before{top:-5px;bottom:auto;right:22px;left:auto;
-      border:none;border-left:1px solid var(--border);border-top:1px solid var(--border);}
 
     /* Relationship 은 데스크톱과 같이 가로로 나란히 */
     .pd-relationship{flex-direction:row;gap:8px;margin:18px 0 20px;}

@@ -161,6 +161,7 @@ function migrateOcPost(o){
   if(o.profile.metaHtml == null) o.profile.metaHtml = '';
   o.profile.image = normalizeImg(o.profile.image);
   if(o.quote == null) o.quote = '';
+  migrateThemeSongs(o);
   if(!Array.isArray(o.keywords) || o.keywords.length !== 3) o.keywords = ['키워드','키워드','키워드'];
   if(o.freeText == null) o.freeText = '';
   if(!o.folderId) o.folderId = OC_DEFAULT_FOLDER;
@@ -213,6 +214,9 @@ function migratePost(old){
     if(old.relLabelPersonaToChar===undefined) old.relLabelPersonaToChar='Relationship';
     if(old.char.subtitle == null) old.char.subtitle = '';
     if(old.persona.subtitle == null) old.persona.subtitle = '';
+    old.sideImage = normalizeImg(old.sideImage);
+    migrateThemeSongs(old);
+    migrateMessages(old);
     splitLegacyIntro(old.char);
     splitLegacyIntro(old.persona);
     migrateGalleryFolders(old);
@@ -232,7 +236,33 @@ function migratePost(old){
   splitLegacyIntro(migrated.persona);
   migrateGalleryFolders(migrated);
   migrateLogIds(migrated);
+  migrated.sideImage = normalizeImg(migrated.sideImage);
+  migrateThemeSongs(migrated);
+  migrateMessages(migrated);
   return migrated;
+}
+/* 테마곡 목록의 기본 모양 (PAIR·OC 공용) */
+function migrateThemeSongs(obj){
+  if(!Array.isArray(obj.themeSongs)) obj.themeSongs = [];
+  obj.themeSongs.forEach(s=>{
+    if(s.id==null) s.id = Date.now()+Math.floor(Math.random()*1000);
+    if(s.title==null) s.title='';
+    if(s.artist==null) s.artist='';
+    if(s.lyrics==null) s.lyrics='';
+    if(s.cover==null) s.cover='';
+  });
+}
+/* 메시지(말풍선) 목록의 기본 모양 */
+function migrateMessages(obj){
+  if(!Array.isArray(obj.messages)) obj.messages = [];
+  obj.messages.forEach(m=>{
+    if(m.id==null) m.id = Date.now()+Math.floor(Math.random()*1000);
+    if(m.side!=='persona') m.side='char';
+    if(m.text==null) m.text='';
+    if(!Array.isArray(m.images)) m.images=[];
+    if(m.images.length>1) m.images = m.images.slice(0,1);   // 한 말풍선에 사진 한 장
+    delete m.files;                                        // 파일 첨부는 쓰지 않습니다
+  });
 }
 function migrateLogIds(p){
   let seed = Date.now();
@@ -248,6 +278,11 @@ function migrateGalleryFolders(p){
     if(f.pwHash == null) f.pwHash = '';
     if(f.blur   == null) f.blur   = false;
     if(!Array.isArray(f.images)) f.images = [];
+    /* 예전에 폴더로 끌어다 놓을 때 생기던 빈 칸(썸네일만 남고 그림이 없던 것)을
+       불러오면서 걷어냅니다. 지금은 만들어지지 않지만 이미 저장된 것이 있습니다. */
+    else if(f.images.some(src=> typeof src !== 'string' || !src)){
+      f.images = f.images.filter(src=> typeof src === 'string' && src);
+    }
   });
 }
 function defaultKw(){ return [{text:'키워드',color:'#4b4bff'},{text:'키워드',color:'#4b4bff'},{text:'키워드',color:'#4b4bff'}]; }
@@ -858,8 +893,11 @@ function openPairDetail(id){
   });
 }
 
-let pdCharImgAdj=null, pdPersonaImgAdj=null, pdHeaderImgAdj=null;
+let pdCharImgAdj=null, pdPersonaImgAdj=null, pdHeaderImgAdj=null, pdSideImgAdj=null;
 function initPairImageAdjusters(){
+  pdSideImgAdj = createAdjustable(document.getElementById('pdSideImgBox'),
+    ()=>{ const post=getCurrentPost(); return post ? post.sideImage : blankImg(); },
+    (o)=>{ const post=getCurrentPost(); if(!post) return; post.sideImage=o; storageSet('pairPosts',state.pairPosts); });
   pdCharImgAdj = createAdjustable(document.getElementById('pdCharImgBox'),
     ()=>{ const post=getCurrentPost(); return post ? post.char.image : blankImg(); },
     (o)=>{ const post=getCurrentPost(); if(!post) return; post.char.image=o; storageSet('pairPosts',state.pairPosts); });
@@ -895,12 +933,17 @@ function fillPairDetail(p){
   bindRelText('relPersonaToChar','relPersonaToChar',p);
   bindRelText('relLabelCharToPersona','relLabelCharToPersona',p);
   bindRelText('relLabelPersonaToChar','relLabelPersonaToChar',p);
-  bindRelText('pdCharBubble','charBubble',p);
-  bindRelText('pdPersonaBubble','personaBubble',p);
 
   pdCharImgAdj.paint();
   pdPersonaImgAdj.paint();
   pdHeaderImgAdj.paint();
+  if(pdSideImgAdj) pdSideImgAdj.paint();
+
+  /* 오른쪽 칸 — 세로 이미지 / TIMELINE / 테마곡 / 메시지 */
+  PAIR_THEME_HOST.idx = 0;
+  renderThemeSongs(PAIR_THEME_HOST);
+  renderMessages(p);
+  if(pdSidePager) pdSidePager.set(0, false);
 
   bindRichTextToolbars();
   /* 갤러리·로그 엔진을 PAIR 창 쪽으로 돌려놓습니다 */
@@ -941,12 +984,18 @@ function bindMetaContainer(elId, obj, persist){
   el.innerHTML = obj.metaHtml || '';
   el.querySelectorAll('.meta-label,.meta-value').forEach(span=>{ span.contentEditable = isLoggedIn ? 'true' : 'false'; });
   const persistFn = persist || savePair;
-  const save = ()=>{ obj.metaHtml=el.innerHTML; persistFn(); };
-  el._saveMeta = save;
+  el._saveMeta = ()=>{ obj.metaHtml=el.innerHTML; persistFn(); };
+
+  /* 조작은 이 요소에 딱 한 번만 겁니다.
+     창을 열 때마다 다시 걸면 예전 글을 가리키는 저장 함수가 그대로 남아,
+     다음 글의 라벨을 고칠 때 그 내용이 예전 글에도 덮어써집니다.
+     저장은 언제나 지금 걸려 있는 el._saveMeta 로만 합니다. */
+  if(el._metaBound) return;
+  el._metaBound = true;
 
   el.addEventListener('focusout', (e)=>{
     if(!isLoggedIn) return;
-    if(e.target.classList && (e.target.classList.contains('meta-label') || e.target.classList.contains('meta-value'))) save();
+    if(e.target.classList && (e.target.classList.contains('meta-label') || e.target.classList.contains('meta-value'))) el._saveMeta();
   });
   el.addEventListener('keydown', (e)=>{
     // 라벨/값은 한 줄 입력만 허용 (엔터 시 줄바꿈 대신 입력 확정)
@@ -1021,17 +1070,24 @@ function bindRichTextToolbars(){
     if(tb.classList.contains('rt-toolbar-ocfree')) return;
     const targetEl = document.getElementById(tb.dataset.target); // 본문 영역 (B/I/색상 적용 대상)
     const metaEl = document.getElementById(tb.dataset.metaTarget); // 라벨 컨테이너 (+ 버튼 대상)
-    if(!targetEl) return;  // 대상이 없는 툴바는 건너뜀
-    tb.querySelectorAll('button[data-cmd]').forEach(btn=>{
-      btn.onmousedown = (e)=> e.preventDefault();
-      btn.onclick = ()=>{ targetEl.focus(); document.execCommand(btn.dataset.cmd, false, null); };
-    });
-    const colorInput = tb.querySelector('.rt-color');
-    if(colorInput) colorInput.oninput = (e)=>{ targetEl.focus(); document.execCommand('foreColor', false, e.target.value); };
+    // 본문 없이 라벨만 다루는 툴바(OC)도 있으므로 각각 따로 겁니다
+    if(targetEl){
+      tb.querySelectorAll('button[data-cmd]').forEach(btn=>{
+        btn.onmousedown = (e)=> e.preventDefault();
+        btn.onclick = ()=>{ targetEl.focus(); document.execCommand(btn.dataset.cmd, false, null); };
+      });
+      const colorInput = tb.querySelector('.rt-color');
+      if(colorInput) colorInput.oninput = (e)=>{ targetEl.focus(); document.execCommand('foreColor', false, e.target.value); };
+    }
     const addRowBtn = tb.querySelector('.rt-add-row');
-    if(addRowBtn){
+    if(addRowBtn && metaEl){
+      const maxRows = Number(tb.dataset.maxRows) || 0;
       addRowBtn.onmousedown = (e)=> e.preventDefault();
       addRowBtn.onclick = ()=>{
+        if(maxRows && metaEl.querySelectorAll('.meta-row').length >= maxRows){
+          alert(`라벨은 최대 ${maxRows}개까지 넣을 수 있어요.`);
+          return;
+        }
         const row=document.createElement('div');
         row.className='meta-row';
         row.innerHTML = `<span class="meta-drag" contenteditable="false" draggable="true" data-editonly>::</span><span class="meta-label" contenteditable="true">라벨</span><span class="meta-value" contenteditable="true">값</span><button type="button" class="meta-del" contenteditable="false" data-editonly>✕</button>`;
@@ -1945,6 +2001,8 @@ function renderGalleryFolderBar(p){
         e.preventDefault();
         btn.classList.remove('drop-target');
         if(!draggedGalleryKey) return;
+        // 곧 이어 올 dragend 의 '순서 바꾸기'가 끼어들지 않게 표시해 둡니다
+        galleryDropHandled = true;
         const keys = gallerySelectedIdx.size>0 ? Array.from(gallerySelectedIdx) : [draggedGalleryKey];
         const targetFolder = f;
         const bySrc = [];
@@ -2141,6 +2199,7 @@ function renderGallery(p){
         el.addEventListener('dragstart', ()=>{
           draggedGalleryKey = key; draggedGalleryEl = el; el.classList.add('dragging');
           galleryDragPageMoved = false;
+          galleryDropHandled = false;
           // 여러 장을 선택해 둔 경우 함께 옮긴다 (드래그 시작 시점으로 고정)
           galleryDragSrcKeys = gallerySelectedIdx.size>0 ? Array.from(gallerySelectedIdx) : [key];
           // 드래그 중에만 화살표가 드롭을 받도록(평소에는 pointer-events:none)
@@ -2153,6 +2212,16 @@ function renderGallery(p){
             .forEach(h=> h.classList.remove('drop-target'));
           /* 화살표로 다른 페이지를 거쳐 왔으면, 화면(DOM)에 놓인 자리를 그대로 반영한다 */
           if(galleryDragPageMoved){ await finishGalleryDrag(); return; }
+          /* 폴더 탭에 놓아 이미 다른 폴더로 옮겨간 경우에는 여기서 손대면 안 된다.
+             drop 이 dragend 보다 먼저 오지만 저장을 기다리는 중이라 화면은 아직
+             옛 배치 그대로다. 그걸 순서 바꾸기로 착각해 되쓰면 옮겨간 자리에
+             undefined 가 채워져 빈 썸네일이 남는다. */
+          if(galleryDropHandled){
+            galleryDropHandled=false;
+            galleryDragSrcKeys=null;
+            draggedGalleryKey=null; draggedGalleryEl=null;
+            return;
+          }
           galleryDragSrcKeys=null;
           if(draggedGalleryEl){
             /* 화면에는 현재 페이지 몫만 그려져 있습니다.
@@ -2163,8 +2232,9 @@ function renderGallery(p){
             const pageIdx = domKeys.map(k=> Number(k.split('::')[1]));
             const sameSet = pageIdx.length === pageImages.length
               && pageIdx.every(i=> i>=start && i<start+pageImages.length);
-            if(stillSameFolder && sameSet){
-              const reordered = pageIdx.map(i=> folder.images[i]);
+            const reordered = pageIdx.map(i=> folder.images[i]);
+            // 배열이 그새 줄어들어 빈 칸이 섞였으면 되쓰지 않는다
+            if(stillSameFolder && sameSet && reordered.every(src=> typeof src === 'string')){
               folder.images.splice(start, reordered.length, ...reordered);
               await gallerySave();
             }
@@ -2223,6 +2293,8 @@ function setGalleryHint(el, active){
    ------------------------------------------------------------ */
 let galleryDragSrcKeys = null;   // 드래그 시작 시점의 이동 대상 키들
 let galleryDragPageMoved = false;
+/* 폴더 탭이 드롭을 처리했는지 — dragend 의 순서 바꾸기가 겹치지 않게 */
+let galleryDropHandled = false;
 const HINT_DWELL_MS = 450;
 
 /* 화면만 목표 페이지로 넘기고, 끌고 있던 이미지를 그 격자에 넣어준다 */
@@ -2420,12 +2492,17 @@ function initGalleryRoot(host){
   if(addBtn) addBtn.addEventListener('click', ()=>{
     use();
     if(!isLoggedIn) return;
-    const input=document.createElement('input'); input.type='file'; input.accept='image/*';
+    const input=document.createElement('input');
+    input.type='file'; input.accept='image/*'; input.multiple = true;
     input.addEventListener('change', async ()=>{
-      const f=input.files[0]; if(!f) return;
-      const url=await fileToDataUrl(f); const p=galleryPost();
+      const files=Array.from(input.files||[]); if(!files.length) return;
+      const p=galleryPost();
       const folder = getFolder(p, currentGalleryFolderId) || p.galleryFolders[0];
-      folder.images.push(url);
+      // 고른 순서대로 넣습니다 (한 장씩 줄여 담아야 메모리가 덜 튑니다)
+      for(const f of files){
+        const url=await fileToDataUrl(f);
+        folder.images.push(url);
+      }
       await gallerySave(); renderGallery(p);
     });
     input.click();
@@ -2449,8 +2526,14 @@ function initGalleryRoot(host){
   if(next) next.addEventListener('click', ()=>{ if(!next.classList.contains('disabled')) step(1); });
   if(prev) prev.addEventListener('click', ()=>{ if(!prev.classList.contains('disabled')) step(-1); });
 
-  if(wrap && !host.horizontal){
-    wrap.addEventListener('wheel', (e)=>{ step(e.deltaY>0 ? 1 : -1); }, {passive:true});
+  if(wrap){
+    /* 세로 휠은 PAIR 갤러리에서만 씁니다 — OC 창은 세로를 장 넘김에 쓰거든요.
+       가로 휠(트랙패드 좌우 / 마우스는 Shift+휠)은 양쪽 다 받습니다. */
+    wrap.addEventListener('wheel', (e)=>{
+      const dx = wheelDeltaX(e);
+      if(dx){ markOcHandled(e); step(dx>0 ? 1 : -1); return; }
+      if(!host.horizontal && Math.abs(e.deltaY) >= 4) step(e.deltaY>0 ? 1 : -1);
+    }, {passive:true});
   }
 
   /* 손가락 스와이프 — 넘기는 방향에 맞춰 가로/세로를 봅니다 */
@@ -2789,6 +2872,335 @@ function renderOcKeywords(o){
   });
 }
 
+/* ---- 가로 휠 ----
+   트랙패드는 좌우로 밀면 deltaX 가 오지만, 휠 마우스는 Shift 를 누르고
+   굴려도 브라우저에 따라 deltaY 로만 옵니다. 둘 다 가로로 봐줍니다.
+   가로로 처리한 휠은 표시해 두어 OC 창의 장 넘김(세로)이 겹쳐 돌지 않게 합니다. */
+function wheelDeltaX(e){
+  if(Math.abs(e.deltaX) >= 4) return e.deltaX;
+  if(e.shiftKey && Math.abs(e.deltaY) >= 4) return e.deltaY;
+  return 0;
+}
+function markOcHandled(e){ try{ e.__ocHandled = true; }catch(_){} }
+
+/* ---- 오른쪽 칸 넘기기 ----
+   OC 는 [세로 이미지 · 테마곡] 두 장, PAIR 은 [세로 이미지 · TIMELINE ·
+   테마곡 · 메시지] 네 장입니다. 옆으로 미는 동작으로 넘깁니다 —
+   창 자체의 장 넘김은 위아래라 서로 겹치지 않습니다. */
+function makeSidePager(pagesEl, dotsEl){
+  if(!pagesEl) return { set(){}, get(){ return 0; } };
+  let idx = 0;
+  function set(i, animate){
+    const pages = Array.from(pagesEl.querySelectorAll('.side-page'));
+    if(!pages.length) return;
+    idx = clamp(i, 0, pages.length-1);
+    pages.forEach((el,n)=>{
+      el.style.transition = (animate===false) ? 'none' : '';
+      el.style.transform = `translateX(${(n-idx)*100}%)`;
+      el.classList.toggle('active', n===idx);
+    });
+    if(animate===false){
+      void pages[0].offsetWidth;
+      pages.forEach(el=>{ el.style.transition=''; });
+    }
+    if(dotsEl){
+      dotsEl.innerHTML='';
+      pages.forEach((_,n)=>{
+        const d=document.createElement('span');
+        d.className='side-dot'+(n===idx?' active':'');
+        d.addEventListener('click', ()=> set(n));
+        dotsEl.appendChild(d);
+      });
+    }
+  }
+  /* 가로 휠(트랙패드 좌우, 마우스는 Shift+휠) */
+  let lock=0;
+  pagesEl.addEventListener('wheel', (e)=>{
+    const dx = wheelDeltaX(e);
+    if(!dx) return;
+    markOcHandled(e);
+    const now=Date.now();
+    if(now < lock) return;
+    lock = now + 500;
+    set(idx + (dx>0 ? 1 : -1));
+  }, {passive:true});
+  /* 손가락으로 옆으로 밀기 */
+  let x0=null, y0=0;
+  pagesEl.addEventListener('touchstart', (e)=>{
+    if(e.touches.length!==1){ x0=null; return; }
+    x0=e.touches[0].clientX; y0=e.touches[0].clientY;
+  }, {passive:true});
+  pagesEl.addEventListener('touchend', (e)=>{
+    if(x0===null) return;
+    const dx=e.changedTouches[0].clientX-x0, dy=e.changedTouches[0].clientY-y0;
+    x0=null;
+    if(Math.abs(dx)<40 || Math.abs(dx)<=Math.abs(dy)) return;
+    set(idx + (dx<0 ? 1 : -1));
+  }, {passive:true});
+  set(0, false);
+  return { set, get(){ return idx; } };
+}
+let ocSidePager = null, pdSidePager = null;
+function initSidePagers(){
+  ocSidePager = makeSidePager(document.getElementById('ocSidePages'), document.getElementById('ocSideDots'));
+  pdSidePager = makeSidePager(document.getElementById('pdSidePages'), document.getElementById('pdSideDots'));
+}
+
+/* ---- 테마곡 ----
+   곡을 누르면 위 칸(NOW PLAYING)으로 올라오고 그 곡의 가사가 펼쳐집니다.
+   사이트가 직접 소리를 내지는 않습니다 — 음원 파일을 Firestore 에 통째로
+   넣으면 너무 무거워지기 때문입니다.
+   PAIR 과 OC 가 같은 코드를 나눠 쓰므로 요소는 id 가 아니라
+   host.root 안의 클래스로 찾습니다 (갤러리·LOG 와 같은 방식). */
+const OC_THEME_HOST   = { root: document.querySelector('#ocSidePages .oc-theme'),
+  getPost: ()=> getCurrentOc(), save: ()=> saveOc(), idx: 0 };
+const PAIR_THEME_HOST = { root: document.querySelector('#pdSidePages .oc-theme'),
+  getPost: ()=> getCurrentPost(), save: ()=> savePair(), idx: 0 };
+
+function renderThemeSongs(host){
+  const root = host && host.root;
+  if(!root) return;
+  const post = host.getPost();
+  if(!post) return;
+  if(!Array.isArray(post.themeSongs)) post.themeSongs = [];
+  const songs = post.themeSongs;
+  const list = root.querySelector('.oc-theme-list');
+  if(!list) return;
+  if(host.idx >= songs.length) host.idx = 0;
+  const now = songs[host.idx] || null;
+
+  const art=root.querySelector('.oc-theme-now-art');
+  if(art) art.style.backgroundImage = (now && now.cover) ? `url('${now.cover}')` : 'none';
+  const t=root.querySelector('.oc-theme-now-title');
+  if(t) t.innerText = now ? (now.title || '제목 없음') : '테마곡';
+  const a=root.querySelector('.oc-theme-now-artist');
+  if(a) a.innerText = now ? (now.artist || '') : '';
+  /* 막대는 몇 번째 곡인지를 나타냅니다 — 세 곡 중 첫 곡이면 1/3, 다섯 중 넷이면 4/5 */
+  const bar=root.querySelector('.oc-theme-bar span');
+  if(bar) bar.style.width = now ? (((host.idx+1)/songs.length)*100).toFixed(2)+'%' : '0%';
+
+  list.innerHTML='';
+  /* ＋ 곡 추가는 목록 안, 마지막 곡 아래에 붙입니다 */
+  const addBtn=document.createElement('button');
+  addBtn.type='button'; addBtn.className='oc-theme-add'; addBtn.setAttribute('data-editonly','');
+  addBtn.innerText='＋ 곡 추가';
+  addBtn.addEventListener('click', async ()=>{
+    if(!isLoggedIn) return;
+    songs.push({ id:Date.now(), cover:'', title:'제목', artist:'아티스트', lyrics:'' });
+    await host.save();
+    renderThemeSongs(host);
+  });
+
+  if(!songs.length){
+    // 곡이 없을 때는 추가 버튼이 칸 맨 위에 옵니다
+    list.appendChild(addBtn);
+    const empty=document.createElement('div');
+    empty.className='oc-theme-empty';
+    empty.innerText = isLoggedIn ? '아직 넣은 곡이 없어요.' : '등록된 곡이 없어요.';
+    list.appendChild(empty);
+    return;
+  }
+  songs.forEach((s, i)=>{
+    const row=document.createElement('div');
+    row.className='oc-theme-row'+(i===host.idx?' current':'');
+    row.innerHTML =
+      `<div class="oc-theme-art"></div>`
+      + `<div class="oc-theme-meta">`
+      +   `<div class="oc-theme-title" contenteditable="${isLoggedIn}">${escapeHtml(s.title)}</div>`
+      +   `<div class="oc-theme-artist" contenteditable="${isLoggedIn}">${escapeHtml(s.artist)}</div>`
+      + `</div>`
+      + `<button type="button" class="oc-theme-mini oc-theme-del" data-editonly>삭제</button>`
+      /* 가사는 고른 곡에서만 펼쳐집니다 */
+      + `<div class="oc-theme-lyrics" contenteditable="${isLoggedIn}">${escapeHtml(s.lyrics||'')}</div>`;
+
+    const artEl=row.querySelector('.oc-theme-art');
+    if(s.cover) applyThumbBg(artEl, s.cover, 32);
+    else artEl.classList.add('no-cover');
+    artEl.addEventListener('click', (e)=>{
+      if(!isLoggedIn) return;
+      e.stopPropagation();
+      const input=document.createElement('input'); input.type='file'; input.accept='image/*';
+      input.addEventListener('change', async ()=>{
+        const f=input.files[0]; if(!f) return;
+        s.cover = await fileToDataUrl(f);
+        await host.save(); renderThemeSongs(host);
+      });
+      input.click();
+    });
+
+    const bindText=(sel, field)=>{
+      const el=row.querySelector(sel);
+      el.addEventListener('blur', ()=>{
+        if(!isLoggedIn) return;
+        if(s[field]===el.innerText) return;
+        s[field]=el.innerText;
+        host.save(); renderThemeSongs(host);
+      });
+      el.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); el.blur(); } });
+    };
+    bindText('.oc-theme-title','title');
+    bindText('.oc-theme-artist','artist');
+    /* 가사는 줄바꿈을 그대로 쓰므로 innerText 로 주고받습니다 */
+    const lyr=row.querySelector('.oc-theme-lyrics');
+    lyr.addEventListener('click', (e)=> e.stopPropagation());
+    lyr.addEventListener('blur', ()=>{
+      if(!isLoggedIn) return;
+      if(s.lyrics===lyr.innerText) return;
+      s.lyrics=lyr.innerText;
+      host.save();
+    });
+
+    row.querySelector('.oc-theme-del').addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      if(!isLoggedIn) return;
+      if(!confirm(`'${s.title||'이 곡'}' 을 목록에서 뺄까요?`)) return;
+      songs.splice(i,1);
+      if(host.idx>=songs.length) host.idx=0;
+      await host.save(); renderThemeSongs(host);
+    });
+    /* 줄을 누르면 위 칸으로 올라오고 가사가 펼쳐집니다 */
+    row.addEventListener('click', ()=>{
+      if(host.idx===i) return;
+      host.idx = i;
+      renderThemeSongs(host);
+    });
+    list.appendChild(row);
+  });
+  list.appendChild(addBtn);
+}
+
+/* ---- 메시지 (PAIR) ----
+   카톡처럼 주고받는 화면입니다. 캐릭터(상대)는 왼쪽, 페르소나(나)는 오른쪽.
+   사진과 파일은 말풍선 안에 배열로 따로 담습니다 — 본문 HTML 안에 넣으면
+   저장할 때 큰 파일이 문서에 그대로 들어가 용량 제한에 걸립니다.
+   (배열에 담긴 data URL 은 firebase-store 가 알아서 따로 떼어 저장합니다) */
+function renderMessages(p){
+  const list=document.getElementById('pdMsgList');
+  if(!list) return;
+  if(!Array.isArray(p.messages)) p.messages = [];
+  const msgs = p.messages;
+  const save = ()=> savePair();
+  list.innerHTML='';
+
+  if(!msgs.length){
+    const empty=document.createElement('div');
+    empty.className='msg-empty';
+    empty.innerText = isLoggedIn ? '아직 주고받은 말이 없어요.' : '등록된 메시지가 없어요.';
+    list.appendChild(empty);
+  }
+
+  msgs.forEach((m, i)=>{
+    const row=document.createElement('div');
+    row.className='msg-row '+(m.side==='persona'?'persona':'char');
+    /* 페르소나는 오른쪽에서 시작하므로 삭제 버튼이 말풍선 왼쪽에 옵니다 */
+    const delBtn = `<button type="button" class="msg-del" title="삭제">✕</button>`;
+    /* 보기 모드에서 내용이 없으면 글자 칸을 아예 그리지 않습니다 —
+       그래야 사진만 있는 말풍선이 사진에 딱 맞게 붙습니다. */
+    const showText = isLoggedIn || !!(m.text||'').trim();
+    const bubble =
+      `<div class="msg-bubble">`
+      /* data-editonly 를 쓰지 않습니다 — 그 전역 규칙이 아래 .editing 규칙을
+         눌러버려서 항상 보이게 됩니다. 편집 모드 여부는 .editing 쪽에서 봅니다. */
+      +   `<div class="msg-tools">`
+      +     `<button type="button" class="msg-tool msg-img">사진</button>`
+      /* 사진을 누르면 크게 보기가 열리므로 지우기는 여기 버튼으로 합니다 */
+      +     ((m.images||[])[0] ? `<button type="button" class="msg-tool msg-img-del">사진 삭제</button>` : '')
+      +   `</div>`
+      +   `<div class="msg-imgs"></div>`
+      +   (showText ? `<div class="msg-text" contenteditable="${isLoggedIn}"></div>` : '')
+      + `</div>`;
+    row.innerHTML = (m.side==='persona') ? (delBtn + bubble) : (bubble + delBtn);
+
+    const textEl=row.querySelector('.msg-text');
+    if(textEl){
+      textEl.innerText = m.text || '';
+      textEl.addEventListener('blur', ()=>{
+        if(!isLoggedIn) return;
+        if(m.text===textEl.innerText) return;
+        m.text=textEl.innerText;
+        save();
+      });
+    }
+
+    /* 사진 — 한 말풍선에 한 장만 들어갑니다 */
+    const imgs=row.querySelector('.msg-imgs');
+    const shot = (m.images||[])[0];
+    if(shot){
+      const im=document.createElement('img');
+      im.src=shot;
+      im.addEventListener('click', ()=> openGalleryLightbox([shot], 0));
+      imgs.appendChild(im);
+    }
+
+    /* 사진 버튼은 이 말풍선을 고치는 동안에만 위에 뜹니다 */
+    row.querySelectorAll('.msg-tool').forEach(b=> b.addEventListener('mousedown', e=> e.preventDefault()));
+    row.addEventListener('focusin', ()=> setEditingMsgRow(row));
+    row.addEventListener('click', (e)=>{ if(isLoggedIn && !e.target.closest('.msg-del')) setEditingMsgRow(row); });
+
+    row.querySelector('.msg-img').addEventListener('click', ()=>{
+      if(!isLoggedIn) return;
+      const input=document.createElement('input');
+      input.type='file'; input.accept='image/*';
+      input.addEventListener('change', async ()=>{
+        const f=input.files[0]; if(!f) return;
+        m.images=[ await fileToDataUrl(f) ];   // 있던 사진은 갈아 끼웁니다
+        await save(); renderMessages(p);
+      });
+      input.click();
+    });
+    const imgDel=row.querySelector('.msg-img-del');
+    if(imgDel) imgDel.addEventListener('click', async ()=>{
+      if(!isLoggedIn) return;
+      m.images=[];
+      await save(); renderMessages(p);
+    });
+
+    /* 말풍선 자체를 지우는 ✕ (파일 줄의 ✕ 는 위에서 따로 걸었습니다) */
+    const rowDel = (m.side==='persona') ? row.firstElementChild : row.lastElementChild;
+    if(rowDel && rowDel.classList.contains('msg-del')){
+      rowDel.addEventListener('click', async (e)=>{
+        e.stopPropagation();
+        if(!isLoggedIn) return;
+        if(!confirm('이 말풍선을 지울까요?')) return;
+        msgs.splice(i,1);
+        await save(); renderMessages(p);
+      });
+    }
+    list.appendChild(row);
+  });
+
+  /* 목록 끝의 추가 버튼 두 개 */
+  const addRow=document.createElement('div');
+  addRow.className='msg-add-row';
+  const mk=(side, label)=>{
+    const b=document.createElement('button');
+    b.type='button'; b.className='msg-add'; b.innerText=label;
+    b.addEventListener('click', async ()=>{
+      if(!isLoggedIn) return;
+      msgs.push({ id:Date.now(), side, text:'', images:[] });
+      await save();
+      renderMessages(p);
+      const rows=list.querySelectorAll('.msg-row');
+      const last=rows[rows.length-1];
+      if(last){ setEditingMsgRow(last); last.querySelector('.msg-text').focus(); }
+      list.scrollTop = list.scrollHeight;
+    });
+    return b;
+  };
+  addRow.appendChild(mk('char',    '＋ ' + ((p.char && p.char.name) || '상대')));
+  addRow.appendChild(mk('persona', '＋ ' + ((p.persona && p.persona.name) || '나')));
+  list.appendChild(addRow);
+}
+/* 지금 고치는 중인 말풍선 하나에만 표시를 남깁니다 */
+function setEditingMsgRow(row){
+  document.querySelectorAll('.msg-row.editing').forEach(r=>{ if(r!==row) r.classList.remove('editing'); });
+  if(row) row.classList.add('editing');
+}
+document.addEventListener('click', (e)=>{
+  if(e.target.closest && e.target.closest('.msg-row')) return;
+  document.querySelectorAll('.msg-row.editing').forEach(r=> r.classList.remove('editing'));
+});
+
 /* ---- OC 자유 텍스트 서식 ---- */
 function saveOcFree(){
   const o=getCurrentOc();
@@ -2909,8 +3321,10 @@ function fillOcDetail(o){
   bindMeta('ocProfileName','name',o.profile, saveOc);
   bindMeta('ocProfileSub','subtitle',o.profile, saveOc);
   bindMetaContainer('ocMeta', o.profile, saveOc);
-  bindBodyText('ocIntro', o.profile, saveOc);
   renderOcKeywords(o);
+  OC_THEME_HOST.idx = 0;
+  renderThemeSongs(OC_THEME_HOST);
+  if(ocSidePager) ocSidePager.set(0, false);   // 오른쪽 칸은 언제나 세로 이미지부터
 
   const free=document.getElementById('ocFree');
   free.innerHTML = o.freeText || '';
@@ -2971,6 +3385,16 @@ function initOcDetail(){
   const pages = document.getElementById('ocPages');
   if(!pages) return;
 
+  /* 테마곡 목록은 다릅니다 — 스크롤이 생겨 있으면 위아래 끝에 닿아도
+     장을 넘기지 않고 그 칸에서만 스크롤합니다. 곡을 훑어보다가 창이
+     넘어가버리면 곤란하기 때문입니다. 스크롤이 없으면 그냥 넘어갑니다. */
+  const lockedByThemeList = (target)=>{
+    if(!target || !target.closest) return false;
+    const box = target.closest('.oc-theme-list');
+    if(!box) return false;
+    return box.scrollHeight > box.clientHeight + 1;
+  };
+
   /* 안에서 따로 스크롤되는 칸(자유 텍스트 / LOG 표) 위에서는
      그 칸이 끝까지 내려간 뒤에야 페이지를 넘깁니다. */
   const consumedByInnerScroll = (target, down)=>{
@@ -2985,7 +3409,10 @@ function initOcDetail(){
   };
   let wheelLock = 0;
   pages.addEventListener('wheel', (e)=>{
+    // 안쪽에서 가로로 이미 처리한 휠(오른쪽 칸 / 갤러리)은 장 넘김에 쓰지 않습니다
+    if(e.__ocHandled || wheelDeltaX(e)) return;
     if(Math.abs(e.deltaY) < 4) return;
+    if(lockedByThemeList(e.target)) return;
     if(consumedByInnerScroll(e.target, e.deltaY>0)) return;
     const now = Date.now();
     if(now < wheelLock) return;
@@ -3006,6 +3433,7 @@ function initOcDetail(){
     if(document.body.classList.contains('touch-dragging')) return;
     if(Math.abs(dy)<50 || Math.abs(dy)<Math.abs(dx)) return;
     // 안에서 아직 더 스크롤될 곳이 남았으면 페이지를 넘기지 않습니다
+    if(lockedByThemeList(startTarget)) return;
     if(consumedByInnerScroll(startTarget, dy<0)) return;
     setOcPage(ocPageIdx + (dy<0 ? 1 : -1));
   }, {passive:true});
@@ -3922,6 +4350,7 @@ async function boot(){
   initLogRoot(PAIR_LOG_HOST);
   initLogRoot(OC_LOG_HOST);
   initOcDetail();
+  initSidePagers();
   initMobileDrawer();
   initHomeTouchNav();
   initLightboxSwipe();
