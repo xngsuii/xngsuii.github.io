@@ -11,7 +11,7 @@
      css/js를 고칠 때마다 이 숫자를 함께 올려주세요.
      올리지 않으면 브라우저가 옛 파일을 계속 써서
      새 HTML과 짝이 맞지 않아 화면이 깨질 수 있습니다. -->
-<link rel="stylesheet" href="css/style.css?v=31" />
+<link rel="stylesheet" href="css/style.css?v=35" />
 </head>
 <body>
 <div class="app-window">
@@ -81,7 +81,8 @@
             <button class="to-intro-btn" id="toIntroBtn" aria-label="위로">︽</button>
           </div>
           <div class="cards-section">
-            <div class="card-grid" id="cardGrid"></div>
+            <!-- 카드가 여섯 장을 넘으면 여기 안에서 장이 나뉘어 위아래로 넘어갑니다 -->
+            <div class="card-pages" id="cardPages"></div>
           </div>
         </div>
 
@@ -157,6 +158,18 @@
 </div>
 
 <!-- ================= MODALS ================= -->
+
+<!-- 확인 창 — 브라우저 기본 창 대신 사이트 모양에 맞춘 것.
+     다른 창 위에서도 열리므로 z-index 를 한 단계 위로 둡니다. -->
+<div class="modal-overlay" id="modalConfirm">
+  <div class="modal confirm-modal">
+    <div class="confirm-text" id="confirmText"></div>
+    <div class="form-actions">
+      <button type="button" class="btn-ghost" id="confirmCancel">취소</button>
+      <button type="button" class="btn-ghost gf-danger" id="confirmOk">삭제</button>
+    </div>
+  </div>
+</div>
 
 <div class="modal-overlay" id="modalLogin">
   <div class="modal login-modal">
@@ -691,7 +704,7 @@
 </div>
 
 
-<script src="js/main.js?v=31"></script>
-<script type="module" src="js/firebase-store.js?v=31"></script>
+<script src="js/main.js?v=35"></script>
+<script type="module" src="js/firebase-store.js?v=35"></script>
 </body>
 </html>

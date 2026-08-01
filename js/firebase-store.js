@@ -22,7 +22,7 @@ import {
   getFirestore, doc, getDoc, setDoc, deleteDoc,
   collection, getDocs, writeBatch
 } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
-import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=31';
+import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=35';
 
 const app  = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -474,11 +474,17 @@ const SiteStore = {
      flushNow() 가 영영 끝나지 않아 로그아웃 버튼이 아무 반응도 하지 않는
      것처럼 보입니다. 3초만 기다렸다가 그냥 로그아웃합니다. */
   async signOut() {
-    await Promise.race([
-      flushNow().catch(() => {}),
-      new Promise(res => setTimeout(res, 3000))
-    ]);
-    await signOut(auth);
+    const wait = (ms) => new Promise(res => setTimeout(res, ms));
+    await Promise.race([flushNow().catch(() => {}), wait(3000)]);
+    /* signOut 자체도 기다려주지 않을 수 있습니다(IndexedDB·네트워크가 막힌 경우).
+       화면이 편집 모드에 갇히지 않도록 시간을 두고, 끝나면 어떤 경우든
+       보기 모드로 되돌립니다. 서버 권한은 어차피 Firestore 규칙이 봅니다. */
+    try { await Promise.race([signOut(auth), wait(4000)]); }
+    catch (e) { console.error('로그아웃 처리 중 오류', e); }
+    if (isAdmin) {
+      isAdmin = false;
+      listeners.forEach(fn => { try { fn(false); } catch (e) { console.error(e); } });
+    }
   },
 
   async load() { await loadAll(); },

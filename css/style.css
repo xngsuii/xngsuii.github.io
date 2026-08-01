@@ -121,13 +121,19 @@
   /* 구분선: 위/아래 보더에 맞닿도록 세로로 꽉 채움 */
   .li-divider{width:1px;background:var(--border);flex:none;}
   .li-label{display:flex;align-items:center;padding-left:14px;}
-  .cards-section{padding:0;}
-  .card-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:0;border-left:1px solid var(--border);}
+  /* 카드 여섯 장이 남은 높이를 꽉 채웁니다 (2열 x 3행).
+     여섯 장이 넘으면 아래 .card-page 로 나뉘어 위아래로 넘어갑니다. */
+  .cards-section{padding:0;flex:1;min-height:0;display:flex;}
+  .card-pages{position:relative;flex:1;min-height:0;overflow:hidden;}
+  .card-page{position:absolute;inset:0;display:flex;background:var(--bg);
+    transition:transform .45s cubic-bezier(.4,0,.2,1);}
+  .card-grid{display:grid;grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(3,1fr);
+    gap:0;border-left:1px solid var(--border);flex:1;min-height:0;}
   .add-card-mini{width:26px;height:26px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;display:flex;align-items:center;justify-content:center;flex:none;align-self:center;}
   .add-card-mini:hover{background:var(--surface-2);}
   .add-card{border:none;border-right:1px solid var(--border);border-bottom:1px solid var(--border);aspect-ratio:2.5/1;display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--text-muted);background:var(--surface);}
   .add-card:hover{background:var(--surface-2);color:var(--text);}
-  .dream-card{position:relative;overflow:hidden;aspect-ratio:2.5/1;border:none;border-right:1px solid var(--border);border-bottom:1px solid var(--border);background:#222;color:#fff;}
+  .dream-card{position:relative;overflow:hidden;min-height:0;border:none;border-right:1px solid var(--border);border-bottom:1px solid var(--border);background:#222;color:#fff;}
   .dream-card.dragging{opacity:.4;}
   .dream-card .dc-adjustable{position:absolute;inset:0;}
   /* 그라데이션을 카드 왼쪽 절반(0~50%)으로 압축.
@@ -165,6 +171,16 @@
   @media (hover:hover){ .post-card:hover{box-shadow:0 4px 14px rgba(0,0,0,.12);} }
   /* 칸 높이가 행(1fr)으로 정해지므로 썸네일이 남은 높이를 가져갑니다 */
   .post-thumb{width:100%;flex:1;min-height:0;background:var(--surface-2) center/cover no-repeat;}
+  /* ---- 목록 썸네일 위치 조정 ----
+     선택 모드에서 ✥ 를 누르면 그 썸네일만 끌어서 보이는 자리를 옮길 수 있습니다
+     (글 순서가 아니라 이 이미지의 어느 부분을 보여줄지만 바뀝니다). */
+  .thumb-pan-btn{position:absolute;top:4px;right:4px;z-index:4;width:20px;height:20px;
+    display:flex;align-items:center;justify-content:center;font-size:10px;line-height:1;
+    border:1px solid var(--border);background:var(--border);color:var(--bg);}
+  .thumb-pan-btn:hover{background:#3d3933;}
+  .thumb-pan-btn.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .thumb-panning{cursor:move;}
+  .thumb-panning .gt-img,.thumb-panning .an-img{cursor:move;}
   .post-info{padding:10px 12px;flex:none;}
   .post-type{font-family:var(--mono);font-size:9.5px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.05em;}
   .post-title{font-size:13px;font-weight:700;margin-top:2px;}
@@ -238,12 +254,15 @@
   /* 이 칸은 라벨만 담습니다 (본문 글 없음) */
   .oc-info-main .pd-desc-box{flex:none;overflow:visible;}
   .oc-label-box .meta-container{margin-bottom:0;}
-  /* 이름은 서브타이틀처럼 상자 없이 바탕 위에 바로 올립니다 */
-  .oc-info-main .pd-name-input,
-  body.logged-in .oc-info-main .pd-name-input{width:100%;border-color:transparent;
+  /* 이름은 서브타이틀처럼 상자 없이 바탕 위에 바로 올립니다 (OC·PAIR 공통) */
+  .oc-info-main .pd-name-input, .pd-info-main .pd-name-input,
+  body.logged-in .oc-info-main .pd-name-input,
+  body.logged-in .pd-info-main .pd-name-input{width:100%;border-color:transparent;
     background:transparent;padding-left:0;padding-right:0;}
   body.logged-in .oc-info-main .pd-name-input:hover,
-  body.logged-in .oc-info-main .pd-name-input:focus{background:var(--surface);}
+  body.logged-in .oc-info-main .pd-name-input:focus,
+  body.logged-in .pd-info-main .pd-name-input:hover,
+  body.logged-in .pd-info-main .pd-name-input:focus{background:var(--surface);}
   /* 오른쪽 칸은 여러 장짜리입니다 — OC 는 세로 이미지 / 테마곡,
      PAIR 는 세로 이미지 / TIMELINE / 테마곡 / 메시지.
      옆으로 밀거나(터치·가로 휠) 아래 점을 눌러 넘깁니다. */
@@ -287,7 +306,25 @@
     padding:10px;overflow-y:auto;overscroll-behavior:contain;}
   .oc-free-box .oc-free{min-height:100%;border:none;padding:0;}
   body.logged-in .oc-free-box .oc-free{border:none;padding:0;}
-  .oc-free-box .oc-free:empty:before{content:'자유롭게 적어보세요...';color:var(--text-muted);}
+  body.logged-in .oc-free-box .oc-free:empty:before{content:'자유롭게 적어보세요...';color:var(--text-muted);}
+
+  /* ---- 예시 글자 ----
+     기본값을 지우고 다시 쓰지 않도록, 값은 비워두고 자리만 알려줍니다.
+     보기 모드에서는 빈 칸이 그냥 비어 보여야 하므로 편집 모드에서만 띄웁니다. */
+  body.logged-in .meta-label:empty:before{content:'라벨';color:var(--text-muted);opacity:.7;}
+  body.logged-in .meta-value:empty:before{content:'값';color:var(--text-muted);opacity:.7;}
+  body.logged-in .oc-theme-title:empty:before{content:'제목';color:var(--text-muted);opacity:.7;}
+  body.logged-in .oc-theme-artist:empty:before{content:'아티스트';color:var(--text-muted);opacity:.7;}
+  body.logged-in .oc-kw:empty:before{content:'키워드';color:var(--text-muted);opacity:.7;font-weight:400;}
+  body.logged-in .kw-text:empty:before{content:'키워드';opacity:.55;}
+  body.logged-in .rel-label:empty:before{content:'RELATIONSHIP';opacity:.6;}
+  body.logged-in .rel-text:empty:before{content:'관계를 적어보세요';color:var(--text-muted);opacity:.7;}
+  body.logged-in .dc-genre:empty:before{content:'장르';opacity:.6;}
+  body.logged-in .dc-name:empty:before{content:'이름';opacity:.6;}
+  body.logged-in .dc-catch:empty:before{content:'캐치프레이즈';opacity:.6;}
+  body.logged-in .dc-desc:empty:before{content:'설명을 적어보세요';opacity:.6;}
+  body.logged-in .tl-title:empty:before{content:'제목';color:var(--text-muted);opacity:.7;}
+  body.logged-in .tl-content:empty:before{content:'내용을 입력하세요';opacity:.7;}
   .oc-free-box img{max-width:100%;display:block;margin:8px 0;}
 
   /* ---- 테마곡 ----
@@ -324,6 +361,13 @@
     content:'가사를 적어보세요';color:var(--text-muted);opacity:.7;}
   body.logged-in .oc-theme-row.current .oc-theme-lyrics:hover,
   body.logged-in .oc-theme-row.current .oc-theme-lyrics:focus{background:var(--surface);}
+  /* 편집 모드에서 이 손잡이를 끌면 곡 순서가 바뀝니다
+     (제목·아티스트가 글자 편집 칸이라 줄 전체를 끌게 하지 않습니다) */
+  .oc-theme-grip{flex:none;width:12px;text-align:center;color:var(--text-muted);
+    font-size:9px;line-height:1;cursor:grab;user-select:none;display:none;}
+  body.logged-in .oc-theme-grip{display:block;}
+  .oc-theme-row.dragging{opacity:.4;}
+  .oc-theme-row.drop-target{border-color:var(--accent);background:var(--surface);}
   .oc-theme-art{width:30px;height:30px;flex:none;background:var(--surface-2) center/cover no-repeat;
     border:1px solid var(--border);display:flex;align-items:center;justify-content:center;}
   /* 표지가 없을 때 — 어두운 칸(--border #1a1a1a) 한가운데에 주황 ▶ (#c1440e) */
@@ -445,6 +489,11 @@
   .modal-overlay.open{display:flex;}
   .modal{background:var(--bg);border-radius:0;border:1px solid var(--border);max-width:520px;width:100%;max-height:88vh;overflow-y:auto;padding:24px;position:relative;}
   .modal.wide{max-width:900px;}
+  /* 확인 창 — 다른 창 위에서도 열리므로 한 단계 위에 둡니다 */
+  #modalConfirm{z-index:200;}
+  .modal.confirm-modal{max-width:360px;padding:22px 22px 18px;}
+  .confirm-text{font-size:12.5px;line-height:1.7;color:var(--text);white-space:pre-line;}
+  .confirm-modal .form-actions{margin-top:18px;}
   /* 로그인 창은 입력 항목이 두 개뿐이라 좁게 */
   .modal.login-modal{max-width:416px;}
   /* 오버레이 여백(12px)을 뺀 나머지를 전부 쓴다 — 1920x1080(실측 뷰포트 919px)에서 스크롤 없이 들어와야 함 */
@@ -770,7 +819,8 @@
   .gallery-grid-ghost{position:absolute;pointer-events:none;z-index:2;}
   /* 위/아래 힌트는 가장자리에서 같은 거리(4px)에 둬야
      썸네일과의 간격이 위아래 대칭으로 맞습니다. */
-  .gallery-scroll-hint{position:absolute;left:50%;bottom:4px;transform:translateX(-50%);color:var(--accent);font-size:26px;font-weight:900;line-height:1;-webkit-text-stroke:1.5px var(--accent);text-shadow:0 1px 0 var(--accent),0 2px 4px rgba(0,0,0,.25);animation:gallery-bounce 1.4s infinite;pointer-events:none;z-index:4;}
+  /* 눌러서도 넘길 수 있습니다 (휠·스와이프도 그대로) */
+  .gallery-scroll-hint{position:absolute;left:50%;bottom:4px;transform:translateX(-50%);color:var(--accent);font-size:26px;font-weight:900;line-height:1;-webkit-text-stroke:1.5px var(--accent);text-shadow:0 1px 0 var(--accent),0 2px 4px rgba(0,0,0,.25);animation:gallery-bounce 1.4s infinite;pointer-events:auto;cursor:pointer;z-index:4;}
   @keyframes gallery-bounce{0%,100%{transform:translate(-50%,0);}50%{transform:translate(-50%,4px);}}
   /* 위쪽 페이지가 있을 때 상단에 뜨는 힌트.
      ︽ 와 ︾ 는 같은 26px 상자 안에서 글자가 그려지는 높이가 7px 다릅니다
@@ -999,7 +1049,15 @@
     .to-cards-btn{display:flex;width:40px;height:40px;bottom:16px;color:var(--accent);font-size:16px;}
     .to-intro-btn{display:flex;width:34px;height:34px;flex:none;align-self:center;
       margin-left:8px;color:var(--accent);font-size:14px;}
-    .card-grid{grid-template-columns:1fr;}
+    /* 한 열이 되면 여섯 장을 한 화면에 우겨넣을 수 없으므로
+       데스크톱의 '남은 높이 나눠 쓰기'를 풀고 원래대로 비율만 유지합니다 */
+    .cards-section{display:block;flex:none;}
+    /* 좁은 화면에서는 장으로 나누지 않고 전부 이어 붙여 스크롤합니다
+       (JS 가 넣어둔 인라인 transform 을 여기서 되돌립니다) */
+    .card-pages{position:static;display:block;overflow:visible;flex:none;}
+    .card-page{position:static;transform:none !important;transition:none;display:block;}
+    .card-grid{grid-template-columns:1fr;grid-template-rows:none;flex:none;}
+    .dream-card{aspect-ratio:2.5/1;}
     .dream-card .dc-content{max-width:88%;padding:12px 14px;}
     /* 1열이 되면 카드가 넓어져 왼쪽 그라데이션만으로는 글자가 안 읽힙니다 */
     .dream-card .dc-grad{background:linear-gradient(90deg, rgba(0,0,0,.85) 0%, rgba(0,0,0,.6) 34%, rgba(0,0,0,0) 74%);}

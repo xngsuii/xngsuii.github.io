@@ -6,6 +6,11 @@
    Firestore 보안 규칙이 서버에서 최종 확인합니다. */
 let isLoggedIn = false;
 
+/* 한 군데가 터져도 나머지 화면은 계속 그리도록 감쌉니다 —
+   예전에 렌더 한 곳이 예외를 내면 그 뒤가 통째로 멈춰 편집 모드에 갇혔습니다. */
+function safely(label, fn){
+  try{ fn(); }catch(e){ console.error(label+' 그리기 실패', e); }
+}
 function applyEditMode(){
   document.body.classList.toggle('logged-in', isLoggedIn);
   document.getElementById('loginBadge').innerText = isLoggedIn ? 'UNLOCKED' : 'LOCKED';
@@ -16,22 +21,39 @@ function applyEditMode(){
   document.getElementById('siteName').readOnly = !isLoggedIn;
   document.getElementById('homeIntro').contentEditable = isLoggedIn ? 'true' : 'false';
 
-  introBannerAdj && introBannerAdj.paint();
-  renderCards();
-  renderOcPosts();
-  renderArchive();
-  if(currentPairPostId){
+  safely('배너', ()=>{ introBannerAdj && introBannerAdj.paint(); });
+  safely('카드', renderCards);
+  safely('OC 목록', renderOcPosts);
+  safely('ARCHIVE', renderArchive);
+  safely('PAIR 상세', ()=>{
+    if(!currentPairPostId) return;
     const p = getCurrentPost();
     if(p) fillPairDetail(p);
-  }
-  if(currentOcId && document.getElementById('modalOcDetail').classList.contains('open')){
+  });
+  safely('OC 상세', ()=>{
+    if(!(currentOcId && document.getElementById('modalOcDetail').classList.contains('open'))) return;
     const o = getCurrentOc();
     if(o) fillOcDetail(o);
-  }
+  });
 }
 
-document.getElementById('loginBtn').addEventListener('click', async ()=>{
-  if(isLoggedIn){ await window.SiteStore.signOut(); }
+const loginBtnEl = document.getElementById('loginBtn');
+loginBtnEl.addEventListener('click', async ()=>{
+  if(isLoggedIn){
+    /* 저장이 밀려 있으면 몇 초 걸릴 수 있어 버튼을 잠가 둡니다 */
+    loginBtnEl.disabled = true;
+    const before = loginBtnEl.innerText;
+    loginBtnEl.innerText = '로그아웃 중…';
+    try{
+      await window.SiteStore.signOut();
+    }catch(e){
+      console.error('로그아웃 실패', e);
+      alert('로그아웃하지 못했어요. 잠시 뒤 다시 눌러주세요.');
+    }finally{
+      loginBtnEl.disabled = false;
+      if(loginBtnEl.innerText==='로그아웃 중…') loginBtnEl.innerText = before;
+    }
+  }
   else{
     document.getElementById('loginId').value='';
     document.getElementById('loginPw').value='';
@@ -162,7 +184,7 @@ function migrateOcPost(o){
   o.profile.image = normalizeImg(o.profile.image);
   if(o.quote == null) o.quote = '';
   migrateThemeSongs(o);
-  if(!Array.isArray(o.keywords) || o.keywords.length !== 3) o.keywords = ['키워드','키워드','키워드'];
+  if(!Array.isArray(o.keywords) || o.keywords.length !== 3) o.keywords = ['','',''];
   if(o.freeText == null) o.freeText = '';
   if(!o.folderId) o.folderId = OC_DEFAULT_FOLDER;
   o.log = o.log || [];
@@ -229,7 +251,7 @@ function migratePost(old){
     char:{ name:'', subtitle:'', gender:'', age:'', height:'', keywords:defaultKw(), intro: old.charProfile||'', metaHtml:'', image: normalizeImg(old.charImg) },
     persona:{ name:'', subtitle:'', gender:'', age:'', height:'', keywords:defaultKw(), intro: old.personaProfile||'', metaHtml:'', image: normalizeImg(old.personaImg) },
     relCharToPersona:'', relPersonaToChar:'',
-    relLabelCharToPersona:'Relationship', relLabelPersonaToChar:'Relationship',
+    relLabelCharToPersona:'', relLabelPersonaToChar:'',
     log: old.log||[], gallery: old.gallery||[], timeline: old.timeline||[]
   };
   splitLegacyIntro(migrated.char);
@@ -285,7 +307,8 @@ function migrateGalleryFolders(p){
     }
   });
 }
-function defaultKw(){ return [{text:'키워드',color:'#4b4bff'},{text:'키워드',color:'#4b4bff'},{text:'키워드',color:'#4b4bff'}]; }
+/* 예시 글자는 값이 아니라 자리 표시로 둡니다 — 지우고 다시 쓸 필요가 없게 */
+function defaultKw(){ return [{text:'',color:'#4b4bff'},{text:'',color:'#4b4bff'},{text:'',color:'#4b4bff'}]; }
 function migrateArchiveItem(item){
   if(item.title!==undefined && item.date!==undefined && item.kind===undefined){
     if(!item.category) item.category='ooc';
@@ -408,9 +431,103 @@ function applyThumbBg(el, src, boxPx){
   });
 }
 
+/* ---- 목록 썸네일 위치 조정 (PAIR · OC · PROMPT 공용) ----
+   선택 모드에서 ✥ 를 누르면 그 썸네일만 끌어서 보이는 자리를 옮깁니다.
+   글 순서와는 상관없고, 저장되는 것은 item.thumbPos = {x,y} (% 단위)뿐입니다.
+   갤러리 썸네일은 대상이 아닙니다. */
+let panningThumbEl = null;
+function thumbPosOf(item){
+  if(!item.thumbPos || typeof item.thumbPos.x!=='number') item.thumbPos = { x:50, y:50 };
+  return item.thumbPos;
+}
+function applyThumbPos(el, item){
+  const pos = thumbPosOf(item);
+  el.style.backgroundPosition = pos.x+'% '+pos.y+'%';
+}
+/* card: 카드 요소, imgEl: 배경을 그리는 요소, item: 글, save: 저장 함수 */
+function addThumbPanControl(card, imgEl, item, save){
+  if(!isLoggedIn || !imgEl) return;
+  const btn=document.createElement('button');
+  btn.type='button'; btn.className='thumb-pan-btn'; btn.title='이미지 위치 조정';
+  btn.innerText='✥';
+  btn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    const on = !card.classList.contains('thumb-panning');
+    stopThumbPan();
+    if(on){
+      card.classList.add('thumb-panning');
+      btn.classList.add('on');
+      panningThumbEl = card;
+    }
+  });
+  card.appendChild(btn);
+
+  /* 조정 중에는 카드 클릭(선택 토글)이 아니라 끌기로 동작합니다 */
+  let dragging=false, sx=0, sy=0, ox=50, oy=50;
+  const down=(e)=>{
+    if(!card.classList.contains('thumb-panning')) return;
+    if(e.target.closest('.thumb-pan-btn')) return;
+    e.preventDefault(); e.stopPropagation();
+    const pos=thumbPosOf(item);
+    dragging=true; sx=e.clientX; sy=e.clientY; ox=pos.x; oy=pos.y;
+    try{ card.setPointerCapture(e.pointerId); }catch(_){}   // 캡처 실패는 무시(끌기는 그대로 동작)
+  };
+  const move=(e)=>{
+    if(!dragging) return;
+    const rect=imgEl.getBoundingClientRect();
+    const pos=thumbPosOf(item);
+    pos.x = clamp(ox - ((e.clientX-sx)/Math.max(1,rect.width))*100, 0, 100);
+    pos.y = clamp(oy - ((e.clientY-sy)/Math.max(1,rect.height))*100, 0, 100);
+    applyThumbPos(imgEl, item);
+  };
+  const up=async ()=>{ if(!dragging) return; dragging=false; await save(); };
+  /* PROMPT 썸네일은 이미지 위에 '커서를 올리면 어두워지는 덮개'가 깔려 있어
+     이미지 자체는 포인터를 받지 못합니다. 그래서 카드에 겁니다(거리 계산만
+     이미지 칸 기준). PAIR·OC 도 같은 방식이라 동작이 통일됩니다. */
+  card.addEventListener('pointerdown', down);
+  card.addEventListener('pointermove', move);
+  card.addEventListener('pointerup', up);
+  card.addEventListener('pointercancel', up);
+  /* 조정 중에는 카드 클릭이 선택 토글로 새지 않게 막습니다 */
+  card.addEventListener('click', (e)=>{
+    if(card.classList.contains('thumb-panning') && !e.target.closest('.thumb-pan-btn')){
+      e.stopPropagation();
+    }
+  }, true);
+}
+function stopThumbPan(){
+  document.querySelectorAll('.thumb-panning').forEach(el=> el.classList.remove('thumb-panning'));
+  document.querySelectorAll('.thumb-pan-btn.on').forEach(el=> el.classList.remove('on'));
+  panningThumbEl = null;
+}
+
 /* ============================================================
    REUSABLE ADJUSTABLE IMAGE COMPONENT
    ============================================================ */
+/* 그림의 원래 가로세로 비를 기억해 둡니다 (칸을 꽉 채우는 배율 계산용) */
+const imgRatioCache = new Map();
+function imageRatio(src){
+  if(!src) return Promise.resolve(null);
+  if(imgRatioCache.has(src)) return Promise.resolve(imgRatioCache.get(src));
+  return new Promise(res=>{
+    const im=new Image();
+    im.onload=()=>{ const r = im.naturalHeight ? im.naturalWidth/im.naturalHeight : null;
+      imgRatioCache.set(src, r); res(r); };
+    im.onerror=()=>{ imgRatioCache.set(src, null); res(null); };
+    im.src=src;
+  });
+}
+/* 확대 0(=100%)일 때 칸에 여백이 남지 않도록, 짧은 쪽을 기준으로 채우는 배율.
+   background-size 를 '너비 %' 로 주고 있으므로 그 % 를 돌려줍니다. */
+function coverPercent(container, src){
+  const r = imgRatioCache.get(src);
+  if(!r) return 100;
+  const cw = container.clientWidth, ch = container.clientHeight;
+  if(!cw || !ch) return 100;
+  const boxRatio = cw/ch;
+  return r > boxRatio ? (r/boxRatio)*100 : 100;
+}
+
 function createAdjustable(container, getObj, setObj, opts={}){
   const layer = container.querySelector('.adj-layer');
   const emptyBtn = container.querySelector('.adj-empty');
@@ -434,16 +551,38 @@ function createAdjustable(container, getObj, setObj, opts={}){
     const o = getObj() || blankImg();
     if(o.src){
       layer.style.backgroundImage = `url(${o.src})`;
+      /* 확대가 0(100%)일 때는 CSS 의 cover 에 맡깁니다 — % 로 계산하면
+         칸 크기가 소수점일 때 1px 안팎이 모자라 한쪽에 흰 줄이 남습니다.
+         확대한 뒤에만 '꽉 채우는 크기 x 배율' 로 키웁니다. */
+      const scale = o.scale || 100;
+      /* 사진을 넣을 때 적어둔 비율이 있으면 그대로 씁니다 —
+         비율을 다시 재는 동안 확대 전 크기로 한 번 그려지는 것을 막습니다. */
+      if(o.ratio && !imgRatioCache.has(o.src)) imgRatioCache.set(o.src, o.ratio);
+      const known = imgRatioCache.has(o.src);
+      if(!known){
+        imageRatio(o.src).then(r=>{
+          if(r && !o.ratio){ o.ratio = r; }   // 다음 번엔 기다리지 않도록 적어둡니다
+          if(container.isConnected) paint();
+        });
+      }
+      const cover = coverPercent(container, o.src);
+      const useCover = (scale <= 100) || !known;
+      const fill = cover * (scale/100);
+      /* 확대해 둔 사진인데 비율을 아직 모르면, 잠깐 확대 안 된 크기로 그렸다가
+         곧바로 커지는 것이 눈에 띕니다. 비율이 올 때까지 감춰 둡니다
+         (사진은 이미 메모리에 있어 보통 한 프레임 안에 끝납니다). */
+      layer.style.visibility = (scale > 100 && !known) ? 'hidden' : '';
       // background-size가 컨테이너 기준 %라서 축소본으로 바꿔도 확대/위치 값은 그대로 유효하다
-      const needPx = (container.clientWidth||0) * ((o.scale||100)/100);
+      const needPx = (container.clientWidth||0) * (useCover ? cover/100 : fill/100);
       if(needPx){ thumbRetries = 0; applyThumbBg(layer, o.src, needPx); }
       else retryThumbWhenSized();
-      layer.style.backgroundSize = (o.scale||100)+'% auto';
+      layer.style.backgroundSize = useCover ? 'cover' : (fill.toFixed(2)+'% auto');
       layer.style.backgroundPosition = (o.x!=null?o.x:50)+'% '+(o.y!=null?o.y:50)+'%';
       if(emptyBtn) emptyBtn.style.display='none';
       if(changeBtn) changeBtn.style.display = isLoggedIn?'flex':'none';
     }else{
       layer.style.backgroundImage='';
+      layer.style.visibility='';
       if(emptyBtn) emptyBtn.style.display = isLoggedIn?'flex':'none';
       if(changeBtn) changeBtn.style.display='none';
     }
@@ -455,7 +594,9 @@ function createAdjustable(container, getObj, setObj, opts={}){
     input.onchange = async ()=>{
       const f = input.files[0]; if(!f) return;
       const url = await fileToDataUrl(f);
-      const o = { src:url, scale:100, x:50, y:50 };
+      // 비율을 미리 재 두면 다음에 열 때 확대 크기를 바로 잡을 수 있습니다
+      const ratio = await imageRatio(url);
+      const o = { src:url, scale:100, x:50, y:50, ratio: ratio || null };
       setObj(o); paint();
       if(autoAdjust) openPanel();
     };
@@ -596,13 +737,52 @@ document.querySelectorAll('#archiveSub .nav-sub-item').forEach(btn=>{
 
 const homePagesWrap = document.getElementById('homePagesWrap');
 const homeCardsPageEl = document.getElementById('home-cards-page');
+/* 카드가 여섯 장을 넘으면 여러 장으로 나눠 담고 스크롤로 넘깁니다.
+   LOVE INTEREST 줄은 그대로 있고 카드 칸만 밀려납니다. 점 표시는 두지 않습니다. */
+const CARDS_PER_PAGE = 6;
+let cardPageIdx = 0;
+function cardPageCount(){
+  return Math.max(1, Math.ceil((state.cards ? state.cards.length : 0)/CARDS_PER_PAGE));
+}
+function setCardPage(idx, animate){
+  const wrap = document.getElementById('cardPages');
+  if(!wrap) return;
+  const pages = Array.from(wrap.querySelectorAll('.card-page'));
+  if(!pages.length) return;
+  cardPageIdx = clamp(idx, 0, pages.length-1);
+  pages.forEach((el,n)=>{
+    el.style.transition = (animate===false) ? 'none' : '';
+    el.style.transform = `translateY(${(n-cardPageIdx)*100}%)`;
+  });
+  if(animate===false){
+    void pages[0].offsetWidth;
+    pages.forEach(el=>{ el.style.transition=''; });
+  }
+}
+let cardWheelLock = 0;
 homePagesWrap.addEventListener('wheel', (e)=>{
   const showingCards = homePagesWrap.classList.contains('show-cards');
   if(!showingCards){
     if(e.deltaY>0){ homePagesWrap.classList.add('show-cards'); }
-  }else{
-    if(e.deltaY<0 && homeCardsPageEl.scrollTop<=0){ homePagesWrap.classList.remove('show-cards'); }
+    return;
   }
+  /* 카드 장이 여럿이면 먼저 그 안에서 넘깁니다.
+     첫 장에서 더 올리면 그때 소개 화면으로 돌아갑니다. */
+  const last = cardPageCount()-1;
+  const now = Date.now();
+  if(e.deltaY>0 && cardPageIdx < last){
+    if(now < cardWheelLock) return;
+    cardWheelLock = now + 500;
+    setCardPage(cardPageIdx+1);
+    return;
+  }
+  if(e.deltaY<0 && cardPageIdx > 0){
+    if(now < cardWheelLock) return;
+    cardWheelLock = now + 500;
+    setCardPage(cardPageIdx-1);
+    return;
+  }
+  if(e.deltaY<0 && homeCardsPageEl.scrollTop<=0){ homePagesWrap.classList.remove('show-cards'); }
 }, {passive:true});
 
 /* ============================================================
@@ -643,7 +823,7 @@ const introBannerAdj = createAdjustable(
    ============================================================ */
 bindOnce(document.getElementById('addCardBtn'), async ()=>{
   if(!isLoggedIn) return;
-  state.cards.push({ id:Date.now(), name:'이름', catch:'캐치프레이즈', genre:'장르', desc:'짧은 소개글을 입력하세요.', image:blankImg() });
+  state.cards.push({ id:Date.now(), name:'', catch:'', genre:'', desc:'', image:blankImg() });
   await storageSet('cards', state.cards);
   renderCards();
 });
@@ -669,6 +849,60 @@ function bindOnce(el, handler){
 }
 
 /* FLIP 기반 실시간 드래그 재정렬 유틸 */
+/* 브라우저 기본 확인 창 대신 쓰는 사이트 모양의 확인 창.
+   true/false 를 돌려주므로 confirm() 자리에 await 로 그대로 넣으면 됩니다. */
+function siteConfirm(message, okText){
+  const ov = document.getElementById('modalConfirm');
+  if(!ov) return Promise.resolve(window.confirm(message));   // 옛 HTML 이면 기본 창으로
+  return new Promise(res=>{
+    const textEl = document.getElementById('confirmText');
+    const ok = document.getElementById('confirmOk');
+    const cancel = document.getElementById('confirmCancel');
+    textEl.innerText = message;
+    ok.innerText = okText || '삭제';
+    const finish = (v)=>{
+      ov.classList.remove('open');
+      ok.onclick = null; cancel.onclick = null; ov.onclick = null;
+      document.removeEventListener('keydown', onKey, true);
+      res(v);
+    };
+    const onKey = (e)=>{
+      if(e.key==='Escape'){ e.stopPropagation(); finish(false); }
+      else if(e.key==='Enter'){ e.stopPropagation(); finish(true); }
+    };
+    ok.onclick = ()=> finish(true);
+    cancel.onclick = ()=> finish(false);
+    ov.onclick = (e)=>{ if(e.target===ov) finish(false); };
+    document.addEventListener('keydown', onKey, true);
+    ov.classList.add('open');
+    setTimeout(()=>{ try{ ok.focus(); }catch(_){} }, 30);
+  });
+}
+
+/* 같은 자리를 지키는 것이 아니라 '어떤 항목'인지로 짝을 맞추는 FLIP.
+   목록을 통째로 다시 그린 뒤에도 밀려나는 움직임을 보여줄 수 있습니다. */
+function flipByKey(container, itemSelector, keyName){
+  const before = new Map();
+  container.querySelectorAll(itemSelector).forEach(el=>{
+    if(el.dataset[keyName]!=null) before.set(el.dataset[keyName], el.getBoundingClientRect());
+  });
+  return ()=>{
+    container.querySelectorAll(itemSelector).forEach(el=>{
+      const b = before.get(el.dataset[keyName]);
+      if(!b) return;
+      const a = el.getBoundingClientRect();
+      const dy = b.top - a.top;
+      if(!dy) return;
+      el.style.transition = 'none';
+      el.style.transform = `translateY(${dy}px)`;
+      setTimeout(()=>{
+        el.style.transition = 'transform .22s ease';
+        el.style.transform = '';
+      }, 16);
+    });
+  };
+}
+
 function flipCapture(container, itemSelector){
   return new Map(Array.from(container.querySelectorAll(itemSelector)).map(el=>[el, el.getBoundingClientRect()]));
 }
@@ -692,24 +926,34 @@ function reorderArrayByDomOrder(container, itemSelector, arr){
 }
 
 let draggedCardEl=null;
-const cardGridEl = document.getElementById('cardGrid');
+const cardGridEl = document.getElementById('cardPages');
 cardGridEl.addEventListener('dragover', (e)=>{
   e.preventDefault();
   if(!draggedCardEl) return;
   const target = e.target.closest('.dream-card');
-  if(!target || target===draggedCardEl || target.parentNode!==cardGridEl) return;
+  if(!target || target===draggedCardEl || target.parentNode!==draggedCardEl.parentNode) return;
   const rects = flipCapture(cardGridEl, '.dream-card');
   const rect = target.getBoundingClientRect();
   const before = (e.clientX - rect.left) < rect.width/2;
-  cardGridEl.insertBefore(draggedCardEl, before?target:target.nextSibling);
+  target.parentNode.insertBefore(draggedCardEl, before?target:target.nextSibling);
   flipPlay(rects);
 });
 cardGridEl.addEventListener('drop', (e)=> e.preventDefault());
 
 function renderCards(){
-  const grid=document.getElementById('cardGrid');
-  grid.querySelectorAll('.dream-card').forEach(el=>el.remove());
-  state.cards.forEach(c=>{
+  const wrap=document.getElementById('cardPages');
+  if(!wrap) return;
+  wrap.innerHTML='';
+  /* 여섯 장씩 끊어 담고, 마지막 장이 덜 차도 격자 높이는 그대로 둡니다 */
+  const pageCount = Math.max(1, Math.ceil(state.cards.length/CARDS_PER_PAGE));
+  const grids=[];
+  for(let n=0;n<pageCount;n++){
+    const page=document.createElement('div'); page.className='card-page';
+    const g=document.createElement('div'); g.className='card-grid';
+    page.appendChild(g); wrap.appendChild(page); grids.push(g);
+  }
+  state.cards.forEach((c, ci)=>{
+    const grid = grids[Math.floor(ci/CARDS_PER_PAGE)];
     const el=document.createElement('div');
     el.className='dream-card'; el.draggable=isLoggedIn; el.dataset.id=c.id;
     el.innerHTML = `
@@ -752,13 +996,15 @@ function renderCards(){
     el.addEventListener('dragend', async ()=>{
       el.classList.remove('dragging');
       if(draggedCardEl){
-        reorderArrayByDomOrder(grid, '.dream-card', state.cards);
+        reorderArrayByDomOrder(wrap, '.dream-card', state.cards);
         await storageSet('cards', state.cards);
       }
       draggedCardEl=null;
     });
     grid.appendChild(el);
   });
+  // 장 수가 줄었을 수 있으니 현재 장을 범위 안으로 맞춰 다시 세웁니다
+  setCardPage(Math.min(cardPageIdx, pageCount-1), false);
 }
 
 /* ============================================================
@@ -792,7 +1038,7 @@ function updateSelectCountLabel(){
 }
 document.getElementById('deleteSelectedBtn').addEventListener('click', async ()=>{
   if(selectedPairIds.size===0) return;
-  if(!confirm(`선택한 ${selectedPairIds.size}개 글을 삭제할까요?`)) return;
+  if(!await siteConfirm(`선택한 ${selectedPairIds.size}개 글을 삭제할까요?`)) return;
   state.pairPosts = state.pairPosts.filter(p=>!selectedPairIds.has(p.id));
   await storageSet('pairPosts', state.pairPosts);
   selectedPairIds.clear();
@@ -851,7 +1097,10 @@ function renderPairPosts(){
     // 목록 썸네일도 표시용 축소본으로 (박스는 250px 안팎, 원본은 800px대).
     // 붙인 뒤에 호출해야 실제 폭을 잴 수 있다.
     const thumbSrc = p.headerImage && p.headerImage.src;
-    if(thumbSrc) applyThumbBg(el.querySelector('.post-thumb'), thumbSrc);
+    const thumbEl = el.querySelector('.post-thumb');
+    if(thumbSrc) applyThumbBg(thumbEl, thumbSrc);
+    applyThumbPos(thumbEl, p);
+    if(selectMode && thumbSrc) addThumbPanControl(el, thumbEl, p, savePair);
   });
 
   // 마지막 페이지가 덜 차도 격자 높이가 그대로 유지되도록 빈 자리를 채웁니다
@@ -882,14 +1131,18 @@ function getCurrentPost(){ return state.pairPosts.find(x=>x.id===currentPairPost
 function openPairDetail(id){
   currentPairPostId=id;
   const p=getCurrentPost();
-  fillPairDetail(p);
+  /* 창을 먼저 열고 나서 그립니다 — 숨은 상태에서는 사진 칸의 폭·높이가 0 이라
+     '꽉 채우는 배율'을 계산할 수 없어 확대가 안 된 크기로 한 번 그렸다가
+     곧바로 확대되는 것이 눈에 보입니다. 같은 작업 안에서 이어 하므로
+     화면이 중간 상태로 그려지지는 않습니다. */
   openModal('modalPairDetail');
-  // 모달이 열려 레이아웃이 잡힌 뒤 한 번 더 그린다 — 숨겨진 상태에서는 컨테이너 폭이 0이라
-  // 어느 크기의 축소본을 쓸지 판단할 수 없다 (rAF는 백그라운드 탭에서 실행되지 않아 setTimeout 사용)
+  fillPairDetail(p);
+  // 혹시 폭이 아직 안 잡혔을 때를 대비한 한 번 더 (rAF는 백그라운드 탭에서 실행되지 않아 setTimeout)
   setTimeout(()=>{
     if(pdCharImgAdj) pdCharImgAdj.paint();
     if(pdPersonaImgAdj) pdPersonaImgAdj.paint();
     if(pdHeaderImgAdj) pdHeaderImgAdj.paint();
+    if(pdSideImgAdj) pdSideImgAdj.paint();
   });
 }
 
@@ -1090,7 +1343,7 @@ function bindRichTextToolbars(){
         }
         const row=document.createElement('div');
         row.className='meta-row';
-        row.innerHTML = `<span class="meta-drag" contenteditable="false" draggable="true" data-editonly>::</span><span class="meta-label" contenteditable="true">라벨</span><span class="meta-value" contenteditable="true">값</span><button type="button" class="meta-del" contenteditable="false" data-editonly>✕</button>`;
+        row.innerHTML = `<span class="meta-drag" contenteditable="false" draggable="true" data-editonly>::</span><span class="meta-label" contenteditable="true"></span><span class="meta-value" contenteditable="true"></span><button type="button" class="meta-del" contenteditable="false" data-editonly>✕</button>`;
         metaEl.appendChild(row);
         row.querySelector('.meta-label').focus();
         if(metaEl._saveMeta) metaEl._saveMeta();
@@ -1655,7 +1908,7 @@ document.getElementById('logEditBtn').addEventListener('click', ()=>{
 document.getElementById('logDeleteBtn').addEventListener('click', async ()=>{
   logKebabMenu.classList.remove('open');
   if(!isLoggedIn || currentLogViewId==null) return;
-  if(!confirm('이 게시글을 삭제할까요?')) return;
+  if(!await siteConfirm('이 게시글을 삭제할까요?')) return;
   const p=logPost();
   p.log = p.log.filter(x=>x.id!==currentLogViewId);
   await logHost.save();
@@ -2473,7 +2726,7 @@ function initGalleryRoot(host){
   if(delBtn) delBtn.addEventListener('click', async ()=>{
     use();
     if(gallerySelectedIdx.size===0) return;
-    if(!confirm(`선택한 ${gallerySelectedIdx.size}장의 이미지를 삭제할까요?`)) return;
+    if(!await siteConfirm(`선택한 ${gallerySelectedIdx.size}장의 이미지를 삭제할까요?`)) return;
     const p = galleryPost();
     const bySrc = [];
     gallerySelectedIdx.forEach(key=>{
@@ -2606,7 +2859,7 @@ function renderTimeline(p){
 
     el.querySelector('.tl-del').addEventListener('click', async ()=>{
       if(!isLoggedIn) return;
-      if(!confirm('이 타임라인을 삭제할까요?')) return;
+      if(!await siteConfirm('이 타임라인을 삭제할까요?')) return;
       p.timeline.splice(i,1);
       await storageSet('pairPosts', state.pairPosts);
       renderTimeline(p);
@@ -2618,7 +2871,7 @@ function renderTimeline(p){
 document.getElementById('addTimelineBtn').addEventListener('click', async ()=>{
   if(!isLoggedIn) return;
   const p=getCurrentPost(); if(!p) return;
-  p.timeline.push({ title:'새 타임라인', text:'내용을 입력하세요' });
+  p.timeline.push({ title:'', text:'' });
   await storageSet('pairPosts', state.pairPosts);
   renderTimeline(p);
   // 새로 만든 항목의 타이틀에 바로 커서를 둡니다
@@ -2792,11 +3045,13 @@ function renderOcPosts(){
     }
     grid.appendChild(el);
     const src = o.headerImage && o.headerImage.src;
+    const thumb = el.querySelector('.post-thumb');
     if(src){
-      const thumb = el.querySelector('.post-thumb');
       thumb.style.backgroundImage = `url('${src}')`;
       applyThumbBg(thumb, src);
     }
+    applyThumbPos(thumb, o);
+    if(ocSelectMode && src) addThumbPanControl(el, thumb, o, saveOc);
   });
 
   // 마지막 페이지가 덜 차도 격자 높이가 유지되도록
@@ -2896,7 +3151,9 @@ function makeSidePager(pagesEl, dotsEl){
     idx = clamp(i, 0, pages.length-1);
     pages.forEach((el,n)=>{
       el.style.transition = (animate===false) ? 'none' : '';
-      el.style.transform = `translateX(${(n-idx)*100}%)`;
+      /* 장끼리 16px 씩 띄웁니다 — 딱 붙여두면 옆 장의 가장자리(버튼 등)가
+         1px 씩 삐져나와 보입니다. */
+      el.style.transform = `translateX(calc(${(n-idx)*100}% + ${(n-idx)*16}px))`;
       el.classList.toggle('active', n===idx);
     });
     if(animate===false){
@@ -2924,6 +3181,29 @@ function makeSidePager(pagesEl, dotsEl){
     lock = now + 500;
     set(idx + (dx>0 ? 1 : -1));
   }, {passive:true});
+  /* 휠(가운데) 버튼을 누른 채 좌우로 끌어도 넘어갑니다.
+     크롬의 오토스크롤은 스크롤될 곳이 있어야 뜨는데 이 칸은 높이가 고정이라
+     아무 일도 일어나지 않으므로, 그 동작을 대신합니다. */
+  let mx=null, moved=false;
+  pagesEl.addEventListener('pointerdown', (e)=>{
+    if(e.button!==1) return;
+    e.preventDefault();
+    mx=e.clientX; moved=false;
+    try{ pagesEl.setPointerCapture(e.pointerId); }catch(_){}
+  });
+  pagesEl.addEventListener('pointermove', (e)=>{
+    if(mx===null) return;
+    const dx=e.clientX-mx;
+    if(Math.abs(dx) < 60 || moved) return;
+    moved=true;
+    set(idx + (dx<0 ? 1 : -1));
+  });
+  const endMiddle=()=>{ mx=null; };
+  pagesEl.addEventListener('pointerup', endMiddle);
+  pagesEl.addEventListener('pointercancel', endMiddle);
+  // 가운데 버튼의 기본 동작(오토스크롤 원 표시)은 막아둡니다
+  pagesEl.addEventListener('auxclick', (e)=>{ if(e.button===1) e.preventDefault(); });
+
   /* 손가락으로 옆으로 밀기 */
   let x0=null, y0=0;
   pagesEl.addEventListener('touchstart', (e)=>{
@@ -2957,6 +3237,7 @@ const OC_THEME_HOST   = { root: document.querySelector('#ocSidePages .oc-theme')
 const PAIR_THEME_HOST = { root: document.querySelector('#pdSidePages .oc-theme'),
   getPost: ()=> getCurrentPost(), save: ()=> savePair(), idx: 0 };
 
+let draggedSongRow = null;
 function renderThemeSongs(host){
   const root = host && host.root;
   if(!root) return;
@@ -2980,13 +3261,29 @@ function renderThemeSongs(host){
   if(bar) bar.style.width = now ? (((host.idx+1)/songs.length)*100).toFixed(2)+'%' : '0%';
 
   list.innerHTML='';
+  /* 끌고 지나가는 줄이 실시간으로 자리를 내주도록 — 목록 하나에 한 번만 겁니다 */
+  if(!list._songDragBound){
+    list._songDragBound = true;
+    list.addEventListener('dragover', (e)=>{
+      if(!draggedSongRow) return;
+      e.preventDefault();
+      const over = e.target.closest ? e.target.closest('.oc-theme-row') : null;
+      if(!over || over===draggedSongRow || over.parentNode!==list) return;
+      const rects = flipCapture(list, '.oc-theme-row');
+      const rect = over.getBoundingClientRect();
+      const before = (e.clientY - rect.top) < rect.height/2;
+      list.insertBefore(draggedSongRow, before ? over : over.nextSibling);
+      flipPlay(rects);
+    });
+    list.addEventListener('drop', (e)=>{ if(draggedSongRow) e.preventDefault(); });
+  }
   /* ＋ 곡 추가는 목록 안, 마지막 곡 아래에 붙입니다 */
   const addBtn=document.createElement('button');
   addBtn.type='button'; addBtn.className='oc-theme-add'; addBtn.setAttribute('data-editonly','');
   addBtn.innerText='＋ 곡 추가';
   addBtn.addEventListener('click', async ()=>{
     if(!isLoggedIn) return;
-    songs.push({ id:Date.now(), cover:'', title:'제목', artist:'아티스트', lyrics:'' });
+    songs.push({ id:Date.now(), cover:'', title:'', artist:'', lyrics:'' });
     await host.save();
     renderThemeSongs(host);
   });
@@ -3003,8 +3300,10 @@ function renderThemeSongs(host){
   songs.forEach((s, i)=>{
     const row=document.createElement('div');
     row.className='oc-theme-row'+(i===host.idx?' current':'');
+    row.dataset.songId = String(s.id);   // 순서를 바꿀 때 밀려나는 움직임을 짝지어 주는 표시
     row.innerHTML =
-      `<div class="oc-theme-art"></div>`
+      `<span class="oc-theme-grip" draggable="true" title="끌어서 순서 변경">::</span>`
+      + `<div class="oc-theme-art"></div>`
       + `<div class="oc-theme-meta">`
       +   `<div class="oc-theme-title" contenteditable="${isLoggedIn}">${escapeHtml(s.title)}</div>`
       +   `<div class="oc-theme-artist" contenteditable="${isLoggedIn}">${escapeHtml(s.artist)}</div>`
@@ -3053,7 +3352,7 @@ function renderThemeSongs(host){
     row.querySelector('.oc-theme-del').addEventListener('click', async (e)=>{
       e.stopPropagation();
       if(!isLoggedIn) return;
-      if(!confirm(`'${s.title||'이 곡'}' 을 목록에서 뺄까요?`)) return;
+      if(!await siteConfirm(`'${s.title||'이 곡'}' 을 목록에서 뺄까요?`)) return;
       songs.splice(i,1);
       if(host.idx>=songs.length) host.idx=0;
       await host.save(); renderThemeSongs(host);
@@ -3064,6 +3363,32 @@ function renderThemeSongs(host){
       host.idx = i;
       renderThemeSongs(host);
     });
+
+    /* 손잡이(::)를 끌어 순서를 바꿉니다. 제목·아티스트가 글자 편집 칸이라
+       줄 전체를 끌게 하면 글자 선택이 안 되므로 손잡이만 draggable 입니다. */
+    /* 잡고 움직이는 동안 다른 줄이 실시간으로 밀려납니다 (갤러리와 같은 방식).
+       놓는 순간에 한꺼번에 바뀌는 게 아니라, 지나가는 자리마다 자리를 내줍니다. */
+    const grip=row.querySelector('.oc-theme-grip');
+    if(grip && isLoggedIn){
+      grip.addEventListener('dragstart', (e)=>{
+        draggedSongRow = row;
+        row.classList.add('dragging');
+        if(e.dataTransfer){ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain','song'); }
+      });
+      grip.addEventListener('dragend', async ()=>{
+        row.classList.remove('dragging');
+        if(!draggedSongRow){ return; }
+        draggedSongRow = null;
+        /* 화면에 놓인 순서를 그대로 목록에 옮겨 담습니다 */
+        const order = Array.from(list.querySelectorAll('.oc-theme-row')).map(el=> el.dataset.songId);
+        const playing = songs[host.idx];          // 듣던 곡은 그대로 따라가게
+        songs.sort((a,b)=> order.indexOf(String(a.id)) - order.indexOf(String(b.id)));
+        const back = songs.indexOf(playing);
+        host.idx = back<0 ? 0 : back;
+        renderThemeSongs(host);
+        await host.save();
+      });
+    }
     list.appendChild(row);
   });
   list.appendChild(addBtn);
@@ -3161,7 +3486,7 @@ function renderMessages(p){
       rowDel.addEventListener('click', async (e)=>{
         e.stopPropagation();
         if(!isLoggedIn) return;
-        if(!confirm('이 말풍선을 지울까요?')) return;
+        if(!await siteConfirm('이 말풍선을 지울까요?')) return;
         msgs.splice(i,1);
         await save(); renderMessages(p);
       });
@@ -3361,9 +3686,10 @@ function openOcDetail(id){
   currentOcId = id;
   const o = getCurrentOc();
   if(!o) return;
-  fillOcDetail(o);
+  /* 창을 먼저 열고 나서 그립니다 (PAIR 과 같은 이유 — 위 주석 참고) */
   openModal('modalOcDetail');
-  // 창이 열려 크기가 잡힌 뒤 한 번 더 그립니다 (숨은 상태에서는 폭이 0)
+  fillOcDetail(o);
+  // 혹시 폭이 아직 안 잡혔을 때를 대비한 한 번 더
   setTimeout(()=>{
     if(ocProfileAdj) ocProfileAdj.paint();
     if(ocSideAdj) ocSideAdj.paint();
@@ -3420,6 +3746,28 @@ function initOcDetail(){
     setOcPage(ocPageIdx + (e.deltaY>0 ? 1 : -1));
   }, {passive:true});
 
+  /* 휠(가운데) 버튼을 누른 채 위아래로 끌면 장이 넘어갑니다.
+     높이가 고정이라 크롬의 오토스크롤이 뜨지 않으므로 대신 붙였습니다.
+     좌우로 끄는 것은 오른쪽 칸(makeSidePager)이 따로 받습니다. */
+  let my=null, midMoved=false;
+  pages.addEventListener('pointerdown', (e)=>{
+    if(e.button!==1) return;
+    e.preventDefault();
+    my=e.clientY; midMoved=false;
+    try{ pages.setPointerCapture(e.pointerId); }catch(_){}
+  });
+  pages.addEventListener('pointermove', (e)=>{
+    if(my===null) return;
+    const dy=e.clientY-my;
+    if(Math.abs(dy) < 60 || midMoved) return;
+    midMoved=true;
+    setOcPage(ocPageIdx + (dy<0 ? 1 : -1));
+  });
+  const endMid=()=>{ my=null; };
+  pages.addEventListener('pointerup', endMid);
+  pages.addEventListener('pointercancel', endMid);
+  pages.addEventListener('auxclick', (e)=>{ if(e.button===1) e.preventDefault(); });
+
   /* 손가락 위아래 스와이프. 갤러리의 좌우 스와이프와는 방향으로 구분됩니다. */
   let y0=null, x0=0, startTarget=null;
   pages.addEventListener('touchstart', (e)=>{
@@ -3459,7 +3807,7 @@ const ocSelectDeleteBtnEl = document.getElementById('ocSelectDeleteBtn');
 if(ocSelectDeleteBtnEl) ocSelectDeleteBtnEl.addEventListener('click', async ()=>{
   if(!isLoggedIn) return;
   if(ocSelectedIds.size===0){ alert('삭제할 글을 먼저 선택해주세요.'); return; }
-  if(!confirm(`선택한 ${ocSelectedIds.size}개 글을 삭제할까요? 되돌릴 수 없습니다.`)) return;
+  if(!await siteConfirm(`선택한 ${ocSelectedIds.size}개 글을 삭제할까요? 되돌릴 수 없습니다.`)) return;
   state.ocPosts = state.ocPosts.filter(x=> !ocSelectedIds.has(x.id));
   ocSelectedIds.clear();
   await saveOc();
@@ -3755,7 +4103,7 @@ function updateArcPinBtn(item){
 document.getElementById('arcDeleteBtn').addEventListener('click', async ()=>{
   arcKebabMenu.classList.remove('open');
   if(!isLoggedIn || !currentArcViewId) return;
-  if(!confirm('이 게시글을 삭제할까요?')) return;
+  if(!await siteConfirm('이 게시글을 삭제할까요?')) return;
   state.archive = state.archive.filter(x=>x.id!==currentArcViewId);
   await storageSet('archive', state.archive);
   closeModal('modalArcView');
@@ -4050,7 +4398,12 @@ function renderArchive(){
 
       // 4열 격자라 칸이 작은데 원본은 800px대다 — 표시용 축소본으로 교체
       const src = extractFirstImage(item.content);
-      if(src) applyThumbBg(el.querySelector('.an-img'), src);
+      const imgEl = el.querySelector('.an-img');
+      if(src) applyThumbBg(imgEl, src);
+      applyThumbPos(imgEl, item);
+      if(arcSelectMode && src){
+        addThumbPanControl(el, imgEl, item, ()=> storageSet('archive', state.archive));
+      }
     });
   }else{
     let rows='';
@@ -4085,7 +4438,7 @@ const arcSelectDeleteBtnEl = document.getElementById('arcSelectDeleteBtn');
 if(arcSelectDeleteBtnEl) arcSelectDeleteBtnEl.addEventListener('click', async ()=>{
   if(!isLoggedIn) return;
   if(arcSelectedIds.size===0){ alert('삭제할 글을 먼저 선택해주세요.'); return; }
-  if(!confirm(`선택한 ${arcSelectedIds.size}개 글을 삭제할까요? 되돌릴 수 없습니다.`)) return;
+  if(!await siteConfirm(`선택한 ${arcSelectedIds.size}개 글을 삭제할까요? 되돌릴 수 없습니다.`)) return;
   state.archive = state.archive.filter(x=> !arcSelectedIds.has(x.id));
   arcSelectedIds.clear();
   await storageSet('archive', state.archive);
