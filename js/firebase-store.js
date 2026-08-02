@@ -22,7 +22,7 @@ import {
   getFirestore, doc, getDoc, setDoc, deleteDoc,
   collection, getDocs, writeBatch
 } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
-import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=35';
+import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=40';
 
 const app  = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -38,7 +38,9 @@ const blobsRef = () => collection(db, ROOT[0], ROOT[1], 'blobs');
 /* archiveFolders 는 PROMPT 폴더 목록입니다. 안에 글을 담지 않고
    이름·비밀번호해시·옵션만 들어 있어 항목 수가 적으므로 meta 문서에 함께 둡니다.
    (글 쪽에 folderId 가 적혀 있어 폴더-글 연결은 archive 문서들이 갖습니다) */
-const SCALAR_KEYS = ['profile', 'siteName', 'homeIntro', 'homeBanner', 'archiveSeqCounter', 'archiveFolders', 'ocFolders'];
+/* pairCats / ocCats 는 사이드바의 세부 분류 목록입니다({id,name} 몇 개뿐이라 meta 문서에 함께 둡니다).
+   글 쪽에 type 이 적혀 있어 분류-글 연결은 글 문서들이 갖습니다. */
+const SCALAR_KEYS = ['profile', 'siteName', 'homeIntro', 'homeBanner', 'archiveSeqCounter', 'archiveFolders', 'ocFolders', 'pairCats', 'ocCats'];
 const LIST_KEYS   = ['cards', 'pairPosts', 'archive', 'ocPosts'];
 
 /* Firestore 문서 1개 최대 1MiB. 여유를 두고 자릅니다. */
@@ -47,9 +49,9 @@ const CHUNK_CHARS = 700000;
 /* ------------------------------------------------------------
    상태
    ------------------------------------------------------------ */
-let cache = {};            // key -> 화면에 그대로 넘길 값(이미지 복원 완료)
+let cache = {};            // key -> 화면에 넘길 값 (사진 자리에는 blob:// 참조가 그대로 들어 있음)
 let savedJson = {};         // "key/docId" -> 마지막으로 저장한 JSON (변경 감지용)
-let blobCache = new Map();  // blobId -> data URL
+let blobCache = new Map();  // blobId -> data URL (도착한 것부터 채워집니다)
 let knownBlobIds = new Set();
 let loaded = false;
 let isAdmin = false;
@@ -176,6 +178,9 @@ export async function deflate(value, pending) {
 
 export function inflate(value) {
   if (typeof value === 'string') {
+    /* 사진 자체(data URL)는 통째로 훑을 필요가 없습니다 —
+       그릴 때마다 부르는 함수라 수십만 글자를 매번 뒤지면 눈에 띄게 느려집니다. */
+    if (isDataUrl(value)) return value;
     const m = value.match(BLOB_REF);
     if (m) return blobCache.get(m[1]) || '';
     if (value.includes('blob://')) {
@@ -203,48 +208,148 @@ async function writeBlob(id, dataUrl) {
   knownBlobIds.add(id);
 }
 
+/* 조각들은 한꺼번에 받습니다 — 하나씩 기다리면 조각 수만큼 왕복이 늘어납니다 */
 async function readBlob(id, chunks) {
-  const parts = [];
-  for (let i = 0; i < chunks; i++) {
-    const s = await getDoc(doc(collection(doc(blobsRef(), id), 'parts'), String(i)));
-    parts.push(s.exists() ? (s.data().d || '') : '');
+  const snaps = await Promise.all(
+    Array.from({ length: chunks }, (_, i) =>
+      getDoc(doc(collection(doc(blobsRef(), id), 'parts'), String(i))))
+  );
+  return snaps.map(s => (s.exists() ? (s.data().d || '') : '')).join('');
+}
+
+/* ------------------------------------------------------------
+   사진 늦게 받기
+   ------------------------------------------------------------
+   사진은 이 사이트 데이터의 99.9% 를 차지합니다(297장 122MB).
+   예전에는 화면을 그리기 전에 이걸 전부, 그것도 한 장씩 순서대로
+   받느라 첫 화면이 20초 넘게 걸렸습니다.
+
+   지금은 글·목록만 먼저 받아 곧바로 그리고(0.1MB), 사진은 뒤에서
+   여러 장씩 동시에 받아 도착하는 대로 채웁니다. 화면 코드가 받는 값에는
+   blob://<id> 참조가 그대로 들어 있고, 그릴 때 SiteStore.resolve() 로
+   실제 사진을 꺼내 씁니다.
+
+   참조를 그대로 두는 것이 중요합니다. 아직 안 받은 자리를 빈 문자열로
+   바꿔버리면 그 상태에서 저장이 나갈 때 사진이 영영 지워집니다.
+   blob:// 문자열은 deflate 가 손대지 않고 통과시키므로,
+   받았든 안 받았든 저장 왕복 결과가 똑같습니다.
+   ------------------------------------------------------------ */
+const BLOB_CONCURRENCY = 6;    // 실측: 동시에 6장이 한 장씩보다 2.8배 빠릅니다
+const blobChunks = new Map();  // id -> 조각 수
+let blobQueue = [];            // 받을 차례를 기다리는 id (앞이 우선)
+const blobActive = new Set();
+const blobWanted = new Set();  // 목록이 도착하기 전에 먼저 달라고 한 id
+let blobIndexed = false;
+const blobListeners = new Set();
+let blobArrived = new Set();
+let blobNotifyTimer = null;
+
+function blobIdsIn(value, out = []) {
+  if (typeof value === 'string') {
+    if (isDataUrl(value)) return out;   // 사진 자체 — 참조가 들어 있을 수 없습니다
+    for (const m of value.matchAll(/blob:\/\/([a-f0-9]{32})/g)) out.push(m[1]);
+  } else if (Array.isArray(value)) {
+    value.forEach(v => blobIdsIn(v, out));
+  } else if (value && typeof value === 'object') {
+    Object.values(value).forEach(v => blobIdsIn(v, out));
   }
-  return parts.join('');
+  return out;
+}
+
+function missingBlobIds(value) {
+  return [...new Set(blobIdsIn(value))].filter(id => !blobCache.has(id));
+}
+
+/* 한 장마다 화면을 다시 그리면 낭비라 짧게 묶어서 알립니다 */
+function announceBlob(id) {
+  blobArrived.add(id);
+  if (blobNotifyTimer) return;
+  blobNotifyTimer = setTimeout(() => {
+    blobNotifyTimer = null;
+    const batch = blobArrived; blobArrived = new Set();
+    blobListeners.forEach(fn => { try { fn(batch); } catch (e) { console.error(e); } });
+  }, 120);
+}
+
+function pumpBlobs() {
+  while (blobActive.size < BLOB_CONCURRENCY && blobQueue.length) {
+    const id = blobQueue.shift();
+    if (blobCache.has(id) || blobActive.has(id)) continue;
+    blobActive.add(id);
+    readBlob(id, blobChunks.get(id) || 1)
+      .then(data => { blobCache.set(id, data); announceBlob(id); })
+      .catch(e => {
+        console.warn('사진을 받지 못했습니다 — 잠시 후 다시 시도합니다.', id, e);
+        setTimeout(() => { if (!blobCache.has(id)) { blobQueue.push(id); pumpBlobs(); } }, 4000);
+      })
+      .finally(() => { blobActive.delete(id); pumpBlobs(); });
+  }
+}
+
+/* 지금 화면에 필요한 사진을 대기열 맨 앞으로 당깁니다 */
+function wantBlobs(ids) {
+  const need = ids.filter(id => !blobCache.has(id));
+  if (!need.length) return;
+  if (!blobIndexed) { need.forEach(id => blobWanted.add(id)); return; }
+  const jump = new Set(need.filter(id => blobChunks.has(id)));
+  if (!jump.size) return;
+  blobQueue = [...jump, ...blobQueue.filter(id => !jump.has(id))];
+  pumpBlobs();
+}
+
+/* 사진 목록(조각 수만 든 작은 문서들)을 받고 내려받기를 시작합니다 */
+async function loadBlobIndex() {
+  const snap = await getDocs(blobsRef());
+  knownBlobIds.clear(); blobChunks.clear();
+  snap.docs.forEach(d => {
+    knownBlobIds.add(d.id);
+    blobChunks.set(d.id, d.data().chunks || 1);
+  });
+  blobIndexed = true;
+  const first = [...blobWanted].filter(id => blobChunks.has(id) && !blobCache.has(id));
+  blobWanted.clear();
+  const front = new Set(first);
+  const rest = [...knownBlobIds].filter(id => !front.has(id) && !blobCache.has(id));
+  blobQueue = [...first, ...rest];
+  pumpBlobs();
+  if (isAdmin) collectGarbage();
 }
 
 /* ------------------------------------------------------------
    불러오기
    ------------------------------------------------------------ */
 async function loadAll() {
-  // 이미지/첨부파일 먼저 (본문 복원에 필요)
-  blobCache.clear(); knownBlobIds.clear();
-  const blobSnap = await getDocs(blobsRef());
-  for (const d of blobSnap.docs) {
-    knownBlobIds.add(d.id);
-    blobCache.set(d.id, await readBlob(d.id, d.data().chunks || 1));
-  }
+  blobCache.clear(); knownBlobIds.clear(); blobChunks.clear();
+  blobQueue = []; blobWanted.clear(); blobIndexed = false;
+
+  /* 글·목록만 먼저 받습니다 — 전부 합쳐도 0.1MB 라 0.2초면 끝납니다.
+     여기서 사진(122MB)까지 기다리면 첫 화면이 20초 넘게 걸립니다. */
+  const [metaSnap, ...listSnaps] = await Promise.all([
+    getDoc(metaRef()),
+    ...LIST_KEYS.map(key => getDocs(listRef(key)))
+  ]);
 
   const raw = {};
-  const metaSnap = await getDoc(metaRef());
   const meta = metaSnap.exists() ? metaSnap.data() : {};
   for (const k of SCALAR_KEYS) {
     raw[k] = meta[k] === undefined ? null : meta[k];
     savedJson[`${k}/_`] = JSON.stringify(raw[k]);
   }
 
-  for (const key of LIST_KEYS) {
-    const snap = await getDocs(listRef(key));
-    const items = snap.docs
+  LIST_KEYS.forEach((key, n) => {
+    const items = listSnaps[n].docs
       .map(d => ({ ...d.data(), __docId: d.id }))
       .sort((a, b) => (a.__order ?? 0) - (b.__order ?? 0));
     items.forEach(it => { savedJson[`${key}/${it.__docId}`] = JSON.stringify(stripMeta(it)); });
     raw[key] = items.map(stripMeta);
-  }
+  });
 
-  cache = {};
-  for (const k of Object.keys(raw)) cache[k] = inflate(raw[k]);
+  /* 사진 자리의 blob://<id> 는 그대로 둡니다 — 그리는 쪽에서 꺼내 씁니다 */
+  cache = raw;
   loaded = true;
-  if (isAdmin) collectGarbage();
+
+  /* 사진은 화면을 그린 뒤에 뒤에서 받습니다 (기다리지 않습니다) */
+  loadBlobIndex().catch(e => console.error('사진 목록을 받지 못했습니다.', e));
 }
 
 function stripMeta(o) {
@@ -400,6 +505,9 @@ window.addEventListener('pagehide', flushNow);
    ------------------------------------------------------------ */
 async function collectGarbage() {
   if (!loaded || !isAdmin) return;
+  /* 사진 목록이 오기 전에는 knownBlobIds 가 비어 있어 판단할 근거가 없습니다.
+     목록이 도착하면 loadBlobIndex 가 다시 부릅니다. */
+  if (!blobIndexed) return;
   // 아직 저장되지 않은 변경분이 있으면 건너뜁니다.
   // (방금 추가한 이미지를 "사용 안 함"으로 오판할 수 있음)
   if (dirty.size || flushTimer) return;
@@ -488,6 +596,38 @@ const SiteStore = {
   },
 
   async load() { await loadAll(); },
+
+  /* ---- 사진 (늦게 도착합니다) ---- */
+
+  /* 그릴 때 blob://<id> 를 실제 사진으로 바꿉니다. 아직 안 왔으면 '' 입니다.
+     data URL 이나 보통 문자열은 그대로 돌려줍니다. */
+  resolve(value) { return inflate(value); },
+
+  /* 이 값 안의 사진을 전부 받았는지 */
+  hasAll(value) { return missingBlobIds(value).length === 0; },
+
+  /* 지금 보는 것부터 먼저 받게 합니다 (기다리지 않습니다) */
+  prefetch(value) { wantBlobs(missingBlobIds(value)); },
+
+  /* 이 값 안의 사진이 다 올 때까지 기다립니다.
+     편집기처럼 값을 읽어서 도로 저장하는 곳에서만 씁니다 —
+     안 받은 채로 저장하면 그 사진이 지워지기 때문입니다. */
+  ensure(value, timeoutMs = 20000) {
+    if (missingBlobIds(value).length === 0) return Promise.resolve();
+    wantBlobs(missingBlobIds(value));
+    return new Promise(res => {
+      let off = null;
+      const timer = setTimeout(finish, timeoutMs);
+      function finish() { clearTimeout(timer); if (off) off(); res(); }
+      off = SiteStore.onBlobs(() => { if (missingBlobIds(value).length === 0) finish(); });
+    });
+  },
+
+  /* 사진이 도착할 때마다(묶어서) 알립니다: fn(방금 온 id 들의 Set) */
+  onBlobs(fn) { blobListeners.add(fn); return () => blobListeners.delete(fn); },
+
+  /* 진행 표시용 — {받은 장수, 전체 장수} */
+  blobStats() { return { done: blobCache.size, total: blobIndexed ? knownBlobIds.size : 0 }; },
 
   get(key, fallback) {
     const v = cache[key];

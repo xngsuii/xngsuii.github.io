@@ -11,7 +11,7 @@
      css/js를 고칠 때마다 이 숫자를 함께 올려주세요.
      올리지 않으면 브라우저가 옛 파일을 계속 써서
      새 HTML과 짝이 맞지 않아 화면이 깨질 수 있습니다. -->
-<link rel="stylesheet" href="css/style.css?v=35" />
+<link rel="stylesheet" href="css/style.css?v=40" />
 </head>
 <body>
 <div class="app-window">
@@ -31,13 +31,18 @@
 
     <nav class="nav">
       <button class="nav-item active" data-view="home">Home</button>
-      <button class="nav-item" data-view="pair">Pair</button>
-      <div class="nav-sub" id="pairSub">
-        <button class="nav-sub-item active" data-pairsub="all">전체</button>
-        <button class="nav-sub-item" data-pairsub="aichat">Ai chat</button>
-        <button class="nav-sub-item" data-pairsub="dream">Dream</button>
+      <!-- PAIR·OC 의 세부 카테고리는 편집할 수 있어서 main.js 가 그립니다 (renderNavSub).
+           '＋' 는 창을 띄우지 않고 카테고리 목록 하단에 입력 칸을 엽니다(startAddCat). -->
+      <div class="nav-item-row">
+        <button class="nav-item" data-view="pair">Pair</button>
+        <button class="nav-cat-add" data-editonly data-nav="pair" title="카테고리 추가">＋</button>
       </div>
-      <button class="nav-item" data-view="oc">OC</button>
+      <div class="nav-sub" id="pairSub"></div>
+      <div class="nav-item-row">
+        <button class="nav-item" data-view="oc">OC</button>
+        <button class="nav-cat-add" data-editonly data-nav="oc" title="카테고리 추가">＋</button>
+      </div>
+      <div class="nav-sub" id="ocSub"></div>
       <button class="nav-item" data-view="archive">Archive</button>
       <div class="nav-sub" id="archiveSub">
         <button class="nav-sub-item active" data-archivesub="nai">PROMPT</button>
@@ -100,8 +105,8 @@
       </div>
       <div class="pair-select-bar" id="pairSelectBar" style="display:none;">
         <span id="selectCountLabel">0개 선택됨</span>
-        <button class="btn-ghost" id="moveToAichatBtn">AI CHAT로 이동</button>
-        <button class="btn-ghost" id="moveToDreamBtn">DREAM으로 이동</button>
+        <!-- '○○로 이동' 단추는 분류 목록에 맞춰 JS 가 만듭니다 -->
+        <div class="move-btns" id="pairMoveBtns"></div>
         <button class="btn-ghost gf-danger" id="deleteSelectedBtn">삭제</button>
       </div>
       <div class="pair-body">
@@ -114,12 +119,19 @@
     <!-- ---------- OC ---------- -->
     <section class="view" id="view-oc">
       <div class="topbar">
-        <h2>OC</h2>
+        <!-- OC 는 '전체'가 없어 실제 카테고리 이름이 와야 하므로, 데이터가
+             오기 전까지는 빈 채로 둡니다(renderNavSubs 가 즉시 채웁니다). -->
+        <h2 id="ocTitle">OC</h2>
         <div class="pair-header-actions" data-editonly>
-          <button class="btn-ghost gf-danger" id="ocSelectDeleteBtn" style="display:none;">삭제</button>
           <button class="btn-ghost" id="ocSelectBtn">선택</button>
           <button class="btn-primary" id="ocWriteBtn">＋ 글쓰기</button>
         </div>
+      </div>
+      <!-- PAIR 과 같은 모양의 선택 줄 -->
+      <div class="pair-select-bar" id="ocSelectBar" style="display:none;">
+        <span id="ocSelectCountLabel">0개 선택됨</span>
+        <div class="move-btns" id="ocMoveBtns"></div>
+        <button class="btn-ghost gf-danger" id="ocSelectDeleteBtn">삭제</button>
       </div>
       <div class="oc-body">
         <div class="gallery-folder-bar arc-folder-bar" id="ocFolderBar"></div>
@@ -622,7 +634,8 @@
   <div class="modal gf-modal">
     <button class="modal-close" data-close>✕</button>
     <h3 id="gfModalTitle">폴더 추가</h3>
-    <div class="form-row"><label>폴더 이름</label><input type="text" id="gfName" placeholder="새 폴더 이름" /></div>
+    <!-- 라벨·안내 문구는 부르는 쪽(폴더 / 세부 분류)에 맞춰 JS 가 바꿔 넣습니다 -->
+    <div class="form-row"><label id="gfNameLabel">폴더 이름</label><input type="text" id="gfName" placeholder="새 폴더 이름" /></div>
 
     <div class="gf-option">
       <label class="gf-switch">
@@ -704,7 +717,7 @@
 </div>
 
 
-<script src="js/main.js?v=35"></script>
-<script type="module" src="js/firebase-store.js?v=35"></script>
+<script src="js/main.js?v=40"></script>
+<script type="module" src="js/firebase-store.js?v=40"></script>
 </body>
 </html>

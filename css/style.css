@@ -34,17 +34,38 @@
   .nav-item{display:flex;align-items:center;justify-content:space-between;padding:9px 10px;border-radius:var(--radius-sm);font-family:var(--mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);background:transparent;border:none;text-align:left;width:100%;}
   .nav-item:hover{background:var(--surface-2);}
   .nav-item.active{background:var(--accent-soft);color:var(--accent);}
+  /* PAIR·OC 는 라벨 옆에 카테고리 추가(＋) 아이콘이 붙어 nav-item 이 감싸져 있습니다 */
+  .nav-item-row{display:flex;align-items:center;gap:2px;}
+  .nav-item-row .nav-item{flex:1;min-width:0;}
+  .nav-cat-add{flex:none;width:24px;height:24px;display:flex;align-items:center;justify-content:center;
+    border:none;background:transparent;border-radius:var(--radius-sm);color:var(--text-muted);font-family:var(--mono);font-size:13px;}
+  .nav-cat-add:hover{background:var(--surface-2);color:var(--accent);}
   .nav-sub{display:flex;flex-direction:column;gap:1px;margin-left:14px;overflow:hidden;max-height:0;transition:max-height .18s ease;}
   /* 터치 기기에는 hover 가 없습니다. 어정쩡하게 걸려 메뉴가 열린 채 굳는 것을 막기 위해
      마우스가 있는 기기에서만 hover 로 펼칩니다. 터치에서는 .open 클래스(JS)로만 열립니다. */
   @media (hover:hover){
-    .nav-item:hover + .nav-sub{max-height:120px;}
-    .nav-sub:hover{max-height:120px;}
+    .nav-item:hover + .nav-sub{max-height:560px;}
+    .nav-item-row:hover + .nav-sub{max-height:560px;}
+    .nav-sub:hover{max-height:560px;}
   }
-  .nav-sub.open{max-height:120px;}
+  .nav-sub.open{max-height:560px;}
   .nav-sub-item{padding:7px 10px;font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);border-radius:var(--radius-sm);border:none;background:transparent;text-align:left;font-weight:500;}
   .nav-sub-item:hover{background:var(--surface-2);color:var(--text);}
   .nav-sub-item.active{color:var(--accent);background:var(--accent-soft);}
+  /* PAIR·OC 세부 카테고리 — 편집 모드에서 이름 변경(✎)·순서 변경(끌기) */
+  .nav-sub-item{display:flex;align-items:center;justify-content:space-between;gap:6px;}
+  .nav-sub-item .ns-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .nav-sub-item .ns-edit{flex:none;font-size:10px;opacity:.45;padding:0 2px;}
+  .nav-sub-item .ns-edit:hover{opacity:1;color:var(--accent);}
+  .nav-sub-item.dragging{opacity:.4;}
+  /* 카테고리 추가 — 라벨 옆 '＋' 를 누르면 목록 하단에 이 줄이 뜹니다 */
+  .ns-add-row{display:flex;align-items:center;gap:4px;padding:4px 6px 4px 10px;}
+  .ns-add-input{flex:1;min-width:0;font-family:var(--mono);font-size:11px;padding:5px 7px;
+    border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);}
+  .ns-add-ok,.ns-add-cancel{flex:none;width:22px;height:22px;display:flex;align-items:center;justify-content:center;
+    border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-muted);font-size:11px;}
+  .ns-add-ok:hover{color:var(--accent);border-color:var(--accent);}
+  .ns-add-cancel:hover{color:#c0392b;border-color:#c0392b;}
 
   .login-widget{margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:10px;border-top:1px solid var(--border);}
   .login-badge{font-family:var(--mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:5px 9px;border-radius:0;background:var(--surface-2);color:var(--text-muted);}
@@ -163,6 +184,7 @@
   .post-slot{visibility:hidden;pointer-events:none;}
   .post-grid .empty-note{grid-column:1/-1;grid-row:1/-1;align-self:center;}
   .pair-select-bar{display:flex;align-items:center;gap:8px;padding:10px 28px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text-muted);background:var(--surface);}
+  .pair-select-bar .move-btns{display:flex;flex-wrap:wrap;gap:6px;flex:1;min-width:0;}
   .pair-header-actions{gap:8px;}
   .post-card{position:relative;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--bg);cursor:pointer;display:flex;flex-direction:column;min-height:0;}
   .post-card.selectable{cursor:default;}
@@ -1037,7 +1059,12 @@
     .nav-item{padding:13px 10px;font-size:13px;}
     .nav-sub-item{padding:13px 10px;font-size:12px;}
     .nav-sub{max-height:0;}
-    .nav-sub.open{max-height:220px;}
+    .nav-sub.open{max-height:70vh;}
+    /* 터치 타겟 40px 이상 */
+    .nav-cat-add{width:40px;height:40px;font-size:16px;}
+    .ns-add-row{padding:8px 8px 8px 10px;}
+    .ns-add-ok,.ns-add-cancel{width:36px;height:36px;font-size:14px;}
+    .ns-add-input{padding:9px 10px;font-size:13px;}
     .login-btn-small{min-height:40px;padding:10px 14px;font-size:12px;}
 
     /* ---------- Home ---------- */
