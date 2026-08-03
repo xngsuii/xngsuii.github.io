@@ -1,16 +1,16 @@
   @font-face{
-    font-family:'NeoDunggeunmo';
-    src:url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2001@1.3/NeoDunggeunmo.woff') format('woff');
+    font-family:'JoseonGulim';
+    src:url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_20-04@1.0/ChosunGu.woff') format('woff');
     font-weight:normal;font-style:normal;font-display:swap;
   }
   :root{
     --bg:#f4f1ea;--surface:#ece7d9;--surface-2:#e2dbc8;--border:#1a1a1a;
     --text:#1a1a1a;--text-muted:#6b675e;--accent:#c1440e;--accent-soft:#f4dcce;
     --page-bg:#EF3921;
-    --radius:0px;--radius-sm:0px;--mono:'NeoDunggeunmo',monospace;font-family:'NeoDunggeunmo',monospace;
+    --radius:0px;--radius-sm:0px;--mono:'JoseonGulim',monospace;font-family:'JoseonGulim',monospace;
   }
   *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;height:100%;font-family:'NeoDunggeunmo',monospace;}
+  html,body{margin:0;padding:0;height:100%;font-family:'JoseonGulim',monospace;}
   body{background:var(--page-bg);display:flex;align-items:center;justify-content:center;min-height:100vh;}
   button{font-family:inherit;cursor:pointer;}
   input,textarea,select{font-family:inherit;}
@@ -34,12 +34,23 @@
   .nav-item{display:flex;align-items:center;justify-content:space-between;padding:9px 10px;border-radius:var(--radius-sm);font-family:var(--mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);background:transparent;border:none;text-align:left;width:100%;}
   .nav-item:hover{background:var(--surface-2);}
   .nav-item.active{background:var(--accent-soft);color:var(--accent);}
-  /* PAIR·OC 는 라벨 옆에 카테고리 추가(＋) 아이콘이 붙어 nav-item 이 감싸져 있습니다 */
-  .nav-item-row{display:flex;align-items:center;gap:2px;}
+  /* PAIR·OC 는 라벨 옆에 카테고리 추가(＋) 아이콘이 붙어 nav-item 이 감싸져 있습니다.
+     세부 카테고리 줄(.nav-sub-item)은 ✎ 가 버튼 *안에* 들어 있어 배경이 저절로
+     아이콘 뒤까지 이어지는데, ＋ 는 .nav-item 바깥의 형제라 배경을 .nav-item 에
+     칠하면 ＋ 앞에서 끊겨 라벨과 따로 노는 것처럼 보입니다. 그래서 hover·활성
+     배경을 둘 다 줄(.nav-item-row) 에 칠하고 안쪽 .nav-item 은 투명하게 둡니다 —
+     ＋ 에 커서를 올려도 줄 전체가 같이 밝아져 ✎ 와 동작이 같아집니다. */
+  .nav-item-row{display:flex;align-items:center;gap:2px;border-radius:var(--radius-sm);}
   .nav-item-row .nav-item{flex:1;min-width:0;}
+  .nav-item-row:hover{background:var(--surface-2);}
+  .nav-item-row:has(.nav-item.active){background:var(--accent-soft);}
+  .nav-item-row .nav-item:hover,
+  .nav-item-row .nav-item.active{background:transparent;}
+  /* ✎(.ns-edit) 와 같은 방식 — 자기 배경 박스 없이 옅게 있다가 진해지기만 합니다 */
   .nav-cat-add{flex:none;width:24px;height:24px;display:flex;align-items:center;justify-content:center;
-    border:none;background:transparent;border-radius:var(--radius-sm);color:var(--text-muted);font-family:var(--mono);font-size:13px;}
-  .nav-cat-add:hover{background:var(--surface-2);color:var(--accent);}
+    border:none;background:transparent;border-radius:var(--radius-sm);color:var(--text-muted);font-family:var(--mono);font-size:13px;opacity:.45;}
+  .nav-cat-add:hover{opacity:1;color:var(--accent);}
+  .nav-item-row:has(.nav-item.active) .nav-cat-add{color:var(--accent);}
   .nav-sub{display:flex;flex-direction:column;gap:1px;margin-left:14px;overflow:hidden;max-height:0;transition:max-height .18s ease;}
   /* 터치 기기에는 hover 가 없습니다. 어정쩡하게 걸려 메뉴가 열린 채 굳는 것을 막기 위해
      마우스가 있는 기기에서만 hover 로 펼칩니다. 터치에서는 .open 클래스(JS)로만 열립니다. */
@@ -837,6 +848,8 @@
      (한 페이지 15장 = 5열 3행이 이 안에 들어가도록 맞춤) */
   .gallery-grid-wrap{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;
     padding-top:38px;padding-bottom:38px;position:relative;overflow:hidden;}
+  /* 바깥에서 이미지 파일을 끌어다 놓는 동안 보이는 표시 */
+  .gallery-grid-wrap.gallery-file-dragover{outline:2px dashed var(--accent);outline-offset:-6px;background:var(--accent-soft);}
   /* 페이지 전환 시 밀려나가는 이전 페이지 */
   .gallery-grid-ghost{position:absolute;pointer-events:none;z-index:2;}
   /* 위/아래 힌트는 가장자리에서 같은 거리(4px)에 둬야

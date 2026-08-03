@@ -192,8 +192,8 @@ let state = {
 const ARC_DEFAULT_FOLDER = 'arcdefault';
 function normalizeArcFolders(list){
   const out = Array.isArray(list) ? list.slice() : [];
-  if(!out.some(f=> f && f.id===ARC_DEFAULT_FOLDER)){
-    out.unshift({ id:ARC_DEFAULT_FOLDER, name:'기본' });
+  if(!out.length){
+    out.push({ id:ARC_DEFAULT_FOLDER, name:'기본' });
   }
   out.forEach(f=>{
     if(f.secret == null) f.secret = false;
@@ -209,8 +209,8 @@ function normalizeArcFolders(list){
 const OC_DEFAULT_FOLDER = 'ocdefault';
 function normalizeOcFolders(list){
   const out = Array.isArray(list) ? list.slice() : [];
-  if(!out.some(f=> f && f.id===OC_DEFAULT_FOLDER)){
-    out.unshift({ id:OC_DEFAULT_FOLDER, name:'기본' });
+  if(!out.length){
+    out.push({ id:OC_DEFAULT_FOLDER, name:'기본' });
   }
   out.forEach(f=>{
     if(f.secret == null) f.secret = false;
@@ -260,8 +260,9 @@ function ocFoldersOf(catId){
 function ocFolderIdOf(item){
   const cat = ocCatOf(item.type);
   const folders = ocFoldersOf(cat.id);
-  const id = item.folderId || OC_DEFAULT_FOLDER;
-  return folders.some(f=>f.id===id) ? id : OC_DEFAULT_FOLDER;
+  const fallback = folders[0] ? folders[0].id : OC_DEFAULT_FOLDER;
+  const id = item.folderId || fallback;
+  return folders.some(f=>f.id===id) ? id : fallback;
 }
 
 /* OC 글 한 건의 기본 모양을 채웁니다 (예전 데이터에 빠진 항목도 여기서 메꿉니다) */
@@ -298,8 +299,9 @@ state.ocCats = normalizeOcCats(null, null);
 
 /* 글이 가리키는 폴더가 지워졌으면 기본 폴더로 봅니다 */
 function arcFolderIdOf(item){
-  const id = item.folderId || ARC_DEFAULT_FOLDER;
-  return state.archiveFolders.some(f=>f.id===id) ? id : ARC_DEFAULT_FOLDER;
+  const fallback = state.archiveFolders[0] ? state.archiveFolders[0].id : ARC_DEFAULT_FOLDER;
+  const id = item.folderId || fallback;
+  return state.archiveFolders.some(f=>f.id===id) ? id : fallback;
 }
 
 function migrateCard(c){
@@ -815,6 +817,7 @@ navItems.forEach(btn=>{
       document.getElementById('selectPairBtn').innerText='선택';
       document.getElementById('pairSelectBar').style.display='none';
       PAIR_CAT_NAV.adding=false;
+      PAIR_CAT_NAV.title(catTitle(PAIR_CAT_NAV, currentPairFilter));
       renderNavSub(PAIR_CAT_NAV);
       renderPairPosts();
     }
@@ -822,6 +825,7 @@ navItems.forEach(btn=>{
       currentOcFilter=defaultCatId(OC_CAT_NAV);
       ocPage=1; ocSelectMode=false; ocSelectedIds.clear();
       OC_CAT_NAV.adding=false;
+      OC_CAT_NAV.title(catTitle(OC_CAT_NAV, currentOcFilter));
       renderNavSub(OC_CAT_NAV);
       renderOcPosts();
     }
@@ -1899,25 +1903,62 @@ const NBSP_RE = / /g;
 const BLOCK_TAGS = ['DIV','P','LI','UL','OL','H1','H2','H3','H4','H5','H6',
                     'BLOCKQUOTE','PRE','HR','TABLE','FIGURE'];
 
-/* 요소의 자식들을 '한 줄'씩 묶어 돌려줍니다. 줄은 <br> 또는 블록 요소로 끊깁니다. */
-function contentLines(root){
-  const lines = [];
-  let cur = { nodes:[], text:'' };
-  const push = ()=>{ lines.push(cur); cur = { nodes:[], text:'' }; };
-  Array.from(root.childNodes).forEach(node=>{
-    if(node.nodeType===1 && node.tagName==='BR'){ cur.nodes.push(node); push(); return; }
-    if(node.nodeType===1 && BLOCK_TAGS.includes(node.tagName)){
-      if(cur.nodes.length) push();
-      cur.nodes.push(node);
-      cur.text = node.textContent || '';
-      push();
-      return;
+/* 본문 전체를 줄바꿈이 살아있는 순수 텍스트로 펼치면서, 그 텍스트의 각 글자가
+   원래 어느 DOM 위치(문자/자식 인덱스)에 있었는지도 함께 기록합니다.
+   contenteditable 이 만드는 DOM 은 줄마다 모양이 들쭉날쭉해서(앞 내용과 아무
+   경계 없이 이어 붙기도, <br> 하나로만 끊기기도, <div> 로 감싸이기도 합니다)
+   최상위 자식만 보고 '줄'을 나누면 뒤쪽 코드 블록을 놓치는 경우가 있었습니다.
+   이 좌표를 그대로 Range 경계로 써서 정확히 그 구간만 지우고 코드 블록을
+   끼워 넣기 위한 것입니다. */
+function flattenForFences(root){
+  let text = '';
+  const marks = [];   // { pos, container, offset } — Range 경계로 바로 쓸 수 있는 DOM 위치
+  const mark = (container, offset)=> marks.push({ pos:text.length, container, offset });
+  const childIndex = (node)=> Array.prototype.indexOf.call(node.parentNode.childNodes, node);
+
+  /* 블록 여닫는 경계는 그 자체가 내용이 아니라 인접한 블록끼리 구분만
+     지어주면 되는 표시라서, 앞이 이미 줄바꿈이면 겹쳐 쓰지 않습니다
+     (안 그러면 <div>A</div><div>B</div> 처럼 붙어 있는 두 줄 사이에
+     그 경계가 두 번(닫힘+열림) 잡혀 없던 빈 줄이 생깁니다).
+     <br> 나 텍스트 속 실제 줄바꿈 문자는 사용자가 직접 넣은 내용이라
+     겹치더라도(빈 줄을 의도한 것일 수 있으니) 항상 그대로 씁니다. */
+  const addBoundary = (container, offset)=>{
+    if(text.length && !text.endsWith('\n')){ mark(container, offset); text += '\n'; }
+  };
+  function walkText(node){
+    const s = node.data;
+    let start = 0;
+    for(let i=0;i<s.length;i++){
+      if(s[i] === '\n'){
+        if(i > start){ mark(node, start); text += s.slice(start, i); }
+        mark(node, i);
+        text += '\n';
+        start = i + 1;
+      }
     }
-    cur.nodes.push(node);
-    cur.text += node.textContent || '';
-  });
-  if(cur.nodes.length) push();
-  return lines;
+    if(start < s.length){ mark(node, start); text += s.slice(start); }
+  }
+  function walk(node){
+    if(node.nodeType === 3){ walkText(node); return; }
+    if(node.nodeType !== 1) return;
+    if(node.tagName === 'BR'){ mark(node.parentNode, childIndex(node)); text += '\n'; return; }
+    const isBlock = BLOCK_TAGS.includes(node.tagName);
+    if(isBlock) addBoundary(node.parentNode, childIndex(node));
+    Array.from(node.childNodes).forEach(walk);
+    if(isBlock) addBoundary(node.parentNode, childIndex(node) + 1);
+  }
+  Array.from(root.childNodes).forEach(walk);
+  mark(root, root.childNodes.length);
+  return { text: text.replace(NBSP_RE,' '), marks };   // 치환은 글자 수를 바꾸지 않아 좌표가 그대로 맞습니다
+}
+/* marks 는 위치(pos) 오름차순입니다. pos 이하인 마지막 마크를 찾아 그 마크가
+   가리키는 DOM 위치에서 (pos - 마크.pos) 만큼 더한 지점이 실제 Range 경계입니다. */
+function resolveFenceOffset(marks, pos){
+  let best = marks[0];
+  for(let i=0;i<marks.length;i++){
+    if(marks[i].pos <= pos) best = marks[i]; else break;
+  }
+  return { container: best.container, offset: best.offset + (pos - best.pos) };
 }
 
 function makeCodeBlock(code){
@@ -1935,33 +1976,57 @@ function makeCodeBlock(code){
 
 /* ``` 로 감싼 구간을 코드 블록으로 바꿉니다.
    ``` 는 각각 자기 줄에 두는 것을 기준으로 하고(한 줄에서 열고 닫는 것도 됩니다),
-   닫는 ``` 이 없으면 손대지 않고 원문 그대로 둡니다. */
+   닫는 ``` 이 없으면 손대지 않고 원문 그대로 둡니다.
+   여러 개가 있으면 문서 순서대로 (1,2)(3,4)(5,6)... 쌍을 짓고, 마지막에 짝이
+   안 맞는 하나가 남으면 손대지 않습니다. */
 function applyCodeFences(root){
-  const plain = (s)=> String(s||'').replace(NBSP_RE,' ');
-  const lines = contentLines(root);
-  let i = 0;
-  while(i < lines.length){
-    const t = plain(lines[i].text);
-    const open = t.indexOf(CODE_FENCE);
-    if(open < 0){ i++; continue; }
-    let code, endLine;
-    const sameLine = t.indexOf(CODE_FENCE, open + CODE_FENCE.length);
-    if(sameLine >= 0){
-      code = t.slice(open + CODE_FENCE.length, sameLine);
-      endLine = i;
+  const { text, marks } = flattenForFences(root);
+  const fenceLen = CODE_FENCE.length;
+  const positions = [];
+  let idx = text.indexOf(CODE_FENCE);
+  while(idx >= 0){ positions.push(idx); idx = text.indexOf(CODE_FENCE, idx + fenceLen); }
+  if(positions.length < 2) return;
+
+  const pairs = [];
+  for(let k=0; k+1 < positions.length; k+=2) pairs.push([positions[k], positions[k+1]]);
+
+  /* 뒤에서부터 지웁니다 — marks 는 지우기 전 좌표 기준이라, 앞에서부터 지우면
+     이미 지운 자리 뒤에 있던 좌표들이 다 밀려 어긋납니다.
+     닫는 펜스와 다음 블록의 여는 펜스가 어쩌다 같은 줄에 놓이면(정상적인
+     사용에서는 안 생기지만) 두 블록이 지울 범위가 겹칠 수 있습니다 — 이미
+     처리한(뒤쪽) 블록이 차지한 자리와 겹치는 블록은 건드리지 않고 원문 그대로 둡니다. */
+  let claimedFrom = text.length + 1;
+  for(let p = pairs.length - 1; p >= 0; p--){
+    const [openPos, closePos] = pairs[p];
+    const nextNl = text.indexOf('\n', openPos + fenceLen);
+    const sameLine = nextNl === -1 || nextNl >= closePos;   // 한 줄 안에서 열고 닫은 경우
+
+    let code;
+    if(sameLine){
+      code = text.slice(openPos + fenceLen, closePos);
     }else{
-      let j = i + 1;
-      while(j < lines.length && plain(lines[j].text).indexOf(CODE_FENCE) < 0) j++;
-      if(j >= lines.length){ i++; continue; }   // 닫는 ``` 이 없음
-      code = lines.slice(i+1, j).map(l=> plain(l.text)).join('\n');
-      endLine = j;
+      const codeStart = nextNl + 1;
+      const closeLineStart = text.lastIndexOf('\n', closePos - 1) + 1;
+      const codeEnd = Math.max(codeStart, closeLineStart > 0 ? closeLineStart - 1 : closeLineStart);
+      code = text.slice(codeStart, codeEnd);
     }
-    const anchor = lines[i].nodes[0];
-    if(anchor && anchor.parentNode){
-      anchor.parentNode.insertBefore(makeCodeBlock(code), anchor);
-      for(let k=i;k<=endLine;k++) lines[k].nodes.forEach(n=> n.remove());
-    }
-    i = endLine + 1;
+
+    // 지울 DOM 범위 — 여는 펜스가 있는 줄의 시작부터 닫는 펜스가 있는 줄 끝(줄바꿈 포함)까지
+    const delStart = text.lastIndexOf('\n', openPos - 1) + 1;
+    let delEnd = text.indexOf('\n', closePos + fenceLen);
+    delEnd = delEnd < 0 ? text.length : delEnd + 1;
+    if(delEnd > claimedFrom) continue;   // 뒤쪽 블록과 범위가 겹침
+
+    try{
+      const startPoint = resolveFenceOffset(marks, delStart);
+      const endPoint = resolveFenceOffset(marks, delEnd);
+      const range = document.createRange();
+      range.setStart(startPoint.container, startPoint.offset);
+      range.setEnd(endPoint.container, endPoint.offset);
+      range.deleteContents();
+      range.insertNode(makeCodeBlock(code));
+      claimedFrom = delStart;
+    }catch(e){ /* 예상 밖의 DOM 모양이면 이 블록은 건드리지 않고 넘어갑니다 */ }
   }
 }
 
@@ -2421,21 +2486,23 @@ function archiveFolderCtx(){
   return {
     getList: ()=> state.archiveFolders,
     blurHint: '썸네일이 흐리게 보이고, 각 글 오른쪽 위의 👁 를 누르면 그 글만 선명해집니다.',
-    canDelete: (f)=> f.id !== ARC_DEFAULT_FOLDER,
+    canDelete: ()=> state.archiveFolders.length>1,   // 마지막 폴더는 남겨둡니다
     /* 갤러리와 달리 안에 든 글은 지우지 않습니다 — 글은 이미지보다 되돌리기 어렵고,
        일괄 삭제는 선택 모드의 🗑 버튼으로 따로 할 수 있습니다. */
     deleteWarn: (f)=>{
       const n = countIn(f);
-      return n>0
-        ? `'${f.name}' 폴더를 삭제합니다. 안에 있는 글 ${n}개는 지워지지 않고 '기본' 폴더로 옮겨집니다.`
-        : `'${f.name}' 폴더를 삭제합니다.`;
+      if(n===0) return `'${f.name}' 폴더를 삭제합니다.`;
+      const fallbackName = state.archiveFolders.find(x=>x!==f).name;
+      return `'${f.name}' 폴더를 삭제합니다. 안에 있는 글 ${n}개는 지워지지 않고 '${fallbackName}' 폴더로 옮겨집니다.`;
     },
     newFolder: (base)=> ({ ...base, id:'af'+Date.now() }),
     onCreate: (f)=>{ currentArcFolderId = f.id; arcPage = 1; },
     onDelete: async (f)=>{
-      state.archive.forEach(x=>{ if(x.folderId===f.id) x.folderId = ARC_DEFAULT_FOLDER; });
-      state.archiveFolders = state.archiveFolders.filter(x=>x!==f);
-      if(currentArcFolderId===f.id){ currentArcFolderId = ARC_DEFAULT_FOLDER; arcPage = 1; }
+      const remaining = state.archiveFolders.filter(x=>x!==f);
+      const fallback = remaining[0].id;
+      state.archive.forEach(x=>{ if(x.folderId===f.id) x.folderId = fallback; });
+      state.archiveFolders = remaining;
+      if(currentArcFolderId===f.id){ currentArcFolderId = fallback; arcPage = 1; }
       await storageSet('archive', state.archive);
     },
     save: ()=> storageSet('archiveFolders', state.archiveFolders),
@@ -3177,22 +3244,26 @@ function initGalleryRoot(host){
     renderGallery(p);
   });
 
+  /* + 버튼과 바깥에서 끌어다 놓기가 같은 방식으로 이미지를 추가합니다 */
+  const addGalleryFiles = async (fileList)=>{
+    const files = Array.from(fileList||[]).filter(f=> f.type.startsWith('image/'));
+    if(!files.length) return;
+    const p=galleryPost();
+    const folder = getFolder(p, currentGalleryFolderId) || p.galleryFolders[0];
+    // 고른 순서대로 넣습니다 (한 장씩 줄여 담아야 메모리가 덜 튑니다)
+    for(const f of files){
+      const url=await fileToDataUrl(f);
+      folder.images.push(url);
+    }
+    await gallerySave(); renderGallery(p);
+  };
+
   if(addBtn) addBtn.addEventListener('click', ()=>{
     use();
     if(!isLoggedIn) return;
     const input=document.createElement('input');
     input.type='file'; input.accept='image/*'; input.multiple = true;
-    input.addEventListener('change', async ()=>{
-      const files=Array.from(input.files||[]); if(!files.length) return;
-      const p=galleryPost();
-      const folder = getFolder(p, currentGalleryFolderId) || p.galleryFolders[0];
-      // 고른 순서대로 넣습니다 (한 장씩 줄여 담아야 메모리가 덜 튑니다)
-      for(const f of files){
-        const url=await fileToDataUrl(f);
-        folder.images.push(url);
-      }
-      await gallerySave(); renderGallery(p);
-    });
+    input.addEventListener('change', ()=> addGalleryFiles(input.files));
     input.click();
   });
 
@@ -3213,6 +3284,29 @@ function initGalleryRoot(host){
   const step = (dir)=>{ use(); galleryStepPage(dir); };
   if(next) next.addEventListener('click', ()=>{ if(!next.classList.contains('disabled')) step(1); });
   if(prev) prev.addEventListener('click', ()=>{ if(!prev.classList.contains('disabled')) step(-1); });
+
+  /* 다른 창(탐색기 등)에서 이미지를 끌어다 놓아도 + 버튼과 같이 추가됩니다.
+     이미지 순서 바꾸기 드래그(내부, dataTransfer 에 파일이 없음)와는
+     dataTransfer.types 로 구분합니다 — 놓지 않으면 브라우저가 파일을
+     새 페이지로 열어버리므로 dragover 에서도 preventDefault 가 필요합니다. */
+  if(wrap){
+    const isFileDrag = (e)=> e.dataTransfer && Array.from(e.dataTransfer.types||[]).includes('Files');
+    wrap.addEventListener('dragover', (e)=>{
+      if(!isLoggedIn || !isFileDrag(e)) return;
+      e.preventDefault();
+      wrap.classList.add('gallery-file-dragover');
+    });
+    wrap.addEventListener('dragleave', (e)=>{
+      if(e.target===wrap) wrap.classList.remove('gallery-file-dragover');
+    });
+    wrap.addEventListener('drop', (e)=>{
+      if(!isLoggedIn || !isFileDrag(e)) return;
+      e.preventDefault();
+      wrap.classList.remove('gallery-file-dragover');
+      use();
+      addGalleryFiles(e.dataTransfer.files);
+    });
+  }
 
   if(wrap){
     /* 세로 휠은 PAIR 갤러리에서만 씁니다 — OC 창은 세로를 장 넘김에 쓰거든요.
@@ -3346,19 +3440,21 @@ function ocFolderCtx(catId){
     getList: ()=> ocFoldersOf(cat.id),
     hideBlur: true,          // OC 는 '썸네일 흐리게'를 쓰지 않습니다
     blurHint: '',
-    canDelete: (f)=> f.id !== OC_DEFAULT_FOLDER,
+    canDelete: ()=> ocFoldersOf(cat.id).length>1,   // 마지막 폴더는 남겨둡니다
     deleteWarn: (f)=>{
       const n = countIn(f);
-      return n>0
-        ? `'${f.name}' 폴더를 삭제합니다. 안에 있는 글 ${n}개는 지워지지 않고 '기본' 폴더로 옮겨집니다.`
-        : `'${f.name}' 폴더를 삭제합니다.`;
+      if(n===0) return `'${f.name}' 폴더를 삭제합니다.`;
+      const fallbackName = ocFoldersOf(cat.id).find(x=>x!==f).name;
+      return `'${f.name}' 폴더를 삭제합니다. 안에 있는 글 ${n}개는 지워지지 않고 '${fallbackName}' 폴더로 옮겨집니다.`;
     },
     newFolder: (base)=> ({ ...base, id:'ocf'+Date.now(), blur:false }),
     onCreate: (f)=>{ currentOcFolderId = f.id; ocPage = 1; },
     onDelete: async (f)=>{
-      state.ocPosts.forEach(x=>{ if(x.type===cat.id && x.folderId===f.id) x.folderId = OC_DEFAULT_FOLDER; });
-      cat.folders = ocFoldersOf(cat.id).filter(x=>x!==f);
-      if(currentOcFolderId===f.id){ currentOcFolderId = OC_DEFAULT_FOLDER; ocPage = 1; }
+      const remaining = ocFoldersOf(cat.id).filter(x=>x!==f);
+      const fallback = remaining[0].id;
+      state.ocPosts.forEach(x=>{ if(x.type===cat.id && x.folderId===f.id) x.folderId = fallback; });
+      cat.folders = remaining;
+      if(currentOcFolderId===f.id){ currentOcFolderId = fallback; ocPage = 1; }
       await saveOc();
     },
     save: ()=> storageSet('ocCats', state.ocCats),
