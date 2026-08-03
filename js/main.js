@@ -1516,9 +1516,10 @@ document.getElementById('deleteSelectedBtn').addEventListener('click', async ()=
   selectedPairIds.clear();
   renderPairPosts();
 });
-/* PROMPT 페이지와 같은 4열 x 2행 = 8개 (모바일은 2열 x 4행).
-   CSS 의 .post-grid 열/행 수와 반드시 짝을 맞춰야 합니다. */
-const PAIR_PER_PAGE = 8;
+/* PC 는 4열 x 2행 = 8개, 모바일은 2열 x 2행 = 4개.
+   CSS 의 .post-grid 열 수와 반드시 짝을 맞춰야 합니다.
+   (isMobileWidth 는 갤러리 쪽과 같은 기준을 씁니다 — 아래 MOBILE_MQ 참고) */
+function pairPerPage(){ return isMobileWidth() ? 4 : 8; }
 let pairPage = 1;
 
 function renderPairPosts(){
@@ -1528,11 +1529,12 @@ function renderPairPosts(){
   const list = state.pairPosts.filter(p=> currentPairFilter==='all' || p.type===currentPairFilter);
   if(list.length===0){ grid.innerHTML='<div class="empty-note">아직 작성된 글이 없어요.</div>'; return; }
 
-  const totalPages = Math.max(1, Math.ceil(list.length/PAIR_PER_PAGE));
+  const perPage = pairPerPage();
+  const totalPages = Math.max(1, Math.ceil(list.length/perPage));
   if(pairPage>totalPages) pairPage=totalPages;
   if(pairPage<1) pairPage=1;
-  const start=(pairPage-1)*PAIR_PER_PAGE;
-  const pageItems = list.slice(start, start+PAIR_PER_PAGE);
+  const start=(pairPage-1)*perPage;
+  const pageItems = list.slice(start, start+perPage);
 
   pageItems.forEach(p=>{
     const el=document.createElement('div'); el.className='post-card'+(selectMode?' selectable':'');
@@ -1561,7 +1563,7 @@ function renderPairPosts(){
   });
 
   // 마지막 페이지가 덜 차도 격자 높이가 그대로 유지되도록 빈 자리를 채웁니다
-  for(let i=pageItems.length;i<PAIR_PER_PAGE;i++){
+  for(let i=pageItems.length;i<perPage;i++){
     const slot=document.createElement('div'); slot.className='post-slot';
     grid.appendChild(slot);
   }
@@ -3649,7 +3651,8 @@ document.getElementById('addTimelineBtn').addEventListener('click', async ()=>{
    상세 창은 인덱스 탭 없이 프로필 / 갤러리 / 로그 세 장이
    위아래로 넘어갑니다. 갤러리·로그는 PAIR 상세와 같은 코드를 씁니다.
    ============================================================ */
-const OC_PER_PAGE = 8;
+/* PAIR 목록과 같은 규칙 — PC 8개, 모바일 4개 */
+function ocPerPage(){ return isMobileWidth() ? 4 : 8; }
 let ocPage = 1;
 let currentOcFolderId = OC_DEFAULT_FOLDER;
 let ocSelectMode = false;
@@ -3692,59 +3695,116 @@ function ocFolderCtx(catId){
   };
 }
 
-function renderOcFolderBar(catId){
-  const bar = document.getElementById('ocFolderBar');
-  if(!bar) return;
-  bar.innerHTML='';
-  ocFoldersOf(catId).forEach(f=>{
-    const btn=document.createElement('button');
-    btn.type='button'; btn.className='gallery-folder-tab'+(f.id===currentOcFolderId?' active':'');
+/* ---- 폴더 고르기 드롭다운 (OC · ARCHIVE 공용) ----
+   예전에는 목록 위에 폴더 탭이 한 줄 깔려 있었지만, 그 줄이 차지하던 높이를
+   글 목록에 돌려주려고 상단바 오른쪽 끝의 드롭다운으로 옮겼습니다(갤러리는
+   창 안이라 예전 탭 그대로입니다). 두 곳이 다른 점은 host 로만 받습니다 —
+   갤러리·LOG 를 host 로 공유하는 것과 같은 방식입니다. */
+function renderFolderDropdown(host){
+  const root = document.getElementById(host.rootId);
+  if(!root) return;
+  const folders = host.folders();
+  const cur = folders.find(f=>f.id===host.currentId()) || folders[0];
+  if(!cur) return;
+  root.innerHTML = '';
+  root.classList.remove('open');
+  const close = ()=> root.classList.remove('open');
+
+  const btn = document.createElement('button');
+  btn.type='button'; btn.className='folder-dd-btn'; btn.title='폴더';
+  if(cur.secret){
+    const lock=document.createElement('span');
+    lock.className='gf-lock'; lock.innerText='🔒'; lock.title='비밀 폴더';
+    btn.appendChild(lock);
+  }
+  const nameEl=document.createElement('span'); nameEl.className='fdd-name'; nameEl.innerText=cur.name;
+  const caret=document.createElement('span'); caret.className='fdd-caret'; caret.innerText='▾';
+  btn.appendChild(nameEl); btn.appendChild(caret);
+  btn.addEventListener('click', (e)=>{ e.stopPropagation(); root.classList.toggle('open'); });
+  /* 글을 끌고 단추 위로 오면 저절로 펼쳐집니다 — 예전 탭처럼 끌어다 놓아
+     폴더를 옮길 수 있어야 하는데, 닫혀 있으면 놓을 자리가 없기 때문입니다. */
+  btn.addEventListener('dragover', (e)=>{
+    if(host.draggedId()==null) return;
+    e.preventDefault(); root.classList.add('open');
+  });
+  root.appendChild(btn);
+
+  const menu = document.createElement('div');
+  menu.className='folder-dd-menu';
+  root.appendChild(menu);
+
+  folders.forEach(f=>{
+    const item=document.createElement('button');
+    item.type='button'; item.className='folder-dd-item'+(f.id===cur.id?' active':'');
     if(f.secret){
       const lock=document.createElement('span');
       lock.className='gf-lock'; lock.innerText='🔒'; lock.title='비밀 폴더';
-      btn.appendChild(lock);
+      item.appendChild(lock);
     }
-    const nameSpan=document.createElement('span'); nameSpan.innerText=f.name;
-    btn.appendChild(nameSpan);
-    btn.addEventListener('click', (e)=>{
+    const label=document.createElement('span'); label.className='fdd-label'; label.innerText=f.name;
+    item.appendChild(label);
+    item.addEventListener('click', (e)=>{
       if(e.target.closest('.gallery-folder-rename')) return;
-      const open = ()=>{ currentOcFolderId=f.id; ocPage=1; ocSelectedIds.clear(); renderOcPosts(); };
+      const open = ()=>{ close(); host.select(f); };
       if(folderLocked(f)) openFolderUnlock(f, open); else open();
     });
     if(isLoggedIn){
       const renameBtn=document.createElement('button');
       renameBtn.type='button'; renameBtn.className='gallery-folder-rename';
       renameBtn.innerText='✎'; renameBtn.title='폴더 설정';
-      renameBtn.addEventListener('click', (e)=>{ e.stopPropagation(); openFolderModal(ocFolderCtx(catId), f); });
-      btn.appendChild(renameBtn);
+      renameBtn.addEventListener('click', (e)=>{ e.stopPropagation(); close(); openFolderModal(host.ctx(), f); });
+      item.appendChild(renameBtn);
 
-      // 선택 모드에서 끌어다 놓으면 그 폴더로 옮겨집니다 (PROMPT 와 같은 방식)
-      btn.addEventListener('dragover', (e)=>{
-        if(draggedOcId==null) return;
-        e.preventDefault(); btn.classList.add('drop-target');
+      item.addEventListener('dragover', (e)=>{
+        if(host.draggedId()==null) return;
+        e.preventDefault(); item.classList.add('drop-target');
       });
-      btn.addEventListener('dragleave', ()=> btn.classList.remove('drop-target'));
-      btn.addEventListener('drop', async (e)=>{
-        e.preventDefault(); btn.classList.remove('drop-target');
-        if(draggedOcId==null) return;
-        const ids = new Set(ocSelectedIds); ids.add(draggedOcId);
-        state.ocPosts.forEach(x=>{ if(ids.has(x.id)) x.folderId = f.id; });
-        draggedOcId=null; ocSelectedIds.clear();
-        await saveOc();
-        renderOcPosts();
+      item.addEventListener('dragleave', ()=> item.classList.remove('drop-target'));
+      item.addEventListener('drop', async (e)=>{
+        if(host.draggedId()==null) return;
+        e.preventDefault(); item.classList.remove('drop-target'); close();
+        await host.onDrop(f);
       });
-
-      bindFolderTabReorder(btn, f, ocFolderCtx(catId), bar);
+      // 폴더끼리 끌어 순서 바꾸기 — 예전 탭에서 쓰던 것을 그대로 씁니다
+      bindFolderTabReorder(item, f, host.ctx(), menu);
     }
-    bar.appendChild(btn);
+    menu.appendChild(item);
   });
+
   if(isLoggedIn){
+    const sep=document.createElement('div'); sep.className='folder-dd-sep'; menu.appendChild(sep);
     const addBtn=document.createElement('button');
-    addBtn.type='button'; addBtn.className='gallery-folder-add'; addBtn.innerText='＋ 폴더';
-    addBtn.addEventListener('click', ()=> openFolderModal(ocFolderCtx(catId), null));
-    bar.appendChild(addBtn);
+    addBtn.type='button'; addBtn.className='folder-dd-add'; addBtn.innerText='＋ 폴더';
+    addBtn.addEventListener('click', (e)=>{ e.stopPropagation(); close(); openFolderModal(host.ctx(), null); });
+    menu.appendChild(addBtn);
   }
 }
+/* 바깥을 누르면 닫습니다 */
+document.addEventListener('click', (e)=>{
+  document.querySelectorAll('.folder-dd.open').forEach(dd=>{
+    if(!dd.contains(e.target)) dd.classList.remove('open');
+  });
+});
+document.addEventListener('keydown', (e)=>{
+  if(e.key==='Escape') document.querySelectorAll('.folder-dd.open').forEach(dd=> dd.classList.remove('open'));
+});
+
+const OC_FOLDER_DD = {
+  rootId: 'ocFolderDD',
+  folders: ()=> ocFoldersOf(currentOcFilter),
+  currentId: ()=> currentOcFolderId,
+  ctx: ()=> ocFolderCtx(currentOcFilter),
+  select: (f)=>{ currentOcFolderId=f.id; ocPage=1; ocSelectedIds.clear(); renderOcPosts(); },
+  draggedId: ()=> draggedOcId,
+  onDrop: async (f)=>{
+    const ids = new Set(ocSelectedIds); ids.add(draggedOcId);
+    state.ocPosts.forEach(x=>{ if(ids.has(x.id)) x.folderId = f.id; });
+    draggedOcId=null; ocSelectedIds.clear();
+    await saveOc();
+    renderOcPosts();
+  }
+};
+function renderOcFolderBar(){ renderFolderDropdown(OC_FOLDER_DD); }
 
 function renderOcPosts(){
   const grid=document.getElementById('ocGrid');
@@ -3785,11 +3845,12 @@ function renderOcPosts(){
     x.type===currentOcFilter && ocFolderIdOf(x)===folder.id);
   if(list.length===0){ grid.innerHTML='<div class="empty-note">아직 만들어진 캐릭터가 없어요.</div>'; return; }
 
-  const totalPages = Math.max(1, Math.ceil(list.length/OC_PER_PAGE));
+  const perPage = ocPerPage();
+  const totalPages = Math.max(1, Math.ceil(list.length/perPage));
   if(ocPage>totalPages) ocPage=totalPages;
   if(ocPage<1) ocPage=1;
-  const start=(ocPage-1)*OC_PER_PAGE;
-  const pageItems = list.slice(start, start+OC_PER_PAGE);
+  const start=(ocPage-1)*perPage;
+  const pageItems = list.slice(start, start+perPage);
 
   pageItems.forEach(o=>{
     const el=document.createElement('div');
@@ -3826,7 +3887,7 @@ function renderOcPosts(){
   });
 
   // 마지막 페이지가 덜 차도 격자 높이가 유지되도록
-  for(let i=pageItems.length;i<OC_PER_PAGE;i++){
+  for(let i=pageItems.length;i<perPage;i++){
     const slot=document.createElement('div'); slot.className='post-slot';
     grid.appendChild(slot);
   }
@@ -5033,73 +5094,28 @@ function filterArchiveItems(items){
   });
 })();
 
-/* PROMPT 폴더 탭 — 갤러리 폴더바와 같은 모양(같은 CSS 클래스)입니다.
-   선택 모드에서 글을 끌어다 놓으면 그 폴더로 옮겨집니다. */
-function renderArcFolderBar(){
-  const bar = document.getElementById('arcFolderBar');
-  if(!bar) return;
-  bar.innerHTML='';
-  state.archiveFolders.forEach(f=>{
-    const btn=document.createElement('button');
-    btn.type='button'; btn.className='gallery-folder-tab'+(f.id===currentArcFolderId?' active':'');
-    if(f.secret){
-      const lock=document.createElement('span');
-      lock.className='gf-lock'; lock.innerText='🔒'; lock.title='비밀 폴더';
-      btn.appendChild(lock);
-    }
-    const nameSpan=document.createElement('span');
-    nameSpan.innerText=f.name;
-    btn.appendChild(nameSpan);
-    btn.addEventListener('click', (e)=>{
-      if(e.target.closest('.gallery-folder-rename')) return;
-      const open = ()=>{
-        currentArcFolderId=f.id; arcPage=1;
-        arcUnblurred.clear(); arcSelectedIds.clear();
-        renderArchive();
-      };
-      if(folderLocked(f)) openFolderUnlock(f, open);
-      else open();
-    });
-    if(isLoggedIn){
-      const renameBtn=document.createElement('button');
-      renameBtn.type='button'; renameBtn.className='gallery-folder-rename';
-      renameBtn.innerText='✎'; renameBtn.title='폴더 설정';
-      renameBtn.addEventListener('click', (e)=>{ e.stopPropagation(); openFolderModal(archiveFolderCtx(), f); });
-      btn.appendChild(renameBtn);
-
-      btn.addEventListener('dragover', (e)=>{
-        if(draggedArcId==null) return;
-        e.preventDefault();
-        btn.classList.add('drop-target');
-      });
-      btn.addEventListener('dragleave', ()=> btn.classList.remove('drop-target'));
-      btn.addEventListener('drop', async (e)=>{
-        e.preventDefault();
-        btn.classList.remove('drop-target');
-        if(draggedArcId==null) return;
-        // 선택해 둔 글이 있으면 함께, 없으면 끌던 글 하나만 옮깁니다
-        const ids = new Set(arcSelectedIds);
-        ids.add(draggedArcId);
-        state.archive.forEach(x=>{ if(ids.has(x.id)) x.folderId = f.id; });
-        draggedArcId=null;
-        arcSelectedIds.clear();
-        arcUnblurred.clear();
-        await storageSet('archive', state.archive);
-        renderArchive();
-      });
-
-      bindFolderTabReorder(btn, f, archiveFolderCtx(), bar);
-    }
-    bar.appendChild(btn);
-  });
-  if(isLoggedIn){
-    const addBtn=document.createElement('button');
-    addBtn.type='button'; addBtn.className='gallery-folder-add';
-    addBtn.innerText='＋ 폴더';
-    addBtn.addEventListener('click', ()=> openFolderModal(archiveFolderCtx(), null));
-    bar.appendChild(addBtn);
+/* PROMPT 폴더 — OC 와 같은 상단바 드롭다운을 씁니다(renderFolderDropdown). */
+const ARC_FOLDER_DD = {
+  rootId: 'arcFolderDD',
+  folders: ()=> state.archiveFolders,
+  currentId: ()=> currentArcFolderId,
+  ctx: ()=> archiveFolderCtx(),
+  select: (f)=>{
+    currentArcFolderId=f.id; arcPage=1;
+    arcUnblurred.clear(); arcSelectedIds.clear();
+    renderArchive();
+  },
+  draggedId: ()=> draggedArcId,
+  onDrop: async (f)=>{
+    // 선택해 둔 글이 있으면 함께, 없으면 끌던 글 하나만 옮깁니다
+    const ids = new Set(arcSelectedIds); ids.add(draggedArcId);
+    state.archive.forEach(x=>{ if(ids.has(x.id)) x.folderId = f.id; });
+    draggedArcId=null; arcSelectedIds.clear(); arcUnblurred.clear();
+    await storageSet('archive', state.archive);
+    renderArchive();
   }
-}
+};
+function renderArcFolderBar(){ renderFolderDropdown(ARC_FOLDER_DD); }
 
 function renderArchive(){
   const wrap=document.getElementById('archiveBody');
@@ -5123,9 +5139,13 @@ function renderArchive(){
   // OOC/ETC 는 데스크톱 15줄 / 모바일 10줄
   const perPage = isGallery ? 8 : (isMobileWidth() ? 10 : 15);
 
-  /* PROMPT 는 폴더로 한 번 더 걸러서 보여줍니다 */
+  /* PROMPT 는 폴더로 한 번 더 걸러서 보여줍니다.
+     폴더 고르기는 목록 위 탭이 아니라 상단바 드롭다운입니다 — 폴더를 쓰지 않는
+     OOC/ETC 에서는 그 단추 자체를 숨깁니다. */
   let folder = null;
-  const folderBarHtml = isGallery ? '<div class="gallery-folder-bar arc-folder-bar" id="arcFolderBar"></div>' : '';
+  const folderBarHtml = '';
+  const folderDD = document.getElementById('arcFolderDD');
+  if(folderDD) folderDD.style.display = isGallery ? '' : 'none';
   let catItems = state.archive.filter(x=>(x.category||'ooc')===currentArchiveCategory);
   if(isGallery){
     // 폴더 목록이 어떤 이유로든 비어 있으면 기본 폴더를 만들어 둡니다
@@ -5541,6 +5561,9 @@ function initResponsiveWatch(){
     const o = getCurrentOc();
     if(o && document.getElementById('modalOcDetail').classList.contains('open')) renderGallery(o);
     if(document.getElementById('view-archive').classList.contains('active')) renderArchive();
+    /* PAIR·OC 목록도 한 페이지 개수가 달라지므로(8 ↔ 4) 첫 페이지로 되돌리고 다시 그립니다 */
+    pairPage = 1; ocPage = 1;
+    if(document.getElementById('view-pair').classList.contains('active')) renderPairPosts();
     if(document.getElementById('view-oc').classList.contains('active')) renderOcPosts();
   };
   window.matchMedia(MOBILE_MQ).addEventListener('change', onChange);

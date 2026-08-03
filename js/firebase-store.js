@@ -22,7 +22,7 @@ import {
   getFirestore, doc, getDoc, setDoc, deleteDoc,
   collection, getDocs, writeBatch
 } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
-import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=54';
+import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=59';
 
 const app  = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);

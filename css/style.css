@@ -13,6 +13,9 @@
     --text:#1a1a1a;--text-muted:#6b675e;--accent:#c1440e;--accent-soft:#f4dcce;
     --page-bg:#EF3921;
     --radius:0px;--radius-sm:0px;--mono:'JoseonGulim',monospace;font-family:'JoseonGulim',monospace;
+    /* 상단바 제목·사이드바 이름/카테고리·HOME 카드 글자에만 쓰는 픽셀 서체.
+       본문은 --mono(조선굴림체) 그대로입니다. */
+    --pixel:'Galmuri9',monospace;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;height:100%;font-family:'JoseonGulim',monospace;}
@@ -32,11 +35,11 @@
   /* ---------- Sidebar ---------- */
   .sidebar{width:230px;flex:none;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:20px 16px;gap:16px;overflow-y:auto;}
   .profile-block{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;padding:4px 4px 14px;border-bottom:1px solid var(--border);}
-  .profile-name{font-family:var(--mono);font-size:14px;font-weight:700;letter-spacing:.02em;border:none;background:transparent;text-align:center;width:100%;color:var(--text);outline:none;}
+  .profile-name{font-family:var(--pixel);font-size:14px;font-weight:700;letter-spacing:.02em;border:none;background:transparent;text-align:center;width:100%;color:var(--text);outline:none;}
   .profile-bio{font-size:11.5px;color:var(--text-muted);border:none;background:transparent;text-align:center;width:100%;resize:none;outline:none;line-height:1.5;height:44px;}
 
   .nav{display:flex;flex-direction:column;gap:2px;}
-  .nav-item{display:flex;align-items:center;justify-content:space-between;padding:9px 10px;border-radius:var(--radius-sm);font-family:var(--mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);background:transparent;border:none;text-align:left;width:100%;}
+  .nav-item{display:flex;align-items:center;justify-content:space-between;padding:9px 10px;border-radius:var(--radius-sm);font-family:var(--pixel);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);background:transparent;border:none;text-align:left;width:100%;}
   .nav-item:hover{background:var(--surface-2);}
   .nav-item.active{background:var(--accent-soft);color:var(--accent);}
   /* PAIR·OC 는 라벨 옆에 카테고리 추가(＋) 아이콘이 붙어 nav-item 이 감싸져 있습니다.
@@ -65,7 +68,7 @@
     .nav-sub:hover{max-height:560px;}
   }
   .nav-sub.open{max-height:560px;}
-  .nav-sub-item{padding:7px 10px;font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);border-radius:var(--radius-sm);border:none;background:transparent;text-align:left;font-weight:500;}
+  .nav-sub-item{padding:7px 10px;font-family:var(--pixel);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);border-radius:var(--radius-sm);border:none;background:transparent;text-align:left;font-weight:500;}
   .nav-sub-item:hover{background:var(--surface-2);color:var(--text);}
   .nav-sub-item.active{color:var(--accent);background:var(--accent-soft);}
   /* PAIR·OC 세부 카테고리 — 편집 모드에서 이름 변경(✎)·순서 변경(끌기) */
@@ -107,7 +110,7 @@
      화면을 옮기거나 로그인할 때마다 제목 줄이 위아래로 튀었습니다.
      .cards-topbar 도 같은 값으로 맞춰 세 화면의 머리줄이 한 높이로 이어집니다. */
   .topbar{position:sticky;top:0;background:rgba(244,241,234,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;z-index:20;}
-  .topbar h2{font-family:var(--mono);font-size:14px;margin:0;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
+  .topbar h2{font-family:var(--pixel);font-size:14px;margin:0;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
   .btn-primary{background:var(--text);color:#fff;border:none;border-radius:var(--radius-sm);padding:8px 14px;font-size:12.5px;font-weight:600;}
   .btn-primary:hover{opacity:.85;}
   .btn-ghost{background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:8px 14px;font-size:12.5px;font-weight:600;}
@@ -148,7 +151,7 @@
      .topbar(PAIR/ARCHIVE)와 같은 60px 를 써서 화면을 옮겨도 머리줄이 이어져 보입니다. */
   .cards-topbar{position:sticky;top:0;background:rgba(244,241,234,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:0 28px 0 0;display:flex;align-items:stretch;gap:0;z-index:5;height:60px;}
   .to-intro-btn{width:28px;height:28px;border-radius:0;border:1px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:13px;}
-  .cards-topbar h3{font-family:var(--mono);font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin:0;flex:1;}
+  .cards-topbar h3{font-family:var(--pixel);font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin:0;flex:1;}
   .li-title{display:flex;align-items:stretch;gap:0;}
   /* 아이콘 칸: 바 높이와 같은 변을 가진 정사각형.
      폭을 직접 지정합니다 — 사파리는 늘어난(stretch) 높이로부터 aspect-ratio 의
@@ -178,9 +181,10 @@
      각 정지점을 50/74 비율로 줄임 (34% → 23%, 74% → 50%) */
   .dream-card .dc-grad{position:absolute;inset:0;background:linear-gradient(90deg, rgba(0,0,0,.85) 0%, rgba(0,0,0,.55) 23%, rgba(0,0,0,0) 50%);z-index:2;pointer-events:none;}
   .dream-card .dc-content{position:absolute;left:0;bottom:0;z-index:3;padding:12px 16px;max-width:78%;}
-  .dream-card .dc-genre{font-family:var(--mono);font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;opacity:.9;outline:none;}
-  .dream-card .dc-name{font-size:16px;font-weight:700;margin:3px 0;outline:none;}
-  .dream-card .dc-catch{font-size:11.5px;opacity:.9;font-style:italic;margin-bottom:5px;outline:none;}
+  /* 장르·이름·캐치프레이즈만 픽셀 서체 — 설명(.dc-desc)은 본문 서체 그대로입니다 */
+  .dream-card .dc-genre{font-family:var(--pixel);font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;opacity:.9;outline:none;}
+  .dream-card .dc-name{font-family:var(--pixel);font-size:16px;font-weight:700;margin:3px 0;outline:none;}
+  .dream-card .dc-catch{font-family:var(--pixel);font-size:11.5px;opacity:.9;font-style:italic;margin-bottom:5px;outline:none;}
   .dream-card .dc-desc{font-size:10.5px;opacity:.85;line-height:1.5;outline:none;}
   @media (hover:hover){
     .dream-card [contenteditable="true"]:hover{outline:1px solid rgba(255,255,255,.4);border-radius:3px;}
@@ -202,6 +206,39 @@
   .pair-select-bar{display:flex;align-items:center;gap:8px;padding:10px 28px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text-muted);background:var(--surface);}
   .pair-select-bar .move-btns{display:flex;flex-wrap:wrap;gap:6px;flex:1;min-width:0;}
   .pair-header-actions{gap:8px;}
+  /* ---- 상단바 오른쪽 묶음 (선택 · 글쓰기 · 폴더) ----
+     OC·ARCHIVE 는 폴더 탭 줄 대신 상단바 오른쪽 끝의 드롭다운으로 폴더를 고릅니다.
+     폴더 단추는 보기 모드에도 있어야 하므로 [data-editonly] 묶음 바깥에 있고,
+     그 묶음은 보기 모드에서 사라지는 대신 자리만 남겨(.keep-space) 폴더 단추가
+     좌우로 움직이지 않게 합니다. */
+  .topbar-actions{display:flex;align-items:center;gap:8px;}
+  body:not(.logged-in) .topbar-actions .pair-header-actions.keep-space[data-editonly]{
+    display:inline-flex;visibility:hidden;pointer-events:none;}
+  .folder-dd{position:relative;flex:none;}
+  .folder-dd-btn{display:inline-flex;align-items:center;gap:6px;max-width:190px;
+    border:1px solid var(--border);background:var(--bg);color:var(--text);
+    font-family:var(--mono);font-size:11px;font-weight:700;padding:7px 10px;line-height:1.2;}
+  .folder-dd-btn:hover{background:var(--surface-2);}
+  .folder-dd-btn .fdd-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .folder-dd-btn .fdd-caret{flex:none;font-size:9px;color:var(--text-muted);}
+  .folder-dd.open .folder-dd-btn{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);}
+  .folder-dd-menu{display:none;position:absolute;top:calc(100% + 4px);right:0;min-width:100%;
+    max-width:260px;max-height:60vh;overflow-y:auto;background:var(--bg);
+    border:1px solid var(--border);z-index:60;padding:4px;}
+  .folder-dd.open .folder-dd-menu{display:block;}
+  .folder-dd-item{display:flex;align-items:center;gap:6px;width:100%;text-align:left;
+    border:none;background:transparent;color:var(--text);font-family:var(--mono);font-size:11px;
+    padding:7px 8px;white-space:nowrap;}
+  .folder-dd-item:hover{background:var(--surface-2);}
+  .folder-dd-item.active{background:var(--accent-soft);color:var(--accent);font-weight:700;}
+  .folder-dd-item.drop-target{background:var(--accent);color:#fff;}
+  .folder-dd-item .fdd-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;}
+  .folder-dd-item .gallery-folder-rename{flex:none;}
+  .folder-dd-add{display:flex;align-items:center;justify-content:center;width:100%;
+    border:1px dashed var(--accent);background:var(--bg);color:var(--accent);
+    font-family:var(--mono);font-size:10.5px;font-weight:700;padding:6px 8px;margin-top:4px;}
+  .folder-dd-add:hover{background:var(--accent-soft);}
+  .folder-dd-sep{height:1px;background:var(--border);margin:4px 2px 0;opacity:.35;}
   .post-card{position:relative;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--bg);cursor:pointer;display:flex;flex-direction:column;min-height:0;}
   .post-card.selectable{cursor:default;}
   .post-check{position:absolute;top:6px;left:6px;width:18px;height:18px;border:1px solid var(--border);background:var(--bg);z-index:4;display:flex;align-items:center;justify-content:center;font-size:11px;}
@@ -447,8 +484,10 @@
   /* 상자 없이 TIMELINE 처럼 제목줄 + 구분선만 두고, 목록만 스크롤됩니다 */
   .msg-section{display:flex;flex-direction:column;min-height:0;height:100%;margin-bottom:0;}
   .msg-section > .pd-section-head{flex:none;}
+  /* 위 여백 26px 은 첫 말풍선의 도구 줄(.msg-tools, top:-23px) 자리입니다 —
+     0 이면 스크롤 칸 위쪽 경계에 잘려서 맨 위 말풍선만 '사진' 버튼이 안 보입니다. */
   .msg-list{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
-    padding:0 0 26px;display:flex;flex-direction:column;gap:12px;scrollbar-width:none;}
+    padding:26px 0;display:flex;flex-direction:column;gap:12px;scrollbar-width:none;}
   .msg-list::-webkit-scrollbar{width:0;}
   .msg-empty{margin:auto;font-size:10.5px;color:var(--text-muted);}
   .msg-row{position:relative;display:flex;align-items:flex-start;gap:5px;max-width:100%;}
@@ -675,6 +714,9 @@
   .arc-view-content img{max-width:100%;display:block;margin:8px 0;}
   .arc-view-content pre{background:var(--surface);border:1px solid var(--border);padding:8px;overflow-x:auto;font-family:var(--mono);font-size:11px;}
   .arc-view-content blockquote{border-left:3px solid var(--accent);margin:8px 0;padding:4px 12px;color:var(--text);}
+  /* OC 자유 텍스트에도 인용구 버튼이 있습니다 — 여기에도 같은 모양을 줘야
+     왼쪽 세로 막대가 보입니다(전에는 규칙이 없어 평범한 글처럼 보였습니다). */
+  .oc-free blockquote{border-left:3px solid var(--accent);margin:8px 0;padding:4px 12px;color:var(--text);}
   .img-toolbar{position:fixed;display:flex;gap:2px;background:var(--text);border:1px solid var(--border);z-index:600;}
   .img-toolbar button{background:var(--text);color:#fff;border:none;width:24px;height:24px;font-size:11px;}
   .img-toolbar button:hover{background:var(--accent);}
@@ -1143,12 +1185,21 @@
 
     /* ---------- Pair 목록 ---------- */
     .pair-body{padding:16px 14px 10px;}
-    /* 한 페이지 8개는 그대로 두고 4x2 를 2x4 로 세웁니다 (PROMPT 와 같은 방식) */
-    .post-grid{grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(4,1fr);gap:10px;}
+    /* 모바일은 한 페이지 4개(2x2) — pairPerPage()/ocPerPage() 와 짝을 맞춰야 합니다.
+       칸이 8개에서 4개로 줄어든 만큼 카드 하나가 커져 사진이 잘 보입니다. */
+    .post-grid{grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(2,1fr);gap:10px;}
     .post-info{padding:8px 10px;}
     .post-title{font-size:12.5px;}
     .pair-select-bar{flex-wrap:wrap;padding:10px 14px;gap:6px;}
     .pair-header-actions{gap:6px;}
+    /* 폴더 드롭다운 — 좁은 화면에서는 이름을 줄이고 터치 크기를 키웁니다.
+       보기 모드에서 편집 단추 자리를 비워두는 것(.keep-space)은 PC 에서만 합니다 —
+       모바일은 가로가 빠듯해서 빈 자리를 남기면 폴더 단추가 화면 밖으로 밀립니다. */
+    .topbar-actions{gap:6px;}
+    body:not(.logged-in) .topbar-actions .pair-header-actions.keep-space[data-editonly]{display:none;}
+    .folder-dd-btn{max-width:112px;padding:10px 8px;font-size:10.5px;}
+    .folder-dd-item{padding:11px 10px;font-size:12px;}
+    .folder-dd-add{padding:10px 8px;}
     .post-check{width:24px;height:24px;font-size:13px;}
 
     /* ---------- OC ---------- */
