@@ -267,8 +267,10 @@ function ocFolderIdOf(item){
 
 /* OC 글 한 건의 기본 모양을 채웁니다 (예전 데이터에 빠진 항목도 여기서 메꿉니다) */
 function migrateOcPost(o){
-  o.title = o.title || '새 캐릭터';
-  if(o.subtitle == null) o.subtitle = '캐치프레이즈';
+  /* 이름·부제목은 비워 둡니다 — 입력칸의 안내 문구(placeholder)만 보이고,
+     쓰는 사람이 예시 글자를 지울 필요가 없습니다. */
+  if(o.title == null) o.title = '';
+  if(o.subtitle == null) o.subtitle = '';
   o.headerImage = normalizeImg(o.headerImage);
   o.sideImage   = normalizeImg(o.sideImage);
   o.profile = o.profile || {};
@@ -1485,7 +1487,9 @@ function newPostType(nav){
 
 bindOnce(document.getElementById('writePairBtn'), async ()=>{
   if(!isLoggedIn) return;
-  const post = migratePost({ id:Date.now(), type: newPostType(PAIR_CAT_NAV), title:'새 페어' });
+  /* 이름·부제목은 비워 둡니다 — 입력칸의 안내 문구(placeholder)만 보이고,
+     쓰는 사람이 예시 글자를 지울 필요가 없습니다. */
+  const post = migratePost({ id:Date.now(), type: newPostType(PAIR_CAT_NAV), title:'' });
   // 새 글은 맨 앞에 쌓입니다 — 첫 페이지 왼쪽 위에서 바로 보입니다
   state.pairPosts.unshift(post);
   await storageSet('pairPosts', state.pairPosts);
@@ -1622,7 +1626,7 @@ function fillPairDetail(p){
   titleInput.oninput=()=>{ if(!isLoggedIn)return; p.title=titleInput.value; storageSet('pairPosts',state.pairPosts); renderPairPosts(); };
 
   const subtitleInput=document.getElementById('pdSubtitleInput');
-  if(p.subtitle==null) p.subtitle='타이틀';
+  if(p.subtitle==null) p.subtitle='';
   subtitleInput.value=p.subtitle; subtitleInput.readOnly=!isLoggedIn;
   subtitleInput.oninput=()=>{ if(!isLoggedIn)return; p.subtitle=subtitleInput.value; storageSet('pairPosts',state.pairPosts); };
 
@@ -2007,20 +2011,33 @@ function resolveFenceOffset(marks, pos){
   }
   return { container: best.container, offset: best.offset + (pos - best.pos) };
 }
+/* 한 줄을 끝맺는 것들 — <br> 뿐 아니라 사진·구분선·이미 만들어진 코드 상자처럼
+   자기 줄을 차지하는(display:block) 것들도 줄을 나눕니다. 글자로는 아무것도
+   내놓지 않아 펼친 텍스트에서는 앞줄과 같은 자리에 붙어 보이지만, 화면에서는
+   분명히 다른 줄이고 무엇보다 지워지면 안 되는 내용입니다. */
+function isLineSeparator(node){
+  if(!node || node.nodeType !== 1) return false;
+  if(node.tagName === 'BR' || node.tagName === 'IMG') return true;
+  if(BLOCK_TAGS.includes(node.tagName)) return true;
+  return node.classList && (node.classList.contains('code-block') || node.classList.contains('code-embed'));
+}
 /* 펜스 글자를 감싼 가장 가까운 블록 요소(el, 예: .fold-body) 안에서, 그 글자가
    속한 '줄'만 골라 경계를 찾습니다 — el 전체가 아닙니다. el 은 흔히 한 줄짜리
-   그릇(접기 안에서 줄마다 따로 감싸인 <div> 하나)이지만, <br> 로만 줄을 나눈
+   그릇(접기 안에서 줄마다 따로 감싸인 <div> 하나)이지만, 줄을 <br> 로만 나눈
    경우엔 el 하나(예: .fold-body 자신) 안에 여러 줄이 형제로 같이 들어있을 수
-   있습니다 — 그때 el 전체를 지우면 그 안의 다른 줄(안내문·다른 문단)까지
-   함께 사라집니다. 그래서 먼저 el 의 자식들 사이에서 <br> 를 찾고, 있으면
-   그 자리(el 안)를 쓰고, 없으면(el 자체가 통째로 한 줄) el 을 지울 단위로 보고
-   el 의 부모 안에서 el 의 위치를 씁니다. */
+   있습니다 — 그때 el 전체를 지우면 그 안의 다른 줄까지 함께 사라집니다.
+   특히 `<div class="fold-body"><img>```</div>` 처럼 사진과 여는 펜스가 <br> 도
+   없이 한 그릇에 들어있는 글이 실제로 저장돼 있어서(접기 안에 사진을 넣고 바로
+   백틱을 친 경우), <br> 만 찾으면 그 사진까지 지워집니다. 그래서 사진·구분선
+   같은 것도 줄 끝으로 봅니다(isLineSeparator).
+   그 방향에 줄 끝이 하나도 없으면 el 자체가 통째로 한 줄이라는 뜻이므로,
+   el 을 지울 단위로 보고 el 의 부모 안에서 el 의 위치를 씁니다. */
 function localLineBoundary(el, node, dir){
   let cur = node;
   while(cur.parentNode !== el) cur = cur.parentNode;
   let sib = dir < 0 ? cur.previousSibling : cur.nextSibling;
   while(sib){
-    if(sib.nodeType === 1 && sib.tagName === 'BR'){
+    if(isLineSeparator(sib)){
       const idx = Array.prototype.indexOf.call(el.childNodes, sib);
       return { container: el, offset: dir < 0 ? idx + 1 : idx };
     }

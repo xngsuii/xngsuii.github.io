@@ -222,6 +222,10 @@
   .post-info{padding:10px 12px;flex:none;}
   .post-type{font-family:var(--mono);font-size:9.5px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.05em;}
   .post-title{font-size:13px;font-weight:700;margin-top:2px;}
+  /* 이름을 아직 안 적은 글은 목록에서 칸이 비어 보이므로, 상세 창 입력칸의
+     안내 문구와 같은 말을 옅게 대신 보여줍니다(실제로 저장된 글자는 아닙니다). */
+  #view-pair .post-title:empty:before{content:'새 페어';color:var(--text-muted);font-weight:500;}
+  #view-oc .post-title:empty:before{content:'새 캐릭터';color:var(--text-muted);font-weight:500;}
   .empty-note{color:var(--text-muted);font-size:12.5px;padding:30px 0;text-align:center;}
   /* LOG 목록이 비었을 때 — 남은 칸 한가운데에 놓습니다.
      아래 34px 은 페이지 버튼 자리라 빼고 잽니다. 그래야 글이 있을 때
@@ -726,6 +730,12 @@
      위 여백은 본문 줄 간격(12.5px x 1.4 = 약 5px 벌어짐)보다 조금 넓게 잡아
      제목과 내용이 한 문단으로 붙어 보이지 않게 합니다. */
   .fold-body{padding-left:20px;margin-top:7px;}
+  /* 백틱 코드블록은 접기 안에서도 .fold-body 밖(접기의 직계 자식)에 놓일 수
+     있습니다 — 펜스가 있던 줄 그릇을 통째로 갈아끼우는 자리라서요(applyCodeFences
+     의 localLineBoundary 참고). 그때도 .fold-body 와 같은 만큼 들여써야 사진·글과
+     왼쪽 끝이 맞습니다. */
+  .fold-block > .code-block,
+  .fold-block > .code-embed{margin-left:20px;}
   /* .fold-body 하나만 짚지 않고 fold-head 를 뺀 모든 직계 자식을 숨깁니다 —
      예전에 저장된 글 중에는(브라우저가 접기 내용 칸 안에서 엔터를 처리하며
      같은 class 를 그대로 물려받은 형제 <div> 를 만들어) 접기 하나에 .fold-body
