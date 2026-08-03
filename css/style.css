@@ -3,6 +3,11 @@
     src:url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_20-04@1.0/ChosunGu.woff') format('woff');
     font-weight:normal;font-style:normal;font-display:swap;
   }
+  @font-face{
+    font-family:'Galmuri9';
+    src:url('https://cdn.jsdelivr.net/npm/galmuri@2.40.3/dist/Galmuri9.woff2') format('woff2');
+    font-weight:normal;font-style:normal;font-display:swap;
+  }
   :root{
     --bg:#f4f1ea;--surface:#ece7d9;--surface-2:#e2dbc8;--border:#1a1a1a;
     --text:#1a1a1a;--text-muted:#6b675e;--accent:#c1440e;--accent-soft:#f4dcce;
@@ -129,9 +134,9 @@
   .home-pages-wrap.show-cards #home-intro-page{transform:translateY(-100%);}
   .home-pages-wrap.show-cards #home-cards-page{transform:translateY(0);}
 
-  .intro-card{width:100%;max-width:420px;border:1px solid var(--border);border-radius:0;padding:26px 24px 30px;text-align:center;background:var(--bg);}
+  .intro-card{width:100%;max-width:420px;border:1px solid var(--border);border-radius:0;padding:26px 24px 30px;text-align:center;background:var(--bg);font-family:'Galmuri9',monospace;}
   .intro-banner{width:100%;aspect-ratio:3/1;border-radius:0;border:1px solid var(--border);margin-bottom:16px;}
-  .intro-sitename{font-family:var(--mono);font-size:17px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;border:none;background:transparent;text-align:center;width:100%;outline:none;color:var(--text);}
+  .intro-sitename{font-family:inherit;font-size:17px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;border:none;background:transparent;text-align:center;width:100%;outline:none;color:var(--text);}
   .intro-divider{color:var(--text-muted);font-size:12px;margin:10px 0;}
   .home-intro{font-size:12.5px;line-height:1.9;outline:none;color:var(--text);min-height:24px;white-space:pre-wrap;}
   .home-intro:empty:before{content:'소개글을 입력하세요...';color:var(--text-muted);}
@@ -532,6 +537,15 @@
   /* 오버레이 여백(12px)을 뺀 나머지를 전부 쓴다 — 1920x1080(실측 뷰포트 919px)에서 스크롤 없이 들어와야 함 */
   .modal.wide.pd-modal{width:720px;max-width:96vw;max-height:calc(100vh - 24px);}
   .modal.wide.arc-modal{max-width:580px;}
+  /* 세로로 꽉 채우는 배치 — .arc-editor 가 남는 높이를 전부 가져가서(flex:1),
+     본문이 짧을 때도 길 때도 모달 전체 높이가 항상 (거의) 88vh 에 맞춰집니다.
+     그래야 글 보기 창과 글 수정 창의 높이가 비슷해집니다 — 예전에는 .arc-editor
+     에만 고정 max-height(320px)를 줘서 수정 창이 보기 창보다 훨씬 짧았습니다.
+     반드시 '글쓰기/수정' 창에만 걸어야 합니다 — 보기 창(#modalArcView)도 같은
+     .arc-modal 클래스를 쓰는데, 거기에 flex 를 걸면 본문(.arc-view-content)이
+     flex 아이템이 되어 눌려버리고, 창 전체가 스크롤되던 것이 본문 안쪽 스크롤로
+     바뀝니다. 보기 창은 예전처럼 .modal 기본값(창 전체 스크롤)을 그대로 씁니다. */
+  #modalArcWrite .modal.wide.arc-modal{display:flex;flex-direction:column;}
   .modal h3{margin:0 0 16px;font-family:var(--mono);font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
   .modal-close{position:absolute;top:14px;right:14px;background:rgba(244,241,234,.9);border:1px solid var(--border);width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text);z-index:10;}
   .modal.pd-modal{padding:0;}
@@ -650,7 +664,7 @@
   .kw-color{width:13px;height:13px;padding:0;border:none;border-radius:50%;overflow:hidden;background:none;cursor:pointer;}
   .rt-toolbar{display:flex;align-items:center;gap:4px;margin-bottom:6px;flex-wrap:wrap;}
   .rt-sep{width:1px;align-self:stretch;background:var(--border);margin:0 4px;}
-  .arc-editor{min-height:220px;margin-bottom:16px;}
+  .arc-editor{flex:1 1 auto;min-height:160px;max-height:none;overflow-y:auto;margin-bottom:16px;}
   .arc-editor img{max-width:100%;display:block;margin:8px 0;cursor:pointer;}
   .arc-editor pre{background:var(--surface);border:1px solid var(--border);padding:8px;overflow-x:auto;font-family:var(--mono);font-size:11px;}
   .arc-editor blockquote{border-left:3px solid var(--accent);margin:8px 0;padding:4px 12px;color:var(--text);}
@@ -703,11 +717,21 @@
     line-height:1.6;cursor:pointer;user-select:none;-webkit-user-select:none;}
   .fold-arrow:hover{color:var(--text);}
   .fold-title{flex:1;min-width:0;outline:none;}
+  /* 타이틀/내용 안내 문구 — OC 자유 텍스트(.oc-free:empty:before)와 같은 방식으로,
+     실제 글자가 아니라 비어 있을 때만 보이는 안내라 지우지 않고 바로 이어 쓸 수
+     있습니다. 읽기 화면에 빈 접기가 남을 일은 없어야 하니 편집 중에만 보입니다. */
+  body.logged-in .fold-title:empty:before{content:'타이틀';color:var(--text-muted);}
+  body.logged-in .fold-body:empty:before{content:'내용을 입력하세요';color:var(--text-muted);}
   /* 화살표(12px) + 간격(8px) 만큼 들여써서 제목 글자 왼쪽 끝에 맞춥니다.
      위 여백은 본문 줄 간격(12.5px x 1.4 = 약 5px 벌어짐)보다 조금 넓게 잡아
      제목과 내용이 한 문단으로 붙어 보이지 않게 합니다. */
   .fold-body{padding-left:20px;margin-top:7px;}
-  .fold-block:not(.open) .fold-body{display:none;}
+  /* .fold-body 하나만 짚지 않고 fold-head 를 뺀 모든 직계 자식을 숨깁니다 —
+     예전에 저장된 글 중에는(브라우저가 접기 내용 칸 안에서 엔터를 처리하며
+     같은 class 를 그대로 물려받은 형제 <div> 를 만들어) 접기 하나에 .fold-body
+     가 여러 개 나란히 있거나, 백틱 코드블록이 그 사이 직계 자식으로 끼어든
+     경우가 있습니다. 그런 경우에도 접었을 때 전부 가려지도록 이렇게 둡니다. */
+  .fold-block:not(.open) > *:not(.fold-head){display:none;}
   .arc-view-content .fold-head{cursor:pointer;}
   .code-embed-image{background:#fff;}
   .code-embed-preview-live{background:#fff;padding:10px;overflow:auto;}

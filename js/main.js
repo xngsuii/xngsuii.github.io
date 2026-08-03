@@ -1220,6 +1220,47 @@ function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 document.querySelectorAll('[data-close]').forEach(el=>{ el.addEventListener('click', ()=> el.closest('.modal-overlay').classList.remove('open')); });
 document.querySelectorAll('.modal-overlay').forEach(ov=>{ ov.addEventListener('click',(e)=>{ if(e.target===ov) ov.classList.remove('open'); }); });
 
+/* 글쓰기 창(ARCHIVE·LOG)에서 저장하지 않은 변경사항이 있는 채로 바깥을
+   클릭하거나 X(.modal-close) 버튼을 눌러 나가려 하면, 그래도 나갈지
+   사이트 디자인에 맞춘 확인창(siteConfirm)으로 한 번 더 묻습니다.
+   '취소'(.btn-ghost, 위의 [data-close] 로 이미 처리됨)는 그 자체가 버리겠다는
+   뜻이라 다시 묻지 않습니다 — 그래서 여기서는 .modal-close 와 오버레이 바깥
+   클릭만 가로챕니다. 위 두 줄의 일반 핸들러가 이미 등록돼 있으므로, 여기
+   핸들러는 capture 단계에서 먼저 받아 필요할 때만 막습니다(stopPropagation).
+   getSnapshot() 은 지금 입력 상태를 문자열로 돌려주는 함수 — 모달을 열 때
+   armUnsavedGuard() 로 그 시점 값을 기준선으로 저장해 두고, 닫으려는 시점에
+   다시 불러 값이 달라졌으면 '저장 안 됨'으로 봅니다. */
+function guardUnsavedClose(overlayId, getSnapshot){
+  const overlay = document.getElementById(overlayId);
+  if(!overlay) return;
+  let baseline = null;
+  overlay._armUnsavedGuard = ()=>{ baseline = getSnapshot(); };
+  const dirty = ()=> baseline !== null && getSnapshot() !== baseline;
+  const attempt = (e)=>{
+    if(!overlay.classList.contains('open') || !dirty()) return;
+    e.stopPropagation();
+    e.preventDefault();
+    siteConfirm('저장하지 않은 내용이 있어요. 그래도 나갈까요?', '나가기').then(ok=>{
+      if(ok){ baseline = null; overlay.classList.remove('open'); }
+    });
+  };
+  overlay.querySelectorAll('.modal-close').forEach(btn=> btn.addEventListener('click', attempt, true));
+  overlay.addEventListener('click', (e)=>{ if(e.target===overlay) attempt(e); }, true);
+}
+guardUnsavedClose('modalArcWrite', ()=> JSON.stringify([
+  document.getElementById('arcTitleInput').value,
+  document.getElementById('arcCategoryInput').value,
+  document.getElementById('arcContentEditor').innerHTML,
+  arcAttachments
+]));
+guardUnsavedClose('modalLogWrite', ()=> JSON.stringify([
+  document.getElementById('logTitle').value,
+  document.getElementById('logContent').innerHTML,
+  document.getElementById('logSubColor').value,
+  document.getElementById('logParenColor').value,
+  document.getElementById('logHighlightColor').value
+]));
+
 /* ============================================================
    PROFILE
    ============================================================ */
@@ -1917,13 +1958,19 @@ function flattenForFences(root){
   const childIndex = (node)=> Array.prototype.indexOf.call(node.parentNode.childNodes, node);
 
   /* 블록 여닫는 경계는 그 자체가 내용이 아니라 인접한 블록끼리 구분만
-     지어주면 되는 표시라서, 앞이 이미 줄바꿈이면 겹쳐 쓰지 않습니다
-     (안 그러면 <div>A</div><div>B</div> 처럼 붙어 있는 두 줄 사이에
-     그 경계가 두 번(닫힘+열림) 잡혀 없던 빈 줄이 생깁니다).
-     <br> 나 텍스트 속 실제 줄바꿈 문자는 사용자가 직접 넣은 내용이라
-     겹치더라도(빈 줄을 의도한 것일 수 있으니) 항상 그대로 씁니다. */
+     지어주면 되는 표시라서, 실제 줄바꿈 글자는 앞이 이미 줄바꿈이면 새로
+     더하지 않습니다(안 그러면 <div>A</div><div>B</div> 처럼 붙어 있는 두 줄
+     사이에 그 경계가 두 번(닫힘+열림) 잡혀 없던 빈 줄이 생깁니다).
+     그래도 마크 자체는 매번 남겨야 합니다 — 접기처럼 여러 단계 경계가 같은
+     글자 자리에 겹칠 때(예: 제목 줄이 끝나고 곧바로 내용 칸이 시작하는 자리는
+     'fold-head 가 끝나는 자리'이면서 동시에 'fold-body 가 시작하는 자리'),
+     나중에 남긴(더 안쪽) 마크가 그 자리의 대표가 되어야 실제로 커서가 있는
+     안쪽 위치로 정확히 찾아갑니다. <br> 와 텍스트 속 실제 줄바꿈 문자는
+     사용자가 직접 넣은 내용이라 겹치더라도(빈 줄을 의도한 것일 수 있으니)
+     글자 자체는 항상 더합니다. */
   const addBoundary = (container, offset)=>{
-    if(text.length && !text.endsWith('\n')){ mark(container, offset); text += '\n'; }
+    if(text.length && !text.endsWith('\n')) text += '\n';
+    mark(container, offset);
   };
   function walkText(node){
     const s = node.data;
@@ -1931,8 +1978,8 @@ function flattenForFences(root){
     for(let i=0;i<s.length;i++){
       if(s[i] === '\n'){
         if(i > start){ mark(node, start); text += s.slice(start, i); }
-        mark(node, i);
         text += '\n';
+        mark(node, i+1);
         start = i + 1;
       }
     }
@@ -1941,14 +1988,14 @@ function flattenForFences(root){
   function walk(node){
     if(node.nodeType === 3){ walkText(node); return; }
     if(node.nodeType !== 1) return;
-    if(node.tagName === 'BR'){ mark(node.parentNode, childIndex(node)); text += '\n'; return; }
+    if(node.tagName === 'BR'){ text += '\n'; mark(node.parentNode, childIndex(node)+1); return; }
     const isBlock = BLOCK_TAGS.includes(node.tagName);
     if(isBlock) addBoundary(node.parentNode, childIndex(node));
     Array.from(node.childNodes).forEach(walk);
     if(isBlock) addBoundary(node.parentNode, childIndex(node) + 1);
   }
   Array.from(root.childNodes).forEach(walk);
-  mark(root, root.childNodes.length);
+  addBoundary(root, root.childNodes.length);
   return { text: text.replace(NBSP_RE,' '), marks };   // 치환은 글자 수를 바꾸지 않아 좌표가 그대로 맞습니다
 }
 /* marks 는 위치(pos) 오름차순입니다. pos 이하인 마지막 마크를 찾아 그 마크가
@@ -1959,6 +2006,42 @@ function resolveFenceOffset(marks, pos){
     if(marks[i].pos <= pos) best = marks[i]; else break;
   }
   return { container: best.container, offset: best.offset + (pos - best.pos) };
+}
+/* 펜스 글자를 감싼 가장 가까운 블록 요소(el, 예: .fold-body) 안에서, 그 글자가
+   속한 '줄'만 골라 경계를 찾습니다 — el 전체가 아닙니다. el 은 흔히 한 줄짜리
+   그릇(접기 안에서 줄마다 따로 감싸인 <div> 하나)이지만, <br> 로만 줄을 나눈
+   경우엔 el 하나(예: .fold-body 자신) 안에 여러 줄이 형제로 같이 들어있을 수
+   있습니다 — 그때 el 전체를 지우면 그 안의 다른 줄(안내문·다른 문단)까지
+   함께 사라집니다. 그래서 먼저 el 의 자식들 사이에서 <br> 를 찾고, 있으면
+   그 자리(el 안)를 쓰고, 없으면(el 자체가 통째로 한 줄) el 을 지울 단위로 보고
+   el 의 부모 안에서 el 의 위치를 씁니다. */
+function localLineBoundary(el, node, dir){
+  let cur = node;
+  while(cur.parentNode !== el) cur = cur.parentNode;
+  let sib = dir < 0 ? cur.previousSibling : cur.nextSibling;
+  while(sib){
+    if(sib.nodeType === 1 && sib.tagName === 'BR'){
+      const idx = Array.prototype.indexOf.call(el.childNodes, sib);
+      return { container: el, offset: dir < 0 ? idx + 1 : idx };
+    }
+    sib = dir < 0 ? sib.previousSibling : sib.nextSibling;
+  }
+  const parent = el.parentNode;
+  const idx = Array.prototype.indexOf.call(parent.childNodes, el);
+  return { container: parent, offset: dir < 0 ? idx : idx + 1 };
+}
+/* 펜스 글자가 있는 지점에서 그 글자를 감싼 '줄'의 시작 또는 끝 위치를 찾습니다.
+   접기처럼 여러 단계로 중첩된 곳에서는 이 방법만 확실합니다 — 좌표(글자 수)
+   기준으로는 '닫는 경계가 여러 겹 겹치는 자리'에서 가장 안쪽 경계인지 가장
+   바깥쪽 경계인지 좌표만 보고는 구별할 수 없기 때문입니다(여는 경계는 안쪽이
+   나중에 잡혀 항상 안쪽이 이기지만, 닫는 경계는 반대로 안쪽이 먼저 잡혀 좌표만
+   보면 바깥쪽으로 밀려납니다). 감싸는 블록 요소가 없으면(문단 없이 편집기에
+   바로 붙어 있는 글자) null 을 돌려주고, 부르는 쪽이 좌표 기반 좌표로 대신합니다. */
+function fenceLineBoundary(root, point, after){
+  let el = point.container.nodeType === 3 ? point.container.parentNode : point.container;
+  while(el && el !== root && !BLOCK_TAGS.includes(el.tagName)) el = el.parentNode;
+  if(!el || el === root) return null;
+  return localLineBoundary(el, point.container, after ? 1 : -1);
 }
 
 function makeCodeBlock(code){
@@ -2011,15 +2094,22 @@ function applyCodeFences(root){
       code = text.slice(codeStart, codeEnd);
     }
 
-    // 지울 DOM 범위 — 여는 펜스가 있는 줄의 시작부터 닫는 펜스가 있는 줄 끝(줄바꿈 포함)까지
+    // 지울 범위(문자열 좌표) — 겹침 검사와, 감싸는 블록이 없을 때의 대체 계산에 씁니다
     const delStart = text.lastIndexOf('\n', openPos - 1) + 1;
     let delEnd = text.indexOf('\n', closePos + fenceLen);
     delEnd = delEnd < 0 ? text.length : delEnd + 1;
     if(delEnd > claimedFrom) continue;   // 뒤쪽 블록과 범위가 겹침
 
     try{
-      const startPoint = resolveFenceOffset(marks, delStart);
-      const endPoint = resolveFenceOffset(marks, delEnd);
+      /* 실제로 지울 DOM 범위는 펜스를 감싼 가장 가까운 블록 요소(줄) 기준으로
+         잡습니다 — 접기처럼 여러 단계 중첩된 곳에서 좌표만으로는 '닫는 경계가
+         겹치는 자리'가 안쪽인지 바깥쪽인지 구별할 수 없기 때문입니다
+         (fenceLineBoundary 주석 참고). 감싸는 블록이 없는 경우에만 좌표 기반으로
+         돌아갑니다. */
+      const openPoint = resolveFenceOffset(marks, openPos);
+      const closePoint = resolveFenceOffset(marks, closePos);
+      const startPoint = fenceLineBoundary(root, openPoint, false) || resolveFenceOffset(marks, delStart);
+      const endPoint = fenceLineBoundary(root, closePoint, true) || resolveFenceOffset(marks, delEnd);
       const range = document.createRange();
       range.setStart(startPoint.container, startPoint.offset);
       range.setEnd(endPoint.container, endPoint.offset);
@@ -2110,18 +2200,139 @@ function setFoldOpen(block, open){
   if(a) a.textContent = open ? '▾' : '▸';
 }
 
-/* 접기 블록을 편집기에 넣습니다 (ARCHIVE 와 PAIR_LOG 가 함께 씁니다).
-   넣자마자 내용을 적어야 하므로 펼친 상태로 만들고,
-   저장할 때 editorHtml() 이 .open 을 떼어내 게시글에서는 접힌 채로 시작합니다. */
+/* 접기 블록을 편집기에 넣습니다 (ARCHIVE·LOG·OC 자유 텍스트가 함께 씁니다).
+   타이틀·내용은 실제 글자가 아니라 안내 문구(CSS :empty:before, OC 자유 텍스트와
+   같은 방식)라서 지울 필요 없이 바로 이어 쓸 수 있습니다. 넣자마자 펼친 상태로
+   만들고, 저장할 때 editorHtml() 이 .open 을 떼어내 게시글에서는 접힌 채로
+   시작합니다.
+   execCommand 대신 Range.insertNode() 로 직접 넣습니다 — 커서가 이미 다른 접기의
+   내용 칸 안에 있으면 그 자리에 그대로 끼워져 접기 안에 접기가 중첩됩니다. */
 function insertFoldBlock(editorId){
   const editor = document.getElementById(editorId);
   if(!editor) return;
   editor.focus();
-  document.execCommand('insertHTML', false,
-    '<div class="fold-block open">'
-    + '<div class="fold-head"><span class="fold-arrow" contenteditable="false">▾</span>'
-    + '<span class="fold-title">타이틀</span></div>'
-    + '<div class="fold-body">내용을 입력하세요</div></div><br>');
+  const sel = window.getSelection();
+  let range = (sel.rangeCount && editor.contains(sel.getRangeAt(0).commonAncestorContainer))
+    ? sel.getRangeAt(0) : null;
+  if(!range){
+    range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(false);
+  }
+  range.deleteContents();
+
+  const block = document.createElement('div');
+  block.className = 'fold-block open';
+  block.innerHTML =
+    '<div class="fold-head"><span class="fold-arrow" contenteditable="false">▾</span>'
+    + '<span class="fold-title"></span></div>'
+    + '<div class="fold-body"></div>';
+  const frag = document.createDocumentFragment();
+  frag.appendChild(block);
+  frag.appendChild(document.createElement('br'));
+  range.insertNode(frag);
+
+  const titleRange = document.createRange();
+  titleRange.selectNodeContents(block.querySelector('.fold-title'));
+  titleRange.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(titleRange);
+}
+
+/* 접기 안에서 엔터 — 타이틀과 내용 칸 두 자리를 다 다룹니다.
+
+   타이틀: 접힌 상태(제목만 보임)면 이 접기를 벗어나 상위(중첩된 접기라면 그
+   부모의 내용 칸, 아니면 최상위 본문)에 새 줄을 만들어 나가고, 펼친 상태
+   (내용까지 보임)면 벗어나지 않고 내용 칸 맨 앞에 줄바꿈을 넣어 그리로
+   들어갑니다. 두 경우 모두 '접기 블록 바로 뒤/안'에 <br> 하나만 끼워 넣는
+   것이라, 중첩 깊이에 상관없이 같은 코드로 됩니다.
+
+   내용 칸(.fold-body): 브라우저 기본 동작에 맡기면 안 됩니다 — Chrome 은 엔터로
+   블록을 나눌 때 원래 요소의 class 를 그대로 물려받은 새 형제 <div class="fold-body">
+   를 만들어버려서, 한 접기 안에 .fold-body 가 여러 개 나란히 남습니다. 그러면
+   `.fold-block:not(.open) .fold-body{display:none}` 가 그 중 일부만(또는 전부를
+   각각) 숨기게 되어, 그 사이에 백틱 코드블록이라도 끼어들면 접어도 안 사라지고
+   접기 밖으로 빠져나온 것처럼 보입니다. 그래서 여기서는 항상 같은 칸 안에서
+   <br> 로만 줄을 바꾸도록 가로챕니다. */
+/* <br> 뒤에 커서를 두되, 그 br 이 칸의 마지막 자식이 되면(뒤에 실제 내용이
+   없으면) 커서 위치가 불안정해집니다 — Chrome 의 execCommand('insertText')/
+   실제 타이핑이 "그 다음에 올 글자"를 이 br 뒤가 아니라 앞(원래 텍스트 쪽)에
+   붙여버리는 경우가 있습니다(자리는 정확히 "br 뒤"인데도). 그래서 항상 br
+   뒤에 무언가(원래 있던 다음 형제, 없으면 채움용 <br> 하나)를 두고 그 앞에
+   커서를 놓습니다 — "그 다음 형제 앞"은 안정적으로 해석됩니다. */
+function placeCursorAfterBr(sel, br){
+  let next = br.nextSibling;
+  if(!next || (next.nodeType===3 && !next.data)){
+    if(next) next.remove();
+    next = document.createElement('br');
+    br.parentNode.insertBefore(next, br.nextSibling);
+  }
+  const r = document.createRange();
+  r.setStartBefore(next);
+  r.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(r);
+}
+function initFoldEnter(editorId){
+  const editor = document.getElementById(editorId);
+  if(!editor) return;
+  editor.addEventListener('keydown', (e)=>{
+    if(e.key !== 'Enter' || e.shiftKey) return;
+    const sel = window.getSelection();
+    if(!sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    const startEl = range.startContainer.nodeType===1 ? range.startContainer : range.startContainer.parentElement;
+
+    const title = startEl && startEl.closest('.fold-title');
+    if(title && editor.contains(title)){
+      e.preventDefault();
+      const block = title.closest('.fold-block');
+      const br = document.createElement('br');
+      if(block.classList.contains('open')){
+        const body = block.querySelector(':scope > .fold-body');
+        body.insertBefore(br, body.firstChild);
+      }else{
+        block.parentNode.insertBefore(br, block.nextSibling);
+      }
+      placeCursorAfterBr(sel, br);
+      return;
+    }
+
+    const body = startEl && startEl.closest('.fold-body');
+    if(body && editor.contains(body)){
+      e.preventDefault();
+      range.deleteContents();
+      const br = document.createElement('br');
+      range.insertNode(br);
+      placeCursorAfterBr(sel, br);
+    }
+  });
+}
+
+/* 인용구 삽입 (ARCHIVE·OC 자유 텍스트가 함께 씁니다).
+   execCommand('formatBlock','blockquote') 는 커서가 들어 있는 가장 가까운
+   블록 요소를 통째로 blockquote 로 바꿔치기합니다 — 접기 안에서 쓰면 그
+   '가장 가까운 블록'이 .fold-body 자신이라, 접기 구조를 감싸버리고 맙니다
+   (`<blockquote><div class="fold-body">...`). insertFoldBlock 과 같은 방식으로
+   Range 에 직접 넣어서, 접기 안이든 밖이든 커서가 있는 자리에만 끼워 넣습니다. */
+function insertBlockquote(editorId){
+  const editor = document.getElementById(editorId);
+  if(!editor) return;
+  editor.focus();
+  const sel = window.getSelection();
+  if(!sel.rangeCount || !editor.contains(sel.getRangeAt(0).commonAncestorContainer)) return;
+  const range = sel.getRangeAt(0);
+  const collapsed = range.collapsed;
+  const bq = document.createElement('blockquote');
+  if(collapsed) bq.appendChild(document.createElement('br'));
+  else bq.appendChild(range.extractContents());
+  range.insertNode(bq);
+
+  const r = document.createRange();
+  r.selectNodeContents(bq);
+  r.collapse(collapsed);
+  sel.removeAllRanges();
+  sel.addRange(r);
 }
 
 /* 저장할 본문을 꺼냅니다 — 펼쳐둔 접기 블록은 접힌 상태로 되돌립니다 */
@@ -2294,6 +2505,7 @@ let currentLogViewId = null;
   /* 접기 — ARCHIVE 편집기와 같은 블록을 넣습니다 */
   const foldBtn = document.getElementById('logFoldBtn');
   if(foldBtn) foldBtn.addEventListener('click', ()=> insertFoldBlock('logContent'));
+  initFoldEnter('logContent');
   /* 사진 삽입 — ARCHIVE 편집기와 같은 방식(본문 안에 data URL 로 넣습니다) */
   const imgBtn = document.getElementById('logInsertImageBtn');
   if(imgBtn) imgBtn.addEventListener('click', ()=>{
@@ -2318,6 +2530,7 @@ async function fillLogEditor(entry){
   document.getElementById('logParenColor').value     = (entry && entry.parenColor)     || LOG_PAREN_COLOR_DEFAULT;
   document.getElementById('logHighlightColor').value = (entry && entry.highlightColor) || LOG_HIGHLIGHT_DEFAULT;
   document.getElementById('logTextColor').value  = '#1a1a1a';
+  document.getElementById('modalLogWrite')._armUnsavedGuard?.();
 }
 
 bindOnce(document.getElementById('saveLogBtn'), async ()=>{
@@ -4145,7 +4358,7 @@ function stepFontSize(editorId, delta){
   toolbar.querySelectorAll('button[data-cmd]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       editor.focus();
-      if(btn.dataset.cmd==='blockquote') document.execCommand('formatBlock', false, 'blockquote');
+      if(btn.dataset.cmd==='blockquote') insertBlockquote('ocFree');
       else document.execCommand(btn.dataset.cmd, false, null);
       saveOcFree();
     });
@@ -4162,6 +4375,7 @@ function stepFontSize(editorId, delta){
   if(down) down.addEventListener('click', ()=>{ stepFontSize('ocFree', -1); saveOcFree(); });
   const fold=document.getElementById('ocFreeFoldBtn');
   if(fold) fold.addEventListener('click', ()=>{ insertFoldBlock('ocFree'); saveOcFree(); });
+  initFoldEnter('ocFree');
   const divider=document.getElementById('ocFreeDividerBtn');
   if(divider) divider.addEventListener('click', ()=>{
     editor.focus();
@@ -4391,6 +4605,7 @@ async function openArcWriteModal(existingItem){
   ensureCodeEmbedCopy(editorEl);
   arcAttachments = existingItem && existingItem.files ? existingItem.files.slice() : [];
   renderArcAttachList();
+  document.getElementById('modalArcWrite')._armUnsavedGuard?.();
 }
 
 document.getElementById('addArchiveBtn').addEventListener('click', ()=>{
@@ -4404,7 +4619,7 @@ document.querySelectorAll('.rt-toolbar-arc button[data-cmd]').forEach(btn=>{
     const editor=document.getElementById('arcContentEditor');
     editor.focus();
     if(btn.dataset.cmd==='blockquote'){
-      document.execCommand('formatBlock', false, 'blockquote');
+      insertBlockquote('arcContentEditor');
     }else{
       document.execCommand(btn.dataset.cmd, false, null);
     }
@@ -4414,6 +4629,33 @@ document.getElementById('arcColorInput').addEventListener('input', (e)=>{
   const editor=document.getElementById('arcContentEditor');
   editor.focus();
   document.execCommand('foreColor', false, e.target.value);
+});
+
+/* 인용구 안에서 엔터 — 브라우저 기본 동작은 인용구를 하나 더 만들어버립니다.
+   커서 뒤에 남은 내용(있다면)은 새 문단으로 옮기고 그 문단으로 나가서,
+   인용구는 하나만 남고 이어서 평범하게 씁니다. Shift+엔터는 그대로 둬서
+   인용구 안에서 줄바꿈하는 기본 동작(<br> 삽입)이 계속 됩니다. */
+document.getElementById('arcContentEditor').addEventListener('keydown', (e)=>{
+  if(e.key !== 'Enter' || e.shiftKey) return;
+  const sel = window.getSelection();
+  if(!sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  const startEl = range.startContainer.nodeType===1 ? range.startContainer : range.startContainer.parentElement;
+  const bq = startEl && startEl.closest('blockquote');
+  if(!bq || !document.getElementById('arcContentEditor').contains(bq)) return;
+  e.preventDefault();
+  const afterRange = range.cloneRange();
+  afterRange.selectNodeContents(bq);
+  afterRange.setStart(range.endContainer, range.endOffset);
+  const rest = afterRange.extractContents();
+  const p = document.createElement('div');
+  if(rest.textContent.trim() || rest.querySelector('img,hr')) p.appendChild(rest);
+  else p.innerHTML = '<br>';
+  bq.parentNode.insertBefore(p, bq.nextSibling);
+  if(!bq.textContent.trim() && !bq.querySelector('img,hr')) bq.remove();
+  const r = document.createRange();
+  r.selectNodeContents(p); r.collapse(true);
+  sel.removeAllRanges(); sel.addRange(r);
 });
 /* 구분선 삽입 (LOG 편집기와 같은 방식) */
 const arcDividerBtn = document.getElementById('arcDividerBtn');
@@ -4431,14 +4673,27 @@ if(arcFoldBtn){
   arcFoldBtn.addEventListener('mousedown', e=> e.preventDefault());
   arcFoldBtn.addEventListener('click', ()=> insertFoldBlock('arcContentEditor'));
 }
+initFoldEnter('arcContentEditor');
 
 /* 이미지 삽입 + 삽입 후 삭제/이동 툴바 */
 document.getElementById('arcInsertImageBtn').addEventListener('click', ()=>{
+  /* 파일 선택창이 뜨는 동안 포커스가 옮겨가 선택이 풀리므로, 여는 시점의
+     커서 위치를 기억해 뒀다가 넣기 직전에 되돌립니다 — 안 그러면 접기
+     안에 있던 커서가 접기 밖으로 빠져나가 사진이 엉뚱한 자리에 들어갑니다. */
+  const editorAtOpen = document.getElementById('arcContentEditor');
+  const selAtOpen = window.getSelection();
+  const rangeAtOpen = (selAtOpen.rangeCount && editorAtOpen.contains(selAtOpen.getRangeAt(0).commonAncestorContainer))
+    ? selAtOpen.getRangeAt(0).cloneRange() : null;
   const input=document.createElement('input'); input.type='file'; input.accept='image/*';
   input.addEventListener('change', async ()=>{
     const f=input.files[0]; if(!f) return;
     const url=await fileToDataUrl(f);
     const editor=document.getElementById('arcContentEditor'); editor.focus();
+    if(rangeAtOpen){
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(rangeAtOpen);
+    }
     document.execCommand('insertHTML', false, `<img src="${url}" /><br>`);
   });
   input.click();
@@ -4546,8 +4801,17 @@ function renderArcAttachList(){
   });
 }
 
-/* 코드 삽입: 기본으로 실제 HTML/CSS 시뮬레이션(라이브 렌더링)을 보여주고, 다운로드 시점에 그 상태를 이미지로 캡처 */
+/* 코드 삽입: 기본으로 실제 HTML/CSS 시뮬레이션(라이브 렌더링)을 보여주고, 다운로드 시점에 그 상태를 이미지로 캡처
+   버튼을 누른 시점의 커서 위치를 기억해 뒀다가 넣을 때 그대로 되돌립니다 —
+   모달이 열리는 동안 포커스가 옮겨가면서 선택이 풀리면, 그 뒤 editor.focus() 는
+   기억된 위치 없이 기본 자리에 커서를 두므로 접기 안에 있던 커서가 접기 밖으로
+   빠져나가 버립니다. */
+let arcCodeInsertRange = null;
 document.getElementById('arcInsertCodeBtn').addEventListener('click', ()=>{
+  const editor = document.getElementById('arcContentEditor');
+  const sel = window.getSelection();
+  arcCodeInsertRange = (sel.rangeCount && editor.contains(sel.getRangeAt(0).commonAncestorContainer))
+    ? sel.getRangeAt(0).cloneRange() : null;
   document.getElementById('arcCodeInput').value='';
   openModal('modalArcCode');
 });
@@ -4566,6 +4830,11 @@ document.getElementById('arcCodeInsertBtn').addEventListener('click', ()=>{
     <div class="code-embed-code" style="display:none;">${escapeHtml(code)}</div>
   </div><br>`;
   const editor=document.getElementById('arcContentEditor'); editor.focus();
+  if(arcCodeInsertRange){
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(arcCodeInsertRange);
+  }
   document.execCommand('insertHTML', false, html);
   closeModal('modalArcCode');
 });
