@@ -11,7 +11,7 @@
      css/js를 고칠 때마다 이 숫자를 함께 올려주세요.
      올리지 않으면 브라우저가 옛 파일을 계속 써서
      새 HTML과 짝이 맞지 않아 화면이 깨질 수 있습니다. -->
-<link rel="stylesheet" href="css/style.css?v=66" />
+<link rel="stylesheet" href="css/style.css?v=68" />
 </head>
 <body>
 <div class="app-window">
@@ -223,11 +223,10 @@
     <div class="pd-tab-content">
 
         <div class="pd-tab-pane active" data-pdpane="info">
+          <!-- 왼쪽 캐릭터 프로필 · 가운데 넘김 칸 · 오른쪽 페르소나 프로필,
+               그 아래 가로 전체를 쓰는 RELATIONSHIP. 프로필은 사진이 위, 소개가 아래입니다. -->
           <div class="pd-info-grid">
-            <div class="pd-info-main">
-              <div class="pd-section">
-                <h4>Profile</h4>
-
+            <div class="pd-info-col pd-info-col-char">
                 <div class="pd-profile char-layout">
                   <div class="adjustable-img pd-profile-img" id="pdCharImgBox">
                     <div class="adj-layer"></div>
@@ -252,7 +251,9 @@
                     </div>
                   </div>
                 </div>
+            </div>
 
+            <div class="pd-info-col pd-info-col-persona">
                 <div class="pd-profile persona-layout">
                   <div class="pd-profile-info">
                     <div class="pd-meta-row">
@@ -277,22 +278,9 @@
                     <button class="adj-change" data-editonly>📷</button>
                   </div>
                 </div>
-              </div>
-
-              <div class="pd-relationship">
-                <div class="rel-box">
-                  <div class="rel-label" id="relLabelCharToPersona" contenteditable="false"></div>
-                  <div class="rel-text" id="relCharToPersona" contenteditable="false"></div>
-                </div>
-                <div class="rel-icon">⇄</div>
-                <div class="rel-box">
-                  <div class="rel-label" id="relLabelPersonaToChar" contenteditable="false"></div>
-                  <div class="rel-text" id="relPersonaToChar" contenteditable="false"></div>
-                </div>
-              </div>
             </div>
 
-            <!-- 오른쪽 칸은 네 장입니다 — 세로 이미지 / TIMELINE / 테마곡 / 메시지.
+            <!-- 가운데 칸은 네 장입니다 — 세로 이미지 / TIMELINE / 메시지 / 테마곡.
                  옆으로 밀거나(터치·가로 휠) 아래 점을 눌러 넘깁니다. -->
             <div class="pd-info-side">
               <div class="side-pages" id="pdSidePages">
@@ -338,6 +326,19 @@
                 </div>
                 <!-- 점은 칸 안쪽 아래에 겹쳐 놓습니다 -->
                 <div class="side-dots" id="pdSideDots"></div>
+              </div>
+            </div>
+
+            <!-- 세 칸 아래, 가로 전체를 씁니다 -->
+            <div class="pd-relationship">
+              <div class="rel-box">
+                <div class="rel-label" id="relLabelCharToPersona" contenteditable="false"></div>
+                <div class="rel-text" id="relCharToPersona" contenteditable="false"></div>
+              </div>
+              <div class="rel-icon">⇄</div>
+              <div class="rel-box">
+                <div class="rel-label" id="relLabelPersonaToChar" contenteditable="false"></div>
+                <div class="rel-text" id="relPersonaToChar" contenteditable="false"></div>
               </div>
             </div>
           </div>
@@ -756,7 +757,7 @@
      맨 끝에 두어 화면 그리기를 막지 않게 합니다. -->
 <img class="paper-grain" src="img/paper-grain.jpg" alt="" aria-hidden="true" draggable="false" />
 
-<script src="js/main.js?v=66"></script>
-<script type="module" src="js/firebase-store.js?v=66"></script>
+<script src="js/main.js?v=68"></script>
+<script type="module" src="js/firebase-store.js?v=68"></script>
 </body>
 </html>

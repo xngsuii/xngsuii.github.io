@@ -1,26 +1,45 @@
+  /* 본문 서체 — KoPub 돋움. 굵기가 두 벌(보통/굵게) 있는 서체라 두 개를 함께
+     받습니다. 이러면 굵은 글자를 브라우저가 억지로 흉내내지(가짜 볼드) 않습니다. */
   @font-face{
-    font-family:'JoseonGulim';
-    src:url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_20-04@1.0/ChosunGu.woff') format('woff');
-    font-weight:normal;font-style:normal;font-display:swap;
+    font-family:'KoPubDotum';
+    src:url('https://cdn.jsdelivr.net/gh/fonts-archive/KoPubDotum/KoPubDotum-Medium.woff2') format('woff2');
+    font-weight:400;font-style:normal;font-display:swap;
   }
   @font-face{
-    font-family:'Galmuri9';
-    src:url('https://cdn.jsdelivr.net/npm/galmuri@2.40.3/dist/Galmuri9.woff2') format('woff2');
+    font-family:'KoPubDotum';
+    src:url('https://cdn.jsdelivr.net/gh/fonts-archive/KoPubDotum/KoPubDotum-Bold.woff2') format('woff2');
+    font-weight:700;font-style:normal;font-display:swap;
+  }
+  /* 제목 서체 — 조선일보명조 */
+  @font-face{
+    font-family:'ChosunilboMyungjo';
+    src:url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_one@1.0/Chosunilbo_myungjo.woff') format('woff');
     font-weight:normal;font-style:normal;font-display:swap;
   }
   :root{
     --bg:#f4f1ea;--surface:#ece7d9;--surface-2:#e2dbc8;--border:#1a1a1a;
     --text:#1a1a1a;--text-muted:#6b675e;--accent:#c1440e;--accent-soft:#f4dcce;
     --page-bg:#EF3921;
-    --radius:0px;--radius-sm:0px;--mono:'JoseonGulim',monospace;font-family:'JoseonGulim',monospace;
-    /* 상단바 제목·사이드바 이름/카테고리·HOME 카드 글자에만 쓰는 픽셀 서체.
-       본문은 --mono(조선굴림체) 그대로입니다. */
-    --pixel:'Galmuri9',monospace;
+    --radius:0px;--radius-sm:0px;--mono:'KoPubDotum',sans-serif;font-family:'KoPubDotum',sans-serif;
+    /* 상단바 제목·사이드바 이름/카테고리·HOME 카드 글자에만 쓰는 제목 서체.
+       본문은 --mono(KoPub 돋움) 그대로입니다.
+       (변수 이름 --pixel 은 예전에 픽셀 서체를 쓰던 흔적이라 그대로 둡니다 —
+        쓰는 곳이 많아 이름만 바꾸면 놓치는 자리가 생깁니다.) */
+    --pixel:'ChosunilboMyungjo',serif;
     /* 종이 질감의 세기. 0 이면 안 보이고 1 이 가장 진합니다. */
     --grain:1;
   }
+  /* ---- 기호만 시스템 서체로 ----
+     KoPub 돋움에는 ⇄ ‹ › ⋮ 가 '내용 없는 글자'로 들어 있습니다. 아예 없는
+     글자라면 브라우저가 알아서 다른 서체로 넘어가는데, 있긴 있고 비어 있는
+     것이라 넘어가지 않고 그냥 아무것도 안 그려집니다(글자 폭 0).
+     그래서 이 기호를 쓰는 자리만 서체를 따로 지정합니다.
+     화살표·점 모양이라 본문 서체와 달라도 티가 나지 않습니다. */
+  .rel-icon,.lb-nav,.arc-lb-nav,.arc-kebab-btn,
+  .img-toolbar button[data-act="flip"]{font-family:system-ui,'Segoe UI Symbol',sans-serif;}
+
   *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;height:100%;font-family:'JoseonGulim',monospace;}
+  html,body{margin:0;padding:0;height:100%;font-family:var(--mono);}
   body{background:var(--page-bg);display:flex;align-items:center;justify-content:center;min-height:100vh;}
   button{font-family:inherit;cursor:pointer;}
   input,textarea,select{font-family:inherit;}
@@ -162,7 +181,7 @@
   .home-pages-wrap.show-cards #home-intro-page{transform:translateY(-100%);}
   .home-pages-wrap.show-cards #home-cards-page{transform:translateY(0);}
 
-  .intro-card{width:100%;max-width:420px;border:1px solid var(--border);border-radius:0;padding:26px 24px 30px;text-align:center;background:var(--bg);font-family:'Galmuri9',monospace;}
+  .intro-card{width:100%;max-width:420px;border:1px solid var(--border);border-radius:0;padding:26px 24px 30px;text-align:center;background:var(--bg);font-family:var(--pixel);}
   .intro-banner{width:100%;aspect-ratio:3/1;border-radius:0;border:1px solid var(--border);margin-bottom:16px;}
   .intro-sitename{font-family:inherit;font-size:17px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;border:none;background:transparent;text-align:center;width:100%;outline:none;color:var(--text);}
   .intro-divider{color:var(--text-muted);font-size:12px;margin:10px 0;}
@@ -276,9 +295,16 @@
   .post-card.selectable{cursor:default;}
   .post-check{position:absolute;top:6px;left:6px;width:18px;height:18px;border:1px solid var(--border);background:var(--bg);z-index:4;display:flex;align-items:center;justify-content:center;font-size:11px;}
   .post-check.checked{background:var(--accent);color:#fff;border-color:var(--accent);}
-  @media (hover:hover){ .post-card:hover{box-shadow:0 4px 14px rgba(0,0,0,.12);} }
+  /* 마우스를 올리면 사진만 살짝 커집니다. 칸(.post-card)이 overflow:hidden 이라
+     커진 부분은 칸 밖으로 넘치지 않고 잘립니다. 자리(레이아웃)는 그대로입니다 —
+     transform 은 옆 칸을 밀지 않습니다. 마우스가 없는 기기는 제외합니다. */
+  @media (hover:hover){
+    .post-card:hover{box-shadow:0 4px 14px rgba(0,0,0,.12);}
+    .post-card:hover .post-thumb{transform:scale(1.06);}
+  }
   /* 칸 높이가 행(1fr)으로 정해지므로 썸네일이 남은 높이를 가져갑니다 */
-  .post-thumb{width:100%;flex:1;min-height:0;background:var(--surface-2) center/cover no-repeat;}
+  .post-thumb{width:100%;flex:1;min-height:0;background:var(--surface-2) center/cover no-repeat;
+    transition:transform .35s cubic-bezier(.2,0,.2,1);}
   /* ---- 목록 썸네일 위치 조정 ----
      선택 모드에서 ✥ 를 누르면 그 썸네일만 끌어서 보이는 자리를 옮길 수 있습니다
      (글 순서가 아니라 이 이미지의 어느 부분을 보여줄지만 바뀝니다). */
@@ -367,14 +393,14 @@
   .oc-info-main .pd-desc-box{flex:none;overflow:visible;}
   .oc-label-box .meta-container{margin-bottom:0;}
   /* 이름은 서브타이틀처럼 상자 없이 바탕 위에 바로 올립니다 (OC·PAIR 공통) */
-  .oc-info-main .pd-name-input, .pd-info-main .pd-name-input,
+  .oc-info-main .pd-name-input, .pd-info-col .pd-name-input,
   body.logged-in .oc-info-main .pd-name-input,
-  body.logged-in .pd-info-main .pd-name-input{width:100%;border-color:transparent;
+  body.logged-in .pd-info-col .pd-name-input{width:100%;border-color:transparent;
     background:transparent;padding-left:0;padding-right:0;}
   body.logged-in .oc-info-main .pd-name-input:hover,
   body.logged-in .oc-info-main .pd-name-input:focus,
-  body.logged-in .pd-info-main .pd-name-input:hover,
-  body.logged-in .pd-info-main .pd-name-input:focus{background:var(--surface);}
+  body.logged-in .pd-info-col .pd-name-input:hover,
+  body.logged-in .pd-info-col .pd-name-input:focus{background:var(--surface);}
   /* 오른쪽 칸은 여러 장짜리입니다 — OC 는 세로 이미지 / 테마곡,
      PAIR 는 세로 이미지 / TIMELINE / 테마곡 / 메시지.
      옆으로 밀거나(터치·가로 휠) 아래 점을 눌러 넘깁니다. */
@@ -705,21 +731,32 @@
   /* INFO 는 스크롤 없이 한 화면에 들어갑니다 — 남는 높이는 라벨+본문 칸이 가져가고,
      넘치는 글은 그 칸 안에서만 스크롤됩니다. */
   .pd-tab-pane[data-pdpane="info"].active{display:flex;flex-direction:column;height:100%;}
-  .pd-info-grid{display:grid;grid-template-columns:1fr 260px;gap:20px;align-items:stretch;
+  /* [캐릭터 프로필] [넘김 칸] [페르소나 프로필] 세 칸, 그 아래 가로 전체를 쓰는
+     RELATIONSHIP. 가운데 칸만 폭을 정해 두고 양쪽 프로필이 남는 폭을 반씩 나눕니다. */
+  .pd-info-grid{display:grid;grid-template-columns:1fr 244px 1fr;
+    grid-template-rows:1fr auto;
+    grid-template-areas:"char center persona" "rel rel rel";
+    gap:14px 16px;align-items:stretch;
     margin-top:10px;flex:1;min-height:0;}
-  .pd-info-main{display:flex;flex-direction:column;min-height:0;}
-  .pd-info-main > .pd-section{flex:1;min-height:0;display:flex;flex-direction:column;margin-bottom:0;}
-  .pd-info-main > .pd-section > h4{flex:none;margin-bottom:14px;}
-  /* 두 프로필이 남은 높이를 반씩 나눠 씁니다 (사진 높이 192px 이 바닥) */
-  .pd-info-main .pd-profile{flex:1;min-height:0;margin-bottom:14px;}
-  .pd-info-main .pd-profile.persona-layout{margin-bottom:14px;}
-  .pd-info-main .pd-profile-img{align-self:stretch;height:auto;aspect-ratio:auto;min-height:0;}
-  .pd-info-main .pd-profile-info{display:flex;flex-direction:column;min-height:0;}
-  /* 사진 아래 보더까지만 늘어나고, 더 길면 이 안에서만 스크롤됩니다 */
-  .pd-info-main .pd-desc-box{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;}
+  .pd-info-col-char{grid-area:char;}
+  .pd-info-side{grid-area:center;}
+  .pd-info-col-persona{grid-area:persona;}
+  .pd-info-grid > .pd-relationship{grid-area:rel;}
+  .pd-info-col{display:flex;flex-direction:column;min-height:0;}
+  /* 프로필은 사진이 위, 소개가 아래입니다 (예전에는 좌우로 나란히 놓였습니다) */
+  .pd-info-col .pd-profile{display:flex;flex-direction:column;gap:10px;
+    margin:0;flex:1;min-height:0;}
+  .pd-info-col .pd-profile-img{width:100%;aspect-ratio:3/4;height:auto;
+    align-self:auto;flex:none;min-height:0;}
+  /* 페르소나는 예전에 사진을 오른쪽으로 보내려고 순서를 뒤집어 뒀습니다 —
+     세로로 세운 지금은 두 쪽 다 사진이 위여야 하므로 되돌립니다. */
+  .pd-info-col .pd-profile.persona-layout{grid-template-columns:none;}
+  .pd-info-col .pd-profile.persona-layout .pd-profile-img{order:-1;}
+  .pd-info-col .pd-profile-info{display:flex;flex-direction:column;flex:1;min-height:0;}
+  /* 남는 높이는 소개 칸이 가져가고, 더 길면 이 안에서만 스크롤됩니다 */
+  .pd-info-col .pd-desc-box{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;}
   /* 아래 여백은 OC 의 자유 텍스트 칸과 같게 (칸 밖 8px + 안쪽 여백 8px = 16px) */
-  .pd-info-main .pd-relationship{flex:none;margin-bottom:8px;}
-  .pd-info-side{margin-bottom:8px;}
+  .pd-info-grid > .pd-relationship{margin:0 0 8px;}
   .pd-section{margin-bottom:22px;}
   .pd-section h4{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin:0 0 24px;padding-bottom:8px;border-bottom:1px solid var(--border);}
   /* 제목과 추가 버튼을 한 줄에 놓는 머리줄.
@@ -1198,7 +1235,12 @@
      오른쪽 위 👁 를 눌러야 풀립니다 — 커서를 올리면 제목이 뜨는 기능과 겹치기 때문입니다.
      살짝 확대해두면 흐림이 가장자리를 갉아먹어 생기는 테두리 얼룩이 보이지 않습니다. */
   .arc-nai-thumb.blurred .an-img{filter:blur(12px);transform:scale(1.14);}
-  .an-img{transition:filter .18s ease, transform .18s ease;}
+  .an-img{transition:filter .18s ease, transform .35s cubic-bezier(.2,0,.2,1);}
+  /* PAIR·OC 목록과 같은 확대 효과. 흐린 칸은 이미 1.14배로 키워둔 상태라
+     건드리지 않습니다 — 덮어쓰면 흐림 가장자리의 얼룩이 드러납니다. */
+  @media (hover:hover){
+    .arc-nai-thumb:not(.blurred):hover .an-img{transform:scale(1.06);}
+  }
   /* 보기 버튼: 어두운 바탕(보더와 같은 #1a1a1a)에 밝은 기호.
      👁 뒤의 U+FE0E 는 컬러 이모지 대신 글자 모양으로 그리라는 표시입니다 —
      이게 없으면 기기에 따라 색이 박힌 이모지가 나와 color 가 먹지 않습니다. */
@@ -1461,15 +1503,15 @@
     /* 좁은 화면에서는 INFO 를 한 화면에 우겨넣지 않고 그냥 스크롤합니다 —
        데스크톱에서 쓰는 '높이 고정 + 칸 안에서만 스크롤'을 여기서 되돌립니다. */
     .pd-tab-pane[data-pdpane="info"].active{display:block;height:auto;}
-    .pd-info-grid{grid-template-columns:1fr;gap:0;flex:none;min-height:auto;}
-    .pd-info-main{display:block;min-height:auto;}
-    .pd-info-main > .pd-section{display:grid;flex:none;min-height:auto;margin-bottom:22px;}
-    .pd-info-main .pd-profile{flex:none;min-height:auto;}
-    .pd-info-main .pd-profile-info{display:block;}
-    .pd-info-main .pd-desc-box{flex:none;max-height:200px;}
-    /* aspect-ratio 를 데스크톱에서 풀었으므로 여기서 다시 3:4 로 돌려놓습니다 */
-    .pd-info-main .pd-profile-img{align-self:auto;aspect-ratio:3/4;height:auto;}
-    .pd-info-main .pd-relationship{margin-bottom:18px;}
+    /* 세 칸을 옆으로 늘어놓기엔 좁으므로 두 프로필만 나란히 두고,
+       넘김 칸과 RELATIONSHIP 은 그 아래로 내려 보냅니다. */
+    .pd-info-grid{grid-template-columns:1fr 1fr;
+      grid-template-areas:"char persona" "center center" "rel rel";
+      gap:14px 10px;flex:none;min-height:auto;}
+    .pd-info-col{display:block;min-height:auto;}
+    .pd-info-col .pd-profile{display:flex;flex:none;min-height:auto;}
+    .pd-info-col .pd-profile-info{display:block;}
+    .pd-info-col .pd-desc-box{flex:none;max-height:200px;}
     .pd-info-side{margin-bottom:0;}
     .side-pages{min-height:280px;}
     /* 직계 자식만 — TIMELINE 의 제목은 .pd-section-head 안에 있고
@@ -1477,29 +1519,15 @@
     .pd-section > h4{margin-bottom:18px;}
     .pd-section-head{margin-bottom:18px;}
 
-    /* 캐릭터와 페르소나를 좌우로 나란히 놓습니다.
-       DOM 순서가 [프로필A][말풍선A][말풍선B][프로필B] 라 순서만으로는 안 되므로
-       .pd-section 을 2열 격자로 만들고 각자 칸을 지정합니다(마크업 수정 없음).
-         1행: 캐릭터 프로필 | 페르소나 프로필
-         2행: 캐릭터 말풍선 | 페르소나 말풍선 */
-    /* Profile 절에만 적용합니다 — TIMELINE 절(.pd-section-nohead)까지 2열이 되면
-       추가 버튼과 목록이 좌우로 쪼개집니다. */
-    .pd-section:not(.pd-section-nohead){display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start;}
-    .pd-section:not(.pd-section-nohead) > h4{grid-column:1/-1;}
-    .pd-profile.char-layout{grid-column:1;grid-row:2;}
-    .pd-profile.persona-layout{grid-column:2;grid-row:2;}
-
-    /* 두 카드 모두 사진이 위로 오게 합니다.
-       페르소나는 마크업이 [정보][사진] 순서라 order:0 으로는 정보가 위로 갑니다.
-       -1 로 내려 사진을 앞으로 끌어옵니다. */
+    /* 사진이 위로 오는 것은 데스크톱과 같습니다(마크업이 [정보][사진] 순서인
+       페르소나 쪽은 order 로 끌어올립니다 — 데스크톱 규칙이 그대로 먹습니다). */
     .pd-profile,.pd-profile.persona-layout{grid-template-columns:1fr;gap:10px;margin:0;}
-    .pd-profile.persona-layout .pd-profile-img{order:-1;}
-    /* 전체폭이면 3:4 비율 때문에 세로로 너무 길어집니다 */
-    .pd-profile-img{width:100%;max-width:150px;justify-self:center;}
+    /* 좁은 화면에서는 두 프로필이 반씩 나눠 쓰므로 사진에 상한을 두지 않습니다 */
+    .pd-profile-img{width:100%;max-width:none;justify-self:center;}
     .pd-name-input{width:100%;font-size:14px;}
 
     /* Relationship 은 데스크톱과 같이 가로로 나란히 */
-    .pd-relationship{flex-direction:row;gap:8px;margin:18px 0 20px;}
+    .pd-relationship{flex-direction:row;gap:8px;margin:0 0 20px;}
     .rel-box{padding:10px 8px;}
     .rel-text{font-size:11px;}
     .rel-icon{transform:none;font-size:14px;}
