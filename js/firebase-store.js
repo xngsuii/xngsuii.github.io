@@ -22,7 +22,7 @@ import {
   getFirestore, doc, getDoc, setDoc, deleteDoc,
   collection, getDocs, writeBatch
 } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
-import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=59';
+import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=60';
 
 const app  = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -35,12 +35,16 @@ const listRef = (key) => collection(db, ROOT[0], ROOT[1], key);
 const blobsRef = () => collection(db, ROOT[0], ROOT[1], 'blobs');
 
 /* 작은 값은 meta 문서 하나에, 배열은 항목별 문서로 나눠 저장 */
-/* archiveFolders 는 PROMPT 폴더 목록입니다. 안에 글을 담지 않고
+/* archiveFolders* 는 ARCHIVE 세부 카테고리별 폴더 목록입니다. 안에 글을 담지 않고
    이름·비밀번호해시·옵션만 들어 있어 항목 수가 적으므로 meta 문서에 함께 둡니다.
-   (글 쪽에 folderId 가 적혀 있어 폴더-글 연결은 archive 문서들이 갖습니다) */
+   (글 쪽에 folderId 가 적혀 있어 폴더-글 연결은 archive 문서들이 갖습니다)
+   PROMPT 것은 먼저 있던 키라 이름을 그대로 두고, OOC / ETC 는 따로 하나씩 더 둡니다 —
+   세 카테고리는 담는 글이 다르니 폴더도 섞이면 안 됩니다. */
 /* pairCats / ocCats 는 사이드바의 세부 분류 목록입니다({id,name} 몇 개뿐이라 meta 문서에 함께 둡니다).
    글 쪽에 type 이 적혀 있어 분류-글 연결은 글 문서들이 갖습니다. */
-const SCALAR_KEYS = ['profile', 'siteName', 'homeIntro', 'homeBanner', 'archiveSeqCounter', 'archiveFolders', 'ocFolders', 'pairCats', 'ocCats'];
+const SCALAR_KEYS = ['profile', 'siteName', 'homeIntro', 'homeBanner', 'archiveSeqCounter',
+                     'archiveFolders', 'archiveFoldersOoc', 'archiveFoldersEtc',
+                     'ocFolders', 'pairCats', 'ocCats'];
 const LIST_KEYS   = ['cards', 'pairPosts', 'archive', 'ocPosts'];
 
 /* Firestore 문서 1개 최대 1MiB. 여유를 두고 자릅니다. */

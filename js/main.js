@@ -179,7 +179,7 @@ let state = {
   profile:{ name:'이름', bio:'여기에 소개글을 적어주세요.', photo:'' },
   siteName:'사이트 이름', homeIntro:'', homeBanner: blankImg(),
   cards:[], pairPosts:[], archive:[], archiveSeqCounter:0,
-  archiveFolders:[], ocPosts:[],
+  archiveFolders:[], archiveFoldersOoc:[], archiveFoldersEtc:[], ocPosts:[],
   pairCats:[], ocCats:[]
 };
 
@@ -190,10 +190,23 @@ let state = {
    기본 폴더 id 는 갤러리의 'default' 와 겹치지 않게 다른 이름을 씁니다 —
    비밀 폴더 열람 기록(unlockedFolders)을 두 곳이 함께 쓰기 때문입니다. */
 const ARC_DEFAULT_FOLDER = 'arcdefault';
-function normalizeArcFolders(list){
+/* 세부 카테고리(OOC·PROMPT·ETC)마다 폴더 목록을 따로 둡니다 — 담기는 글이
+   서로 다르니 폴더도 섞이면 안 됩니다. PROMPT 는 먼저 있던 키를 그대로 씁니다. */
+const ARC_FOLDER_KEY = { ooc:'archiveFoldersOoc', nai:'archiveFolders', etc:'archiveFoldersEtc' };
+const ARC_DEFAULT_FOLDER_ID = { ooc:'arcoocdefault', nai:ARC_DEFAULT_FOLDER, etc:'arcetcdefault' };
+function arcFoldersOf(cat){
+  const key = ARC_FOLDER_KEY[cat] || ARC_FOLDER_KEY.ooc;
+  if(!Array.isArray(state[key]) || !state[key].length){
+    state[key] = normalizeArcFolders(null, ARC_DEFAULT_FOLDER_ID[cat]);
+  }
+  return state[key];
+}
+function setArcFolders(cat, list){ state[ARC_FOLDER_KEY[cat] || ARC_FOLDER_KEY.ooc] = list; }
+function saveArcFolders(cat){ return storageSet(ARC_FOLDER_KEY[cat] || ARC_FOLDER_KEY.ooc, arcFoldersOf(cat)); }
+function normalizeArcFolders(list, defaultId){
   const out = Array.isArray(list) ? list.slice() : [];
   if(!out.length){
-    out.push({ id:ARC_DEFAULT_FOLDER, name:'기본' });
+    out.push({ id: defaultId || ARC_DEFAULT_FOLDER, name:'기본' });
   }
   out.forEach(f=>{
     if(f.secret == null) f.secret = false;
@@ -289,21 +302,24 @@ function migrateOcPost(o){
   if(!o.folderId) o.folderId = OC_DEFAULT_FOLDER;
   o.log = o.log || [];
   migrateGalleryFolders(o);   // 갤러리 폴더 구조는 PAIR 과 똑같이 씁니다
-  migrateLogIds(o);
+  migrateLog(o);
   return o;
 }
 
 /* 로그인 상태는 데이터를 불러오기 전에 먼저 확정될 수 있고, 그때 applyEditMode 가
    renderArchive / renderOcPosts 를 부릅니다. 폴더·카테고리 목록이 비어 있으면
    찾지 못해 터지므로, 기본값을 미리 넣어둡니다. */
-state.archiveFolders = normalizeArcFolders(null);
+state.archiveFolders    = normalizeArcFolders(null, ARC_DEFAULT_FOLDER_ID.nai);
+state.archiveFoldersOoc = normalizeArcFolders(null, ARC_DEFAULT_FOLDER_ID.ooc);
+state.archiveFoldersEtc = normalizeArcFolders(null, ARC_DEFAULT_FOLDER_ID.etc);
 state.ocCats = normalizeOcCats(null, null);
 
-/* 글이 가리키는 폴더가 지워졌으면 기본 폴더로 봅니다 */
+/* 글이 가리키는 폴더가 지워졌으면 그 글이 속한 카테고리의 첫 폴더로 봅니다 */
 function arcFolderIdOf(item){
-  const fallback = state.archiveFolders[0] ? state.archiveFolders[0].id : ARC_DEFAULT_FOLDER;
+  const folders = arcFoldersOf(item.category || 'ooc');
+  const fallback = folders[0] ? folders[0].id : ARC_DEFAULT_FOLDER;
   const id = item.folderId || fallback;
-  return state.archiveFolders.some(f=>f.id===id) ? id : fallback;
+  return folders.some(f=>f.id===id) ? id : fallback;
 }
 
 function migrateCard(c){
@@ -343,7 +359,7 @@ function migratePost(old){
     splitLegacyIntro(old.char);
     splitLegacyIntro(old.persona);
     migrateGalleryFolders(old);
-    migrateLogIds(old);
+    migrateLog(old);
     return old;
   }
   const migrated = {
@@ -358,7 +374,7 @@ function migratePost(old){
   splitLegacyIntro(migrated.char);
   splitLegacyIntro(migrated.persona);
   migrateGalleryFolders(migrated);
-  migrateLogIds(migrated);
+  migrateLog(migrated);
   migrated.sideImage = normalizeImg(migrated.sideImage);
   migrateThemeSongs(migrated);
   migrateMessages(migrated);
@@ -387,9 +403,30 @@ function migrateMessages(obj){
     delete m.files;                                        // 파일 첨부는 쓰지 않습니다
   });
 }
-function migrateLogIds(p){
+/* ---- LOG 폴더 ----
+   갤러리 폴더와 같은 모양이고, 갤러리처럼 글 하나에 딸립니다(p.logFolders).
+   담기는 것이 이미지가 아니라 글이라 '썸네일 흐리게'는 쓰지 않고,
+   글 쪽에 folderId 를 적어둡니다. 기본 폴더 id 는 다른 폴더들과 겹치지
+   않게 따로 씁니다 — 비밀 폴더 열람 기록(unlockedFolders)을 다 같이 쓰기 때문입니다. */
+const LOG_DEFAULT_FOLDER = 'logdefault';
+function migrateLog(p){
   let seed = Date.now();
   (p.log||[]).forEach(entry=>{ if(entry.id==null){ entry.id = seed++; } });
+  if(!Array.isArray(p.logFolders) || p.logFolders.length===0){
+    p.logFolders = [{ id:LOG_DEFAULT_FOLDER, name:'기본' }];
+  }
+  p.logFolders.forEach(f=>{
+    if(f.secret == null) f.secret = false;
+    if(f.pwHash == null) f.pwHash = '';
+    f.blur = false;
+  });
+}
+/* 글이 가리키는 폴더가 지워졌으면 남아 있는 첫 폴더로 봅니다 */
+function logFolderIdOf(p, entry){
+  const folders = p.logFolders || [];
+  const fallback = folders[0] ? folders[0].id : LOG_DEFAULT_FOLDER;
+  const id = entry.folderId || fallback;
+  return folders.some(f=>f.id===id) ? id : fallback;
 }
 function migrateGalleryFolders(p){
   if(!p.galleryFolders || p.galleryFolders.length===0){
@@ -430,7 +467,9 @@ async function loadState(){
   state.cards     = (await storageGet('cards', [])).map(migrateCard);
   state.pairPosts = (await storageGet('pairPosts', [])).map(migratePost);
   state.archive   = (await storageGet('archive', [])).map(migrateArchiveItem);
-  state.archiveFolders = normalizeArcFolders(await storageGet('archiveFolders', null));
+  state.archiveFolders    = normalizeArcFolders(await storageGet('archiveFolders', null),    ARC_DEFAULT_FOLDER_ID.nai);
+  state.archiveFoldersOoc = normalizeArcFolders(await storageGet('archiveFoldersOoc', null), ARC_DEFAULT_FOLDER_ID.ooc);
+  state.archiveFoldersEtc = normalizeArcFolders(await storageGet('archiveFoldersEtc', null), ARC_DEFAULT_FOLDER_ID.etc);
   /* 처음 열 때는 예전부터 있던 Ai chat / Dream 을 그대로 씁니다.
      OC 는 카테고리가 하나 있어야 하므로, 카테고리 개념이 생기기 전
      전역으로 저장돼 있던 OC 폴더 목록(ocFolders)을 그 첫 카테고리가 이어받습니다 —
@@ -836,6 +875,7 @@ navItems.forEach(btn=>{
       document.querySelectorAll('#archiveSub .nav-sub-item').forEach(b=>b.classList.toggle('active', b.dataset.archivesub==='nai'));
       arcPage=1;
       arcUnblurred.clear();
+      arcSelectedIds.clear();   // 카테고리를 옮기면 골라둔 것도 비웁니다
       renderArchive();
     }
   });
@@ -1143,6 +1183,7 @@ document.querySelectorAll('#archiveSub .nav-sub-item').forEach(btn=>{
     currentArchiveCategory = btn.dataset.archivesub;
     arcPage=1;
     arcUnblurred.clear();
+    arcSelectedIds.clear();   // 카테고리를 옮기면 골라둔 것도 비웁니다
     navItems.forEach(b=>b.classList.remove('active'));
     document.querySelector('.nav-item[data-view="archive"]').classList.add('active');
     document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
@@ -1663,6 +1704,7 @@ function fillPairDetail(p){
   galleryHost = PAIR_GALLERY_HOST;
   logHost = PAIR_LOG_HOST;
   pdLogPage = 1;
+  currentLogFolderId = p.logFolders[0].id;
   currentGalleryFolderId = p.galleryFolders[0].id;
   galleryPage = 1;
   gallerySelectMode = false;
@@ -2377,6 +2419,9 @@ function renderLogContentInto(el, entry){
 
 /* --- Log (작성 시각 자동, 15개씩 페이지네이션, 행 크기/폰트는 완전 고정) --- */
 let pdLogPage = 1;
+/* 지금 보고 있는 LOG 폴더 (창을 열 때 그 글의 첫 폴더로 맞춥니다) */
+let currentLogFolderId = null;
+let draggedLogId = null;
 let logSearchTerm = '';
 let logSearchField = 'title';
 let logSearchDate = '';     // YYYY-MM-DD, 비우면 전체 기간
@@ -2409,17 +2454,36 @@ function filterLogItems(items){
 
 function renderLogList(p){
   const wrap=lq('.log-list');
-  const perPage=15;
-  const all = p.log.slice().reverse();
+  /* 폴더가 하나뿐이면 보기 모드에서는 탭 줄을 아예 내보내지 않습니다 —
+     고를 것이 없는 탭 하나가 목록 높이만 가져가기 때문입니다.
+     탭 줄이 뜨는 보기 모드에서는 그 높이만큼(한 줄) 페이지 크기를 줄입니다 —
+     보기 모드는 아래에 검색 줄까지 있어 15줄이 딱 맞게 들어차 있었습니다. */
+  const showFolderBar = isLoggedIn || (p.logFolders||[]).length>1;
+  const perPage = (!isLoggedIn && showFolderBar) ? 14 : 15;
+  renderLogFolderBar(p, showFolderBar);
+  /* 지금 고른 폴더의 글만 보여줍니다 (갤러리·PROMPT 와 같은 규칙) */
+  const folder = (p.logFolders||[]).find(f=>f.id===currentLogFolderId) || (p.logFolders||[])[0];
+  if(folder) currentLogFolderId = folder.id;
+  /* 잠긴 비밀 폴더는 목록을 아예 그리지 않습니다 */
+  if(folder && folderLocked(folder)){
+    wrap.innerHTML = '<div class="gallery-locked log-locked"><div class="gl-icon">🔒</div>'
+      + '<div class="gl-text">비밀 폴더입니다.</div>'
+      + '<button type="button" class="btn-ghost log-unlock-btn">비밀번호 입력</button></div>';
+    const ub = wrap.querySelector('.log-unlock-btn');
+    if(ub) ub.addEventListener('click', ()=> openFolderUnlock(folder, ()=> renderLogList(p)));
+    return;
+  }
+  const inFolder = folder ? p.log.filter(x=> logFolderIdOf(p,x)===folder.id) : p.log.slice();
+  const all = inFolder.slice().reverse();
   const found = filterLogItems(all);
   /* 안내글은 목록 칸 한가운데에 놓습니다 (갤러리의 '이미지가 없어요' 와 같은 자리) */
   if(all.length===0){ wrap.innerHTML='<div class="empty-note log-empty-note">등록된 게시글이 없어요.</div>'; return; }
   if(found.length===0){ wrap.innerHTML='<div class="empty-note log-empty-note">검색 결과가 없어요.</div>'; return; }
   /* 고정한 글이 맨 위로 올라옵니다 (ARCHIVE 와 같은 방식, 최대 3개) */
   const items = [...found.filter(x=>x.pinned).slice(0,3), ...found.filter(x=>!x.pinned)];
-  /* 화면에 보이는 No 는 등록 순서로 매깁니다 —
+  /* 화면에 보이는 No 는 이 폴더 안의 등록 순서로 매깁니다 —
      그래야 고정하거나 검색해도 같은 글의 번호가 바뀌지 않습니다. */
-  const displayNo = new Map(p.log.map((it,i)=>[it, i+1]));
+  const displayNo = new Map(inFolder.map((it,i)=>[it, i+1]));
   const totalPages = Math.max(1, Math.ceil(items.length/perPage));
   if(pdLogPage>totalPages) pdLogPage=totalPages;
   if(pdLogPage<1) pdLogPage=1;
@@ -2440,10 +2504,18 @@ function renderLogList(p){
     <div class="log-pagination-slot">${totalPages>1?`<div class="log-pagination">${pag}</div>`:''}</div>`;
 
   wrap.querySelectorAll('tr[data-abs]').forEach(tr=>{
-    tr.addEventListener('click', ()=>{
-      const entry = items[Number(tr.dataset.abs)];
-      openLogView(entry);
-    });
+    const entry = items[Number(tr.dataset.abs)];
+    tr.addEventListener('click', ()=> openLogView(entry));
+    /* 편집 모드에서는 줄을 끌어다 폴더 탭에 놓아 옮길 수 있습니다 */
+    if(isLoggedIn){
+      tr.setAttribute('draggable','true');
+      tr.addEventListener('dragstart', (e)=>{
+        draggedLogId = entry.id;
+        tr.classList.add('dragging');
+        if(e.dataTransfer){ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', String(entry.id)); }
+      });
+      tr.addEventListener('dragend', ()=>{ tr.classList.remove('dragging'); draggedLogId=null; });
+    }
   });
   wrap.querySelectorAll('.log-pg-btn').forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -2454,6 +2526,78 @@ function renderLogList(p){
     });
   });
 }
+
+/* ---- LOG 폴더 탭 줄 ----
+   OC·ARCHIVE 는 폴더를 상단바 드롭다운에서 고르지만, LOG 는 갤러리와 마찬가지로
+   상세 창 안이라 얹을 상단바가 없습니다 — 그래서 갤러리와 같은 탭 줄을 씁니다.
+   다만 목록 높이를 뺏지 않도록 새 줄을 만들지 않고, 이미 있던 '＋ 게시글 추가'
+   줄의 왼쪽 빈 자리에 넣습니다. */
+function renderLogFolderBar(p, show){
+  const bar = lq('.log-folder-bar');
+  if(!bar) return;
+  bar.innerHTML='';
+  if(show===false) return;
+  const folders = p.logFolders || [];
+  folders.forEach(f=>{
+    const btn=document.createElement('button');
+    btn.type='button'; btn.className='gallery-folder-tab'+(f.id===currentLogFolderId?' active':'');
+    if(f.secret){
+      const lock=document.createElement('span');
+      lock.className='gf-lock'; lock.innerText='🔒'; lock.title='비밀 폴더';
+      btn.appendChild(lock);
+    }
+    const nameSpan=document.createElement('span');
+    nameSpan.innerText=f.name;
+    btn.appendChild(nameSpan);
+    btn.addEventListener('click', (e)=>{
+      if(e.target.closest('.gallery-folder-rename')) return;
+      const open = ()=>{ currentLogFolderId=f.id; pdLogPage=1; renderLogList(p); };
+      if(folderLocked(f)) openFolderUnlock(f, open);
+      else open();
+    });
+    if(isLoggedIn){
+      const renameBtn=document.createElement('button');
+      renameBtn.type='button'; renameBtn.className='gallery-folder-rename'; renameBtn.innerText='✎'; renameBtn.title='폴더 설정';
+      renameBtn.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        openFolderModal(logFolderCtx(p), f);
+      });
+      btn.appendChild(renameBtn);
+
+      /* 글 줄을 끌어다 놓으면 그 폴더로 옮깁니다.
+         탭끼리 끄는 '순서 바꾸기'와 한 탭에 같이 걸려 있으므로,
+         각자 자기 표시(draggedLogId / draggedFolderId)가 있을 때만 움직입니다. */
+      btn.addEventListener('dragover', (e)=>{
+        if(draggedLogId==null) return;
+        e.preventDefault();
+        btn.classList.add('drop-target');
+      });
+      btn.addEventListener('dragleave', ()=> btn.classList.remove('drop-target'));
+      btn.addEventListener('drop', async (e)=>{
+        if(draggedLogId==null) return;
+        e.preventDefault();
+        btn.classList.remove('drop-target');
+        const entry = (p.log||[]).find(x=>x.id===draggedLogId);
+        draggedLogId=null;
+        if(!entry) return;
+        entry.folderId = f.id;
+        await logHost.save();
+        renderLogList(p);
+      });
+
+      bindFolderTabReorder(btn, f, logFolderCtx(p), bar);
+    }
+    bar.appendChild(btn);
+  });
+  if(isLoggedIn){
+    const addBtn=document.createElement('button');
+    addBtn.type='button'; addBtn.className='gallery-folder-add';
+    addBtn.innerText='＋ 폴더';
+    addBtn.addEventListener('click', ()=> openFolderModal(logFolderCtx(p), null));
+    bar.appendChild(addBtn);
+  }
+}
+
 /* ---- LOG 조각 하나에 조작을 붙입니다 (PAIR 상세 / OC 상세가 각각 한 번씩) ---- */
 function initLogRoot(host){
   const root = host.root;
@@ -2564,7 +2708,9 @@ bindOnce(document.getElementById('saveLogBtn'), async ()=>{
     const entry = p.log.find(x=>x.id===editingLogId);
     if(entry){ entry.title=title; entry.content=content; entry.subColor=subColor; entry.parenColor=parenColor; entry.highlightColor=highlightColor; }
   }else{
-    p.log.push({ id:Date.now(), title, date:nowStamp(), content, subColor, parenColor, highlightColor });
+    /* 새 글은 지금 보고 있는 폴더에 들어갑니다 (갤러리·PROMPT 와 같은 규칙) */
+    const folderId = currentLogFolderId || (p.logFolders[0] && p.logFolders[0].id) || LOG_DEFAULT_FOLDER;
+    p.log.push({ id:Date.now(), title, date:nowStamp(), content, subColor, parenColor, highlightColor, folderId });
   }
   await logHost.save();
   pdLogPage=1;
@@ -2712,32 +2858,65 @@ function galleryFolderCtx(post){
   };
 }
 
-function archiveFolderCtx(){
-  const countIn = (f)=> state.archive.filter(x=>
-    (x.category||'ooc')==='nai' && arcFolderIdOf(x)===f.id).length;
+/* LOG 폴더 — 갤러리와 같은 탭 줄을 쓰지만, 담기는 것이 이미지가 아니라 글입니다.
+   그래서 두 가지가 PROMPT 폴더와 같습니다: 폴더를 지워도 안의 글은 남겨서 다른
+   폴더로 옮기고, '썸네일 흐리게'는 쓸 데가 없어 칸 자체를 감춥니다. */
+function logFolderCtx(post){
+  const countIn = (f)=> (post.log||[]).filter(x=> logFolderIdOf(post, x)===f.id).length;
   return {
-    getList: ()=> state.archiveFolders,
+    hideBlur: true,
+    getList: ()=> post.logFolders,
+    canDelete: ()=> post.logFolders.length>1,   // 마지막 폴더는 남겨둡니다
+    deleteWarn: (f)=>{
+      const n = countIn(f);
+      if(n===0) return `'${f.name}' 폴더를 삭제합니다.`;
+      const fallbackName = post.logFolders.find(x=>x!==f).name;
+      return `'${f.name}' 폴더를 삭제합니다. 안에 있는 글 ${n}개는 지워지지 않고 '${fallbackName}' 폴더로 옮겨집니다.`;
+    },
+    newFolder: (base)=> ({ ...base, id:'lf'+Date.now() }),
+    onCreate: (f)=>{ currentLogFolderId = f.id; pdLogPage = 1; },
+    onDelete: async (f)=>{
+      const remaining = post.logFolders.filter(x=>x!==f);
+      const fallback = remaining[0].id;
+      (post.log||[]).forEach(x=>{ if(x.folderId===f.id) x.folderId = fallback; });
+      post.logFolders = remaining;
+      if(currentLogFolderId===f.id){ currentLogFolderId = fallback; pdLogPage = 1; }
+    },
+    save: ()=> logHost ? logHost.save() : Promise.resolve(),
+    rerender: ()=> renderLogList(post)
+  };
+}
+
+/* cat 을 안 넘기면 지금 보고 있는 세부 카테고리(OOC·PROMPT·ETC)를 씁니다 */
+function archiveFolderCtx(cat){
+  const c = cat || currentArchiveCategory;
+  const countIn = (f)=> state.archive.filter(x=>
+    (x.category||'ooc')===c && arcFolderIdOf(x)===f.id).length;
+  return {
+    getList: ()=> arcFoldersOf(c),
     blurHint: '썸네일이 흐리게 보이고, 각 글 오른쪽 위의 👁 를 누르면 그 글만 선명해집니다.',
-    canDelete: ()=> state.archiveFolders.length>1,   // 마지막 폴더는 남겨둡니다
+    /* 썸네일 격자로 보여주는 PROMPT 에서만 '흐리게'가 뜻이 있습니다 */
+    hideBlur: c!=='nai',
+    canDelete: ()=> arcFoldersOf(c).length>1,   // 마지막 폴더는 남겨둡니다
     /* 갤러리와 달리 안에 든 글은 지우지 않습니다 — 글은 이미지보다 되돌리기 어렵고,
        일괄 삭제는 선택 모드의 🗑 버튼으로 따로 할 수 있습니다. */
     deleteWarn: (f)=>{
       const n = countIn(f);
       if(n===0) return `'${f.name}' 폴더를 삭제합니다.`;
-      const fallbackName = state.archiveFolders.find(x=>x!==f).name;
+      const fallbackName = arcFoldersOf(c).find(x=>x!==f).name;
       return `'${f.name}' 폴더를 삭제합니다. 안에 있는 글 ${n}개는 지워지지 않고 '${fallbackName}' 폴더로 옮겨집니다.`;
     },
     newFolder: (base)=> ({ ...base, id:'af'+Date.now() }),
-    onCreate: (f)=>{ currentArcFolderId = f.id; arcPage = 1; },
+    onCreate: (f)=>{ setCurArcFolderId(f.id, c); arcPage = 1; },
     onDelete: async (f)=>{
-      const remaining = state.archiveFolders.filter(x=>x!==f);
+      const remaining = arcFoldersOf(c).filter(x=>x!==f);
       const fallback = remaining[0].id;
-      state.archive.forEach(x=>{ if(x.folderId===f.id) x.folderId = fallback; });
-      state.archiveFolders = remaining;
-      if(currentArcFolderId===f.id){ currentArcFolderId = fallback; arcPage = 1; }
+      state.archive.forEach(x=>{ if((x.category||'ooc')===c && x.folderId===f.id) x.folderId = fallback; });
+      setArcFolders(c, remaining);
+      if(curArcFolderId(c)===f.id){ setCurArcFolderId(fallback, c); arcPage = 1; }
       await storageSet('archive', state.archive);
     },
-    save: ()=> storageSet('archiveFolders', state.archiveFolders),
+    save: ()=> saveArcFolders(c),
     rerender: ()=> renderArchive()
   };
 }
@@ -4506,6 +4685,7 @@ function fillOcDetail(o){
   galleryHost = OC_GALLERY_HOST;
   logHost = OC_LOG_HOST;
   pdLogPage = 1;
+  currentLogFolderId = o.logFolders[0].id;
   currentGalleryFolderId = o.galleryFolders[0].id;
   galleryPage = 1;
   gallerySelectMode = false;
@@ -4776,40 +4956,189 @@ document.getElementById('arcInsertImageBtn').addEventListener('click', ()=>{
   });
   input.click();
 });
+/* ============================================================
+   본문 사진 — 툴바와 '가로 두 칸' 블록
+   ------------------------------------------------------------
+   사진 위에 커서를 올리면 위/아래로 옮기고 지우는 작은 줄이 뜹니다.
+   사진을 다른 사진 위로 끌어다 놓으면 둘이 나란히 들어가는 두 칸짜리
+   블록(.img-pair)이 만들어지고, 그 다음부터는 같은 줄의 단추로
+   각 칸의 사진을 바꾸거나 좌우를 맞바꿉니다.
+   블록은 통째로 하나의 덩어리라 contenteditable=false 로 둡니다 —
+   그래야 편집기가 안쪽 칸 사이에 커서를 끼워 넣거나 칸을 쪼개지 않습니다.
+   ============================================================ */
 function removeImgToolbar(){ const t=document.querySelector('.img-toolbar'); if(t) t.remove(); }
+
+/* 사진 하나를 고르게 하고 data URL 로 돌려줍니다 (툴바의 '변경' 이 씁니다) */
+function pickImageFile(){
+  return new Promise(resolve=>{
+    const input=document.createElement('input'); input.type='file'; input.accept='image/*';
+    input.addEventListener('change', async ()=>{
+      const f=input.files[0];
+      resolve(f ? await fileToDataUrl(f) : null);
+    });
+    input.click();
+  });
+}
+
+/* 사진 하나 뒤에 붙어 있는 줄바꿈까지 같이 걷어냅니다 —
+   사진만 빼내면 빈 줄이 남습니다. */
+function removeImgWithBreak(img){
+  const next = img.nextSibling;
+  if(next && next.nodeType===1 && next.tagName==='BR') next.remove();
+  img.remove();
+}
+
+/* 두 칸 블록을 만들어 target 자리에 놓습니다 (왼쪽=target, 오른쪽=source) */
+function makeImagePair(targetImg, sourceImg){
+  const block=document.createElement('div');
+  block.className='img-pair';
+  block.setAttribute('contenteditable','false');
+  [targetImg.getAttribute('src'), sourceImg.getAttribute('src')].forEach(src=>{
+    const cell=document.createElement('div');
+    cell.className='img-pair-cell';
+    const im=document.createElement('img');
+    im.setAttribute('src', src);
+    cell.appendChild(im);
+    block.appendChild(cell);
+  });
+  targetImg.parentNode.insertBefore(block, targetImg);
+  const br=document.createElement('br');
+  block.parentNode.insertBefore(br, block.nextSibling);
+  removeImgWithBreak(targetImg);
+  removeImgWithBreak(sourceImg);
+  return block;
+}
+
+/* 두 칸 블록을 풀어 사진 한 장만 남깁니다 (칸 하나를 지웠을 때) */
+function unwrapImagePair(block, keepSrc){
+  const im=document.createElement('img');
+  im.setAttribute('src', keepSrc);
+  block.parentNode.insertBefore(im, block);
+  block.remove();
+}
+
 function showImgToolbar(img){
   removeImgToolbar();
-  const rect = img.getBoundingClientRect();
+  const cell = img.parentElement && img.parentElement.classList.contains('img-pair-cell')
+    ? img.parentElement : null;
+  const block = cell ? cell.parentElement : null;
+  /* 위/아래로 옮기고 지우는 대상은, 두 칸 블록 안의 사진이면 블록 전체입니다 */
+  const unit = block || img;
+  const rect = (cell || img).getBoundingClientRect();
   const toolbar=document.createElement('div');
   toolbar.className='img-toolbar';
-  toolbar.innerHTML = `<button type="button" data-act="up" title="위로">↑</button><button type="button" data-act="down" title="아래로">↓</button><button type="button" data-act="del" title="삭제">✕</button>`;
+  toolbar.innerHTML =
+      (cell ? `<button type="button" data-act="swap-img" title="이 칸 사진 변경">변경</button>`
+            + `<button type="button" data-act="flip" title="좌우 바꾸기">⇄</button>` : '')
+    + `<button type="button" data-act="up" title="위로">↑</button>`
+    + `<button type="button" data-act="down" title="아래로">↓</button>`
+    + `<button type="button" data-act="del" title="${cell?'이 칸 사진 삭제':'삭제'}">✕</button>`;
   document.body.appendChild(toolbar);
   toolbar.style.left = rect.left+'px';
   toolbar.style.top = Math.max(0, rect.top-28)+'px';
   toolbar.addEventListener('mousedown', e=> e.preventDefault());
-  toolbar.querySelector('[data-act="del"]').addEventListener('click', (e)=>{ e.stopPropagation(); img.remove(); removeImgToolbar(); });
-  toolbar.querySelector('[data-act="up"]').addEventListener('click', (e)=>{
-    e.stopPropagation();
-    const prev=img.previousElementSibling;
-    if(prev) img.parentNode.insertBefore(img, prev);
+  const act = (name, fn)=>{
+    const btn = toolbar.querySelector(`[data-act="${name}"]`);
+    if(btn) btn.addEventListener('click', (e)=>{ e.stopPropagation(); fn(); });
+  };
+  act('del', ()=>{
+    /* 두 칸 중 하나를 지우면 남은 한 장은 그대로 두고 블록만 풉니다 —
+       한 칸짜리 두 칸 블록은 뜻이 없기 때문입니다. */
+    if(cell){
+      const other = Array.from(block.children).find(c=>c!==cell);
+      const keep = other ? other.querySelector('img') : null;
+      if(keep) unwrapImagePair(block, keep.getAttribute('src'));
+      else block.remove();
+    }else{
+      img.remove();
+    }
     removeImgToolbar();
   });
-  toolbar.querySelector('[data-act="down"]').addEventListener('click', (e)=>{
-    e.stopPropagation();
-    const next=img.nextElementSibling;
-    if(next) img.parentNode.insertBefore(next, img);
+  act('up', ()=>{
+    const prev=unit.previousElementSibling;
+    if(prev) unit.parentNode.insertBefore(unit, prev);
     removeImgToolbar();
+  });
+  act('down', ()=>{
+    const next=unit.nextElementSibling;
+    if(next) unit.parentNode.insertBefore(next, unit);
+    removeImgToolbar();
+  });
+  act('flip', ()=>{
+    const cells = Array.from(block.children);
+    if(cells.length===2) block.insertBefore(cells[1], cells[0]);
+    removeImgToolbar();
+  });
+  act('swap-img', async ()=>{
+    removeImgToolbar();
+    const url = await pickImageFile();
+    if(url) img.setAttribute('src', url);
+  });
+}
+
+/* ---- 편집기 하나에 사진 조작을 붙입니다 (ARCHIVE 글쓰기 / LOG 글쓰기) ---- */
+let draggedEditorImg = null;
+function initEditorImageTools(editorId){
+  const editor = document.getElementById(editorId);
+  if(!editor) return;
+  editor.addEventListener('mouseover', (e)=>{
+    const img = e.target.closest('img');
+    if(img) showImgToolbar(img);
+  });
+  editor.addEventListener('mouseout', (e)=>{
+    const img = e.target.closest('img');
+    if(img && (!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest('.img-toolbar'))) removeImgToolbar();
+  });
+
+  /* 사진을 다른 사진 위로 끌어다 놓으면 두 칸 블록이 됩니다.
+     이미 두 칸 블록 안에 든 사진은 끌지도, 받지도 않습니다 — 그쪽 사진을
+     바꾸는 길은 툴바의 '변경' 하나로만 둬서, 끌다 놓쳐 한 장이 사라지는
+     일이 없게 합니다. */
+  const plainImg = (el)=>{
+    const img = el && el.closest ? el.closest('img') : null;
+    if(!img || !editor.contains(img)) return null;
+    return img.closest('.img-pair') ? null : img;
+  };
+  editor.addEventListener('dragstart', (e)=>{
+    const img = plainImg(e.target);
+    if(!img) return;
+    draggedEditorImg = img;
+    img.classList.add('img-dragging');
+    if(e.dataTransfer) e.dataTransfer.effectAllowed='move';
+  });
+  editor.addEventListener('dragover', (e)=>{
+    if(!draggedEditorImg) return;
+    const img = plainImg(e.target);
+    if(!img || img===draggedEditorImg) return;
+    e.preventDefault();
+    editor.querySelectorAll('.img-drop-target').forEach(el=> el.classList.remove('img-drop-target'));
+    img.classList.add('img-drop-target');
+  });
+  editor.addEventListener('dragleave', (e)=>{
+    const img = plainImg(e.target);
+    if(img) img.classList.remove('img-drop-target');
+  });
+  editor.addEventListener('drop', (e)=>{
+    if(!draggedEditorImg) return;
+    const target = plainImg(e.target);
+    if(!target || target===draggedEditorImg) return;
+    /* 막지 않으면 편집기가 자기 방식대로 사진을 옮겨 놓습니다 */
+    e.preventDefault();
+    e.stopPropagation();
+    target.classList.remove('img-drop-target');
+    removeImgToolbar();
+    makeImagePair(target, draggedEditorImg);
+    draggedEditorImg = null;
+  });
+  editor.addEventListener('dragend', ()=>{
+    if(draggedEditorImg) draggedEditorImg.classList.remove('img-dragging');
+    editor.querySelectorAll('.img-drop-target').forEach(el=> el.classList.remove('img-drop-target'));
+    draggedEditorImg = null;
   });
 }
 const arcEditorEl = document.getElementById('arcContentEditor');
-arcEditorEl.addEventListener('mouseover', (e)=>{
-  const img = e.target.closest('img');
-  if(img) showImgToolbar(img);
-});
-arcEditorEl.addEventListener('mouseout', (e)=>{
-  const img = e.target.closest('img');
-  if(img && (!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest('.img-toolbar'))) removeImgToolbar();
-});
+initEditorImageTools('arcContentEditor');
+initEditorImageTools('logContent');
 arcEditorEl.addEventListener('click', (e)=>{
   const img = e.target.closest('img');
   if(img) openArcLightbox(arcEditorEl, img);
@@ -4951,9 +5280,12 @@ bindOnce(document.getElementById('saveArcBtn'), async ()=>{
   const category=document.getElementById('arcCategoryInput').value;
   const content=arcEditorHtml();
   if(!title){ alert('제목을 입력해주세요.'); return; }
-  /* PROMPT 글은 폴더에 들어갑니다 — 지금 보고 있는 폴더에 넣고,
-     다른 카테고리를 보다가 PROMPT 로 바꿔 쓴 경우엔 기본 폴더에 넣습니다. */
-  const folderId = (currentArchiveCategory==='nai') ? currentArcFolderId : ARC_DEFAULT_FOLDER;
+  /* 새 글은 그 카테고리에서 지금 보고 있는 폴더에 들어갑니다.
+     쓰는 도중에 카테고리를 바꿨으면 그쪽 카테고리의 첫 폴더에 넣습니다. */
+  const catFolders = arcFoldersOf(category);
+  const folderId = (category===currentArchiveCategory && curArcFolderId(category))
+    ? curArcFolderId(category)
+    : catFolders[0].id;
   if(editingArcId){
     const item = state.archive.find(x=>x.id===editingArcId);
     if(item){
@@ -5021,8 +5353,12 @@ document.getElementById('arcDeleteBtn').addEventListener('click', async ()=>{
 
 let arcPage=1;
 let currentArcViewId=null;
+/* 지금 보고 있는 폴더는 세부 카테고리마다 따로 기억합니다 —
+   OOC 를 보다 ETC 로 갔다 돌아와도 아까 보던 폴더가 그대로 열립니다. */
+const currentArcFolderIds = { ooc:null, nai:null, etc:null };
+function curArcFolderId(cat){ return currentArcFolderIds[cat || currentArchiveCategory]; }
+function setCurArcFolderId(id, cat){ currentArcFolderIds[cat || currentArchiveCategory] = id; }
 /* PROMPT 전용 상태 */
-let currentArcFolderId = ARC_DEFAULT_FOLDER;
 let arcSelectMode = false;
 let arcSelectedIds = new Set();
 /* 👁 로 잠깐 선명하게 본 글. 페이지·폴더를 옮기면 다시 흐려지도록 비웁니다. */
@@ -5094,14 +5430,15 @@ function filterArchiveItems(items){
   });
 })();
 
-/* PROMPT 폴더 — OC 와 같은 상단바 드롭다운을 씁니다(renderFolderDropdown). */
+/* ARCHIVE 폴더 — OC 와 같은 상단바 드롭다운을 씁니다(renderFolderDropdown).
+   세부 카테고리(OOC·PROMPT·ETC)마다 목록이 다르므로 지금 보고 있는 것을 따라갑니다. */
 const ARC_FOLDER_DD = {
   rootId: 'arcFolderDD',
-  folders: ()=> state.archiveFolders,
-  currentId: ()=> currentArcFolderId,
+  folders: ()=> arcFoldersOf(currentArchiveCategory),
+  currentId: ()=> curArcFolderId(),
   ctx: ()=> archiveFolderCtx(),
   select: (f)=>{
-    currentArcFolderId=f.id; arcPage=1;
+    setCurArcFolderId(f.id); arcPage=1;
     arcUnblurred.clear(); arcSelectedIds.clear();
     renderArchive();
   },
@@ -5124,49 +5461,44 @@ function renderArchive(){
   if(titleEl) titleEl.innerText = 'Archive · ' + (ARCHIVE_CAT_LABEL[currentArchiveCategory] || currentArchiveCategory);
   const isGallery = currentArchiveCategory==='nai';
 
-  /* 선택 / 일괄 삭제는 PROMPT 에서만 씁니다 */
-  if(!isGallery && arcSelectMode){ arcSelectMode=false; arcSelectedIds.clear(); }
+  /* 선택 / 일괄 삭제는 세 카테고리 모두에서 씁니다.
+     PROMPT 는 썸네일 위에 체크가 뜨고, OOC·ETC 는 표 맨 앞에 체크 칸이 생깁니다. */
   const selBtn=document.getElementById('arcSelectBtn');
   const selDelBtn=document.getElementById('arcSelectDeleteBtn');
   if(selBtn){
-    selBtn.style.display = isGallery ? 'inline-flex' : 'none';
+    selBtn.style.display = 'inline-flex';
     selBtn.innerText = arcSelectMode ? '선택 취소' : '선택';
     selBtn.classList.toggle('active', arcSelectMode);
   }
-  if(selDelBtn) selDelBtn.style.display = (isGallery && arcSelectMode) ? 'inline-flex' : 'none';
+  if(selDelBtn) selDelBtn.style.display = arcSelectMode ? 'inline-flex' : 'none';
 
   // PROMPT 는 4열 x 2행(모바일은 2열 x 4행)으로 8개 고정,
   // OOC/ETC 는 데스크톱 15줄 / 모바일 10줄
   const perPage = isGallery ? 8 : (isMobileWidth() ? 10 : 15);
 
-  /* PROMPT 는 폴더로 한 번 더 걸러서 보여줍니다.
-     폴더 고르기는 목록 위 탭이 아니라 상단바 드롭다운입니다 — 폴더를 쓰지 않는
-     OOC/ETC 에서는 그 단추 자체를 숨깁니다. */
-  let folder = null;
+  /* 세부 카테고리(OOC·PROMPT·ETC) 안에서 폴더로 한 번 더 걸러 보여줍니다.
+     폴더 고르기는 목록 위 탭이 아니라 상단바 드롭다운입니다. */
   const folderBarHtml = '';
   const folderDD = document.getElementById('arcFolderDD');
-  if(folderDD) folderDD.style.display = isGallery ? '' : 'none';
-  let catItems = state.archive.filter(x=>(x.category||'ooc')===currentArchiveCategory);
-  if(isGallery){
-    // 폴더 목록이 어떤 이유로든 비어 있으면 기본 폴더를 만들어 둡니다
-    if(!state.archiveFolders.length) state.archiveFolders = normalizeArcFolders(null);
-    folder = state.archiveFolders.find(f=>f.id===currentArcFolderId) || state.archiveFolders[0];
-    currentArcFolderId = folder.id;
-    catItems = catItems.filter(x=> arcFolderIdOf(x)===folder.id);
+  if(folderDD) folderDD.style.display = '';
+  const folders = arcFoldersOf(currentArchiveCategory);
+  const folder = folders.find(f=>f.id===curArcFolderId()) || folders[0];
+  setCurArcFolderId(folder.id);
+  let catItems = state.archive.filter(x=>
+    (x.category||'ooc')===currentArchiveCategory && arcFolderIdOf(x)===folder.id);
 
-    /* 잠긴 비밀 폴더는 썸네일을 아예 그리지 않습니다 */
-    if(folderLocked(folder)){
-      wrap.innerHTML = folderBarHtml
-        + `<div class="arc-nai-grid">${'<div class="arc-nai-slot"></div>'.repeat(8)}</div>`
-        + '<div class="gallery-locked"><div class="gl-icon">🔒</div>'
-        + '<div class="gl-text">비밀 폴더입니다.</div>'
-        + '<button type="button" class="btn-ghost" id="arcUnlockBtn">비밀번호 입력</button></div>'
-        + '<div class="log-pagination-slot"></div>';
-      renderArcFolderBar();
-      const ub = document.getElementById('arcUnlockBtn');
-      if(ub) ub.addEventListener('click', ()=> openFolderUnlock(folder, ()=> renderArchive()));
-      return;
-    }
+  /* 잠긴 비밀 폴더는 내용을 아예 그리지 않습니다 */
+  if(folderLocked(folder)){
+    wrap.innerHTML = folderBarHtml
+      + (isGallery ? `<div class="arc-nai-grid">${'<div class="arc-nai-slot"></div>'.repeat(8)}</div>` : '')
+      + '<div class="gallery-locked"><div class="gl-icon">🔒</div>'
+      + '<div class="gl-text">비밀 폴더입니다.</div>'
+      + '<button type="button" class="btn-ghost" id="arcUnlockBtn">비밀번호 입력</button></div>'
+      + '<div class="log-pagination-slot"></div>';
+    renderArcFolderBar();
+    const ub = document.getElementById('arcUnlockBtn');
+    if(ub) ub.addEventListener('click', ()=> openFolderUnlock(folder, ()=> renderArchive()));
+    return;
   }
 
   if(catItems.length===0){
@@ -5277,14 +5609,39 @@ function renderArchive(){
       }
     });
   }else{
+    /* 선택 모드에서는 표 맨 앞에 체크 칸이 한 줄 더 생깁니다
+       (PROMPT 썸네일 위에 뜨는 체크와 같은 모양) */
     let rows='';
     pageItems.forEach((item,i)=>{
-      rows += `<tr data-abs="${start+i}"><td>${displayNo.get(item)||''}</td><td class="log-td-title">${item.pinned?'<span class="arc-pin-tag">📌</span> ':''}${escapeHtml(item.title)}</td><td>${item.date||''}</td></tr>`;
+      const checked = arcSelectedIds.has(item.id);
+      rows += `<tr data-abs="${start+i}"${checked?' class="selected"':''}>`
+        + (arcSelectMode?`<td class="arc-td-check"><div class="gallery-check${checked?' checked':''}">${checked?'✓':''}</div></td>`:'')
+        + `<td>${displayNo.get(item)||''}</td><td class="log-td-title">${item.pinned?'<span class="arc-pin-tag">📌</span> ':''}${escapeHtml(item.title)}</td><td>${item.date||''}</td></tr>`;
     });
-    wrap.innerHTML = `<div class="archive-table-scroll"><table class="log-table"><thead><tr><th>No</th><th>Title</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    wrap.innerHTML = `<div class="archive-table-scroll"><table class="log-table"><thead><tr>${arcSelectMode?'<th class="arc-th-check"></th>':''}<th>No</th><th>Title</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table></div>`
       + `<div class="log-pagination-slot">${totalPages>1?`<div class="log-pagination">${pag}</div>`:''}</div>`;
+    renderArcFolderBar();
     wrap.querySelectorAll('tr[data-abs]').forEach(tr=>{
-      tr.addEventListener('click', ()=> openArcView(items[Number(tr.dataset.abs)]));
+      const item = items[Number(tr.dataset.abs)];
+      tr.addEventListener('click', ()=>{
+        if(arcSelectMode){
+          if(arcSelectedIds.has(item.id)) arcSelectedIds.delete(item.id);
+          else arcSelectedIds.add(item.id);
+          renderArchive();
+          return;
+        }
+        openArcView(item);
+      });
+      /* 편집 모드에서는 줄을 끌어 폴더 단추 위로 가져가면 메뉴가 펼쳐지고,
+         항목에 놓으면 그 폴더로 옮겨집니다 (PROMPT 썸네일과 같은 방식). */
+      if(isLoggedIn){
+        tr.setAttribute('draggable','true');
+        tr.addEventListener('dragstart', (e)=>{
+          draggedArcId=item.id; tr.classList.add('dragging');
+          if(e.dataTransfer){ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', String(item.id)); }
+        });
+        tr.addEventListener('dragend', ()=>{ tr.classList.remove('dragging'); draggedArcId=null; });
+      }
     });
   }
   wrap.querySelectorAll('.log-pg-btn').forEach(btn=>{
@@ -5298,7 +5655,7 @@ function renderArchive(){
   });
 }
 
-/* ---- PROMPT 선택 모드 ---- */
+/* ---- 선택 모드 (세 카테고리 공용) ---- */
 const arcSelectBtnEl = document.getElementById('arcSelectBtn');
 if(arcSelectBtnEl) arcSelectBtnEl.addEventListener('click', ()=>{
   arcSelectMode = !arcSelectMode;

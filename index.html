@@ -11,7 +11,7 @@
      css/js를 고칠 때마다 이 숫자를 함께 올려주세요.
      올리지 않으면 브라우저가 옛 파일을 계속 써서
      새 HTML과 짝이 맞지 않아 화면이 깨질 수 있습니다. -->
-<link rel="stylesheet" href="css/style.css?v=59" />
+<link rel="stylesheet" href="css/style.css?v=60" />
 </head>
 <body>
 <div class="app-window">
@@ -366,7 +366,11 @@
         </div>
 
         <div class="pd-tab-pane pd-tab-pane-log" data-pdpane="log">
-          <div class="log-pane-toolbar"><button class="add-mini-btn log-add-btn" id="addLogBtn" data-editonly>＋ 게시글 추가</button></div>
+          <!-- 폴더 탭은 갤러리와 같은 모양이지만, 목록 높이를 뺏지 않게 이 줄에 함께 놓습니다 -->
+          <div class="log-pane-toolbar">
+            <div class="gallery-folder-bar log-folder-bar" id="logFolderBar"></div>
+            <button class="add-mini-btn log-add-btn" id="addLogBtn" data-editonly>＋ 게시글 추가</button>
+          </div>
           <div class="log-list" id="logList"></div>
           <!-- 검색은 페이지 버튼 아래에 둡니다 (보기 모드 전용) -->
           <div class="log-search" id="logSearchBar">
@@ -521,7 +525,10 @@
         </div>
 
         <div class="oc-page oc-page-log" data-ocpage="log">
-          <div class="log-pane-toolbar"><button class="add-mini-btn log-add-btn" data-editonly>＋ 게시글 추가</button></div>
+          <div class="log-pane-toolbar">
+            <div class="gallery-folder-bar log-folder-bar"></div>
+            <button class="add-mini-btn log-add-btn" data-editonly>＋ 게시글 추가</button>
+          </div>
           <div class="log-list"></div>
           <div class="log-search">
             <input type="date" class="log-search-date" title="게시일" />
@@ -726,7 +733,7 @@
 </div>
 
 
-<script src="js/main.js?v=59"></script>
-<script type="module" src="js/firebase-store.js?v=59"></script>
+<script src="js/main.js?v=60"></script>
+<script type="module" src="js/firebase-store.js?v=60"></script>
 </body>
 </html>

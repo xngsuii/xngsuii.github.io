@@ -621,7 +621,29 @@
   .pd-tab-pane{display:none;}
   .pd-tab-pane.active{display:block;}
   .pd-tab-pane-log.active{display:flex;flex-direction:column;height:100%;}
-  .log-pane-toolbar{display:flex;justify-content:flex-end;margin-bottom:10px;flex:none;}
+  /* 왼쪽에 폴더 탭, 오른쪽에 ＋게시글 추가.
+     탭을 새 줄에 깔면 그만큼 목록이 짧아지므로 이미 있던 이 줄에 함께 놓습니다.
+     탭이 많아도 줄이 늘어나지 않게 한 줄로 두고 가로로 밀어 봅니다.
+     줄을 2.5px 내려 폴더 탭이 GALLERY 탭과 같은 높이에서 시작하게 맞추고(갤러리
+     탭줄은 위 여백 6px 을 갖는데 이 줄은 0 이라 그만큼 위에 붙어 있었습니다),
+     내린 만큼 아래 여백에서 덜어냅니다 — 목록 높이는 그대로여야 15줄이 들어갑니다. */
+  .log-pane-toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;
+    margin-top:2.5px;margin-bottom:7.5px;flex:none;}
+  /* 보기 모드에서는 ＋게시글 추가가 사라져 줄 높이가 탭 높이로 줄고, 가운데 정렬로
+     벌던 3.5px 도 함께 사라집니다. 그만큼 위 여백으로 옮겨 담아 탭 위치는 같게,
+     위아래 여백 합계(10px)도 같게 둡니다. */
+  body:not(.logged-in) .log-pane-toolbar{margin-top:6px;margin-bottom:4px;}
+  /* .gallery-folder-bar 의 위아래 여백을 지웁니다 — 뒤에 오는 규칙이라 여기서 이겨야 합니다 */
+  .log-pane-toolbar .log-folder-bar{margin:0;flex:1 1 auto;min-width:0;flex-wrap:nowrap;
+    overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-ms-overflow-style:none;}
+  .log-folder-bar::-webkit-scrollbar{display:none;height:0;}
+  .log-folder-bar .gallery-folder-tab,.log-folder-bar .gallery-folder-add{flex:none;white-space:nowrap;}
+  .log-pane-toolbar .log-add-btn{flex:none;}
+  /* 잠긴 비밀 폴더 안내는 목록 칸 한가운데에 (갤러리와 같은 자리) */
+  .log-locked{position:static;transform:none;justify-content:center;flex:1;min-height:0;}
+  /* 폴더로 끌어다 옮기는 중인 줄 */
+  .log-table tr.dragging{opacity:.4;}
+  .log-table tr.selected td{background:var(--accent-soft);}
   /* 게시글 검색 (보기 모드 전용) */
   /* 검색창은 페이지 버튼 아래, 가로 가운데에 놓입니다 */
   .log-search{display:flex;justify-content:center;gap:6px;margin-top:10px;flex:none;}
@@ -720,6 +742,24 @@
   .img-toolbar{position:fixed;display:flex;gap:2px;background:var(--text);border:1px solid var(--border);z-index:600;}
   .img-toolbar button{background:var(--text);color:#fff;border:none;width:24px;height:24px;font-size:11px;}
   .img-toolbar button:hover{background:var(--accent);}
+  /* '변경' 처럼 글자가 든 단추는 24px 를 넘어도 잘리지 않게 */
+  .img-toolbar button[data-act="swap-img"]{width:auto;padding:0 7px;font-size:10px;}
+
+  /* ---- 본문 사진 두 칸 블록 ----
+     사진 두 장을 가로로 나란히 넣습니다. 편집기에서 사진을 다른 사진 위로
+     끌어다 놓으면 만들어지고, 보기 화면에서도 같은 모양으로 그려집니다.
+     칸 높이를 맞추려고 사진을 잘라내지는 않습니다 — 원본 비율 그대로 두고
+     위쪽만 맞춥니다(align-items:start). */
+  .img-pair{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:start;margin:6px 0;}
+  .img-pair-cell{min-width:0;}
+  /* 편집기·본문마다 `... img{margin:8px 0}` 이 따로 있어서, 그보다 확실히
+     앞서도록 클래스 두 개를 겹쳐 씁니다 (칸 사이 간격은 gap 이 냅니다) */
+  .img-pair > .img-pair-cell > img{display:block;width:100%;max-width:100%;height:auto;margin:0;}
+  /* 끌어다 놓는 중 표시 */
+  .img-dragging{opacity:.4;}
+  .img-drop-target{outline:2px dashed var(--accent);outline-offset:2px;}
+  /* 접기 안에 들어간 두 칸 블록도 코드 블록처럼 들여쓴 자리에서 시작합니다 */
+  .fold-block > .img-pair{margin-left:20px;}
   .code-embed{border:1px solid var(--border);margin:10px 0;}
   .code-embed-toolbar{display:flex;align-items:center;gap:4px;padding:6px 8px;border-bottom:1px solid var(--border);background:var(--surface);}
   .ce-tab{font-family:var(--mono);font-size:10.5px;border:1px solid var(--border);background:var(--bg);color:var(--text-muted);padding:4px 9px;}
@@ -978,6 +1018,15 @@
   .log-table th:first-child, .log-table td:first-child{width:44px;text-align:center;padding-right:20px;font-size:9px;color:var(--text-muted);}
   .log-table th:last-child{text-align:right;}
   .log-table td:last-child{width:70px;text-align:right;font-size:9px;color:var(--text-muted);}
+  /* ARCHIVE 선택 모드에서는 맨 앞에 체크 칸이 하나 더 붙습니다. 그러면 위의
+     :first-child 규칙(44px 가운데 정렬)이 그 칸에 걸리므로, 원래 그 모양이어야 할
+     No 칸에 같은 규칙을 한 번 더 줍니다. 체크 상자는 썸네일 위에 얹으려고
+     absolute 라, 표 칸 안에서는 제자리에 세웁니다. */
+  .log-table th.arc-th-check + th, .log-table td.arc-td-check + td{
+    width:44px;text-align:center;padding-right:20px;font-size:9px;color:var(--text-muted);}
+  /* No 칸의 오른쪽 여백 20px 을 물려받으면 상자가 왼쪽으로 7px 치우칩니다 */
+  .log-table th.arc-th-check, .log-table td.arc-td-check{padding-right:6px;}
+  .log-table td.arc-td-check .gallery-check{position:static;margin:0 auto;}
   .log-td-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .log-pagination-slot{min-height:34px;display:flex;align-items:center;justify-content:center;flex:none;}
   .log-pagination{display:flex;justify-content:center;gap:4px;font-family:var(--mono);}
@@ -1204,6 +1253,10 @@
 
     /* ---------- OC ---------- */
     .oc-body{padding:16px 14px 10px;}
+    /* 창틀(.oc-modal-wrap)은 가운데 정렬된 칸의 자식이라 그대로 두면 내용 폭까지만
+       늘어나고, 그 안의 창은 width:100% 라 따라서 좁아집니다 — PAIR 이 .pd-modal-wrap
+       에 폭을 주는 것과 같은 이유로 여기도 화면 폭을 꽉 채우게 합니다. */
+    .oc-modal-wrap{width:100%;align-items:stretch;}
     .modal.wide.oc-modal{width:100%;max-width:100%;}
     /* 세 장의 높이를 화면에 맞춥니다 (배너 + 제목 + 넘김 줄을 뺀 나머지).
        데스크톱에서 .oc-pages 의 margin-top 10px 을 걷어낸 만큼 여기서도 줄입니다. */
@@ -1250,6 +1303,9 @@
        (데스크톱에서 마우스를 올려 확인하고 누르던 흐름과 같습니다) */
     .arc-nai-title{font-size:11px;}
     .log-table th:first-child,.log-table td:first-child{width:30px;padding-right:8px;}
+    /* 선택 모드에서는 맨 앞이 체크 칸이므로, 그 다음 칸(No)에 같은 폭을 줍니다 */
+    .log-table th.arc-th-check + th,.log-table td.arc-td-check + td{width:30px;padding-right:8px;}
+    .log-table td.arc-td-check .gallery-check{width:22px;height:22px;font-size:12px;}
     .log-table td:last-child{width:60px;}
     .log-table td{padding:12px 4px;}
     .archive-search{margin:0 14px 14px;}
