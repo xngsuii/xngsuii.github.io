@@ -1248,13 +1248,22 @@ homePagesWrap.addEventListener('wheel', (e)=>{
 /* ============================================================
    MODAL HELPERS
    ============================================================ */
-/* 붙여넣기 시 외부 서식 제거 - 항상 순수 텍스트만 삽입 */
+/* 붙여넣은 글의 '서식'만 사이트 기준으로 맞춥니다 — 글 내용은 건드리지 않습니다.
+   빈 줄을 지우거나 줄을 합치지 않는 것은 그래서입니다(그건 내용을 바꾸는 일입니다).
+   눈에 안 보이지만 모양을 어긋나게 하는 두 가지만 고칩니다:
+   줄바꿈 문자 종류(윈도우·맥), 그리고 웹에서 딸려오는 '줄바꿈 없는 공백'
+   (겉보기엔 보통 공백이지만 그 자리에서 줄이 안 넘어가 문단 모양이 틀어집니다). */
+function normalizePastedText(raw){
+  return String(raw)
+    .replace(/\r\n?/g, '\n')      // 윈도우·맥 줄바꿈을 하나로
+    .replace(/ /g, ' ');     // 줄바꿈 없는 공백 → 보통 공백
+}
 document.addEventListener('paste', (e)=>{
   const target = e.target;
   if(target && target.isContentEditable){
     e.preventDefault();
     const text = (e.clipboardData || window.clipboardData).getData('text/plain');
-    document.execCommand('insertText', false, text);
+    document.execCommand('insertText', false, normalizePastedText(text));
   }
 });
 
@@ -1705,6 +1714,7 @@ function fillPairDetail(p){
   logHost = PAIR_LOG_HOST;
   pdLogPage = 1;
   currentLogFolderId = p.logFolders[0].id;
+  logSelectMode = false; logSelectedIds.clear();
   currentGalleryFolderId = p.galleryFolders[0].id;
   galleryPage = 1;
   gallerySelectMode = false;
@@ -1942,7 +1952,9 @@ function htmlToPlainText(html){
    HTML 문자열을 정규식으로 건드리면 태그·속성이 깨지므로
    글자 노드만 골라서 바꿉니다. */
 function applyAutoFormat(root, subColor, parenColor){
-  const RE = /\*\*([^*\n]+)\*\*|"([^"\n]*)"|\(([^)\n]*)\)/g;
+  /* **볼드** 를 *기울임* 보다 먼저 적어야 합니다 — 갈래는 적힌 순서대로 시도되므로,
+     기울임이 앞에 오면 **볼드** 의 앞쪽 별 두 개를 기울임으로 먼저 채가 버립니다. */
+  const RE = /\*\*([^*\n]+)\*\*|\*([^*\n]+)\*|"([^"\n]*)"|\(([^)\n]*)\)/g;
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
   const targets = [];
   let n;
@@ -1961,13 +1973,16 @@ function applyAutoFormat(root, subColor, parenColor){
       if(m[1] !== undefined){                       // **볼드** — 기호는 제거
         const b = document.createElement('b'); b.textContent = m[1];
         frag.appendChild(b);
-      }else if(m[2] !== undefined){                 // "보조색" — 따옴표 유지
+      }else if(m[2] !== undefined){                 // *기울임* — 기호는 제거
+        const it = document.createElement('i'); it.textContent = m[2];
+        frag.appendChild(it);
+      }else if(m[3] !== undefined){                 // "보조색" — 따옴표 유지
         const s = document.createElement('span');
-        s.style.color = subColor; s.textContent = `"${m[2]}"`;
+        s.style.color = subColor; s.textContent = `"${m[3]}"`;
         frag.appendChild(s);
       }else{                                        // (괄호색) — 괄호 유지
         const s = document.createElement('span');
-        s.style.color = parenColor; s.textContent = `(${m[3]})`;
+        s.style.color = parenColor; s.textContent = `(${m[4]})`;
         frag.appendChild(s);
       }
       last = m.index + m[0].length;
@@ -2181,6 +2196,124 @@ function applyCodeFences(root){
   }
 }
 
+/* ============================================================
+   마크다운 — 줄 단위 서식 (인용문 / 글머리 / 표)
+   ------------------------------------------------------------
+   코드 블록과 완전히 같은 방식으로 동작합니다: 본문을 줄바꿈이 살아있는
+   글자열로 펼쳐(flattenForFences) 어느 줄이 무엇인지 정한 다음, 그 줄이
+   차지한 DOM 범위만 골라 바꿔치웁니다. 최상위 자식만 훑어서는 안 되는
+   이유도 같습니다(줄이 <div> 로 감싸이기도, <br> 로만 끊기기도 합니다).
+   *기울임* 같은 한 줄 안의 서식은 여기가 아니라 applyAutoFormat 이 맡습니다.
+   ============================================================ */
+const MD_HEADING_RE = /^(#{1,6})\s+(\S.*)$/;
+/* |---|---| 처럼 생긴 표의 구분줄. 칸이 둘 이상이어야 표로 봅니다 —
+   글에서 그냥 쓴 --- 한 줄을 표로 잘못 읽지 않게. */
+const MD_TABLE_SEP_RE = /^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?$/;
+/* | 로 감싼 한 줄을 칸으로 자릅니다 (양 끝의 | 는 있어도 없어도 됩니다) */
+function mdTableCells(line){
+  let s = line.trim();
+  if(s.startsWith('|')) s = s.slice(1);
+  if(s.endsWith('|'))   s = s.slice(0, -1);
+  return s.split('|').map(c=> c.trim());
+}
+function mdBuildTable(rows){
+  const table = document.createElement('table');
+  table.className = 'md-table';
+  const head = document.createElement('thead');
+  const hr = document.createElement('tr');
+  mdTableCells(rows[0]).forEach(c=>{
+    const th = document.createElement('th'); th.textContent = c; hr.appendChild(th);
+  });
+  head.appendChild(hr); table.appendChild(head);
+  const body = document.createElement('tbody');
+  rows.slice(2).forEach(line=>{
+    const tr = document.createElement('tr');
+    mdTableCells(line).forEach(c=>{
+      const td = document.createElement('td'); td.textContent = c; tr.appendChild(td);
+    });
+    body.appendChild(tr);
+  });
+  if(body.childNodes.length) table.appendChild(body);
+  return table;
+}
+function mdBuildQuote(lines){
+  const q = document.createElement('blockquote');
+  q.className = 'md-quote';
+  lines.forEach((line, i)=>{
+    if(i) q.appendChild(document.createElement('br'));
+    q.appendChild(document.createTextNode(line.trim().replace(/^>\s?/, '')));
+  });
+  return q;
+}
+function mdBuildHeading(line){
+  const m = line.trim().match(MD_HEADING_RE);
+  const h = document.createElement('h' + m[1].length);
+  h.className = 'md-h';
+  h.textContent = m[2].trim();
+  return h;
+}
+/* 코드 블록·코드 상자 안의 글은 적은 그대로 보여야 하므로 건드리지 않습니다 */
+function mdInsideCode(point){
+  const el = point.container.nodeType === 3 ? point.container.parentNode : point.container;
+  return !!(el && el.closest && el.closest('.code-block, .code-embed'));
+}
+function applyMarkdownBlocks(root){
+  const { text, marks } = flattenForFences(root);
+  if(!text) return;
+  const lines = [];
+  let pos = 0;
+  text.split('\n').forEach(s=>{ lines.push({ s, start:pos, end:pos + s.length }); pos += s.length + 1; });
+
+  /* 무엇을 무엇으로 바꿀지 먼저 다 정해 둡니다. 한 줄이 두 군데에 들어가는 일이
+     없도록 묶음을 잡을 때마다 그만큼 건너뜁니다. */
+  const groups = [];
+  for(let i=0;i<lines.length;i++){
+    const t = lines[i].s.trim();
+    if(!t) continue;
+    // 표 — 머리줄 바로 아래에 구분줄이 있어야 표입니다
+    if(t.includes('|') && i+1 < lines.length && MD_TABLE_SEP_RE.test(lines[i+1].s.trim())){
+      let j = i + 2;
+      while(j < lines.length && lines[j].s.trim() && lines[j].s.includes('|')) j++;
+      groups.push({ kind:'table', from:i, to:j-1 });
+      i = j - 1; continue;
+    }
+    // 인용문 — 이어지는 > 줄들을 한 덩어리로 묶습니다
+    if(t.startsWith('>')){
+      let j = i;
+      while(j < lines.length && lines[j].s.trim().startsWith('>')) j++;
+      groups.push({ kind:'quote', from:i, to:j-1 });
+      i = j - 1; continue;
+    }
+    if(MD_HEADING_RE.test(t)) groups.push({ kind:'heading', from:i, to:i });
+  }
+  if(!groups.length) return;
+
+  /* 뒤에서부터 바꿉니다 — marks 는 바꾸기 전 좌표라, 앞에서부터 손대면
+     그 뒤 좌표가 전부 밀립니다 (코드 블록과 같은 이유). */
+  for(let g = groups.length - 1; g >= 0; g--){
+    const grp = groups[g];
+    const first = lines[grp.from], last = lines[grp.to];
+    try{
+      const startPoint = resolveFenceOffset(marks, first.start);
+      const lastPoint  = resolveFenceOffset(marks, Math.max(first.start, last.end - 1));
+      if(mdInsideCode(startPoint) || mdInsideCode(lastPoint)) continue;
+      const s = fenceLineBoundary(root, startPoint, false) || startPoint;
+      const e = fenceLineBoundary(root, lastPoint, true)
+             || resolveFenceOffset(marks, Math.min(text.length, last.end + 1));
+      const rows = [];
+      for(let k=grp.from; k<=grp.to; k++) rows.push(lines[k].s);
+      const node = grp.kind==='table' ? mdBuildTable(rows)
+                 : grp.kind==='quote' ? mdBuildQuote(rows)
+                 : mdBuildHeading(rows[0]);
+      const range = document.createRange();
+      range.setStart(s.container, s.offset);
+      range.setEnd(e.container, e.offset);
+      range.deleteContents();
+      range.insertNode(node);
+    }catch(err){ /* 예상 밖의 DOM 모양이면 이 줄은 건드리지 않고 넘어갑니다 */ }
+  }
+}
+
 /* 예전에 넣은 코드 상자에는 복사 버튼이 없으므로 그릴 때 채워 넣습니다 */
 function ensureCodeEmbedCopy(root){
   root.querySelectorAll('.code-embed').forEach(embed=>{
@@ -2193,9 +2326,11 @@ function ensureCodeEmbedCopy(root){
   });
 }
 
-/* 게시글 본문 한 번에 처리 — 코드 블록 + 코드 상자 복사 버튼 */
+/* 게시글 본문 한 번에 처리 — 코드 블록 + 줄 단위 마크다운 + 코드 상자 복사 버튼.
+   코드 블록을 먼저 만들어야 그 안의 # 이나 | 를 마크다운으로 잘못 읽지 않습니다. */
 function decorateContent(el){
   applyCodeFences(el);
+  applyMarkdownBlocks(el);
   ensureCodeEmbedCopy(el);
 }
 
@@ -2422,6 +2557,9 @@ let pdLogPage = 1;
 /* 지금 보고 있는 LOG 폴더 (창을 열 때 그 글의 첫 폴더로 맞춥니다) */
 let currentLogFolderId = null;
 let draggedLogId = null;
+/* 선택 모드 — ARCHIVE 의 표 화면과 같은 방식입니다 */
+let logSelectMode = false;
+let logSelectedIds = new Set();
 let logSearchTerm = '';
 let logSearchField = 'title';
 let logSearchDate = '';     // YYYY-MM-DD, 비우면 전체 기간
@@ -2490,9 +2628,14 @@ function renderLogList(p){
   const start=(pdLogPage-1)*perPage;
   const pageItems = items.slice(start, start+perPage);
 
+  /* 선택 모드에서는 표 맨 앞에 체크 칸이 하나 더 붙습니다 (ARCHIVE 와 같은 모양) */
+  const sel = isLoggedIn && logSelectMode;
   let rows='';
   pageItems.forEach((entry, i)=>{
-    rows += `<tr data-abs="${start+i}"><td>${displayNo.get(entry)||''}</td><td class="log-td-title">${entry.pinned?'<span class="arc-pin-tag">📌</span> ':''}${escapeHtml(entry.title)}</td><td>${entry.date||''}</td></tr>`;
+    const checked = logSelectedIds.has(entry.id);
+    rows += `<tr data-abs="${start+i}"${checked?' class="selected"':''}>`
+      + (sel?`<td class="arc-td-check"><div class="gallery-check${checked?' checked':''}">${checked?'✓':''}</div></td>`:'')
+      + `<td>${displayNo.get(entry)||''}</td><td class="log-td-title">${entry.pinned?'<span class="arc-pin-tag">📌</span> ':''}${escapeHtml(entry.title)}</td><td>${entry.date||''}</td></tr>`;
   });
   let pag='';
   if(totalPages>1){
@@ -2500,12 +2643,21 @@ function renderLogList(p){
     for(let i=1;i<=totalPages;i++){ pag += `<button class="log-pg-btn ${i===pdLogPage?'active':''}" data-pg="${i}">${i}</button>`; }
     pag += `<button class="log-pg-btn" data-pg="next" ${pdLogPage===totalPages?'disabled':''}>&gt;</button>`;
   }
-  wrap.innerHTML = `<div class="log-table-scroll"><table class="log-table" id="pdLogTable"><thead><tr><th>No</th><th>LOG</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table></div>
+  wrap.innerHTML = `<div class="log-table-scroll"><table class="log-table" id="pdLogTable"><thead><tr>${sel?'<th class="arc-th-check"></th>':''}<th>No</th><th>LOG</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="log-pagination-slot">${totalPages>1?`<div class="log-pagination">${pag}</div>`:''}</div>`;
+  updateLogSelectBtns();
 
   wrap.querySelectorAll('tr[data-abs]').forEach(tr=>{
     const entry = items[Number(tr.dataset.abs)];
-    tr.addEventListener('click', ()=> openLogView(entry));
+    tr.addEventListener('click', ()=>{
+      if(sel){
+        if(logSelectedIds.has(entry.id)) logSelectedIds.delete(entry.id);
+        else logSelectedIds.add(entry.id);
+        renderLogList(p);
+        return;
+      }
+      openLogView(entry);
+    });
     /* 편집 모드에서는 줄을 끌어다 폴더 탭에 놓아 옮길 수 있습니다 */
     if(isLoggedIn){
       tr.setAttribute('draggable','true');
@@ -2525,6 +2677,19 @@ function renderLogList(p){
       renderLogList(p);
     });
   });
+}
+
+/* 선택 모드 단추 두 개의 표시를 지금 상태에 맞춥니다.
+   요소는 id 가 아니라 지금 열려 있는 창(logHost.root) 안에서 찾습니다 —
+   PAIR·OC 두 벌이 동시에 화면에 있기 때문입니다. */
+function updateLogSelectBtns(){
+  const selBtn = lq('.log-select-btn');
+  const delBtn = lq('.log-select-delete');
+  if(selBtn){
+    selBtn.innerText = logSelectMode ? '선택 취소' : '선택';
+    selBtn.classList.toggle('active', logSelectMode);
+  }
+  if(delBtn) delBtn.style.display = logSelectMode ? '' : 'none';
 }
 
 /* ---- LOG 폴더 탭 줄 ----
@@ -2551,7 +2716,11 @@ function renderLogFolderBar(p, show){
     btn.appendChild(nameSpan);
     btn.addEventListener('click', (e)=>{
       if(e.target.closest('.gallery-folder-rename')) return;
-      const open = ()=>{ currentLogFolderId=f.id; pdLogPage=1; renderLogList(p); };
+      const open = ()=>{
+        currentLogFolderId=f.id; pdLogPage=1;
+        logSelectedIds.clear();   // 폴더를 옮기면 골라둔 것도 비웁니다
+        renderLogList(p);
+      };
       if(folderLocked(f)) openFolderUnlock(f, open);
       else open();
     });
@@ -2577,10 +2746,11 @@ function renderLogFolderBar(p, show){
         if(draggedLogId==null) return;
         e.preventDefault();
         btn.classList.remove('drop-target');
-        const entry = (p.log||[]).find(x=>x.id===draggedLogId);
+        // 골라둔 글이 있으면 함께, 없으면 끌던 글 하나만 옮깁니다
+        const ids = new Set(logSelectedIds); ids.add(draggedLogId);
         draggedLogId=null;
-        if(!entry) return;
-        entry.folderId = f.id;
+        (p.log||[]).forEach(x=>{ if(ids.has(x.id)) x.folderId = f.id; });
+        logSelectedIds.clear();
         await logHost.save();
         renderLogList(p);
       });
@@ -2613,6 +2783,28 @@ function initLogRoot(host){
     document.getElementById('logWriteHint').innerText='작성 시각이 자동으로 기록됩니다.';
     fillLogEditor(null);
     openModal('modalLogWrite');
+  });
+
+  /* 선택 모드 — ARCHIVE 표 화면과 같은 규칙입니다 */
+  const selBtn = root.querySelector('.log-select-btn');
+  if(selBtn) selBtn.addEventListener('click', ()=>{
+    use();
+    if(!isLoggedIn) return;
+    logSelectMode = !logSelectMode;
+    logSelectedIds.clear();
+    const p = logPost(); if(p) renderLogList(p);
+  });
+  const selDel = root.querySelector('.log-select-delete');
+  if(selDel) selDel.addEventListener('click', async ()=>{
+    use();
+    if(!isLoggedIn) return;
+    if(logSelectedIds.size===0){ alert('삭제할 글을 먼저 선택해주세요.'); return; }
+    if(!await siteConfirm(`선택한 ${logSelectedIds.size}개 글을 삭제할까요? 되돌릴 수 없습니다.`)) return;
+    const p = logPost(); if(!p) return;
+    p.log = p.log.filter(x=> !logSelectedIds.has(x.id));
+    logSelectedIds.clear();
+    await logHost.save();
+    renderLogList(p);
   });
 
   const input  = root.querySelector('.log-search-input');
@@ -3197,13 +3389,16 @@ function renderGalleryFolderBar(p){
 }
 
 let galleryLbImages=[]; let galleryLbIndex=0;
+let lbAnimating=false;
 function openGalleryLightbox(images, idx){
   galleryLbImages = images; galleryLbIndex = idx;
+  lbAnimating = false;    // 넘기는 중에 닫았다 다시 열어도 막히지 않게
   prefetchImgs(images);   // 크게 보는 사진이 제일 급하다
   renderGalleryLightbox();
   document.getElementById('lightbox').classList.add('open');
 }
-function renderGalleryLightbox(){
+/* 사진 한 장을 그립니다 (썸네일 줄은 그대로 두고 표시만 갱신) */
+function paintGalleryLightbox(){
   const el = document.getElementById('lightboxImg');
   const src = galleryLbImages[galleryLbIndex];
   el.src = imgUrl(src);
@@ -3211,14 +3406,87 @@ function renderGalleryLightbox(){
     // 그 사이 다른 사진으로 넘어갔으면 덮어쓰지 않는다
     if(galleryLbImages[galleryLbIndex] === src) el.src = imgUrl(src);
   });
+  const many = galleryLbImages.length > 1;
   document.getElementById('lbPrev').style.visibility = galleryLbIndex>0 ? 'visible' : 'hidden';
   document.getElementById('lbNext').style.visibility = galleryLbIndex<galleryLbImages.length-1 ? 'visible' : 'hidden';
+  /* 몇 번째인지 알려주는 칩 — 한 장뿐이면 알려줄 것이 없습니다 */
+  const cnt = document.getElementById('lbCount');
+  if(cnt){
+    cnt.style.display = many ? '' : 'none';
+    cnt.innerText = `${galleryLbIndex+1} / ${galleryLbImages.length}`;
+  }
+  markGalleryLbThumb();
+}
+/* 아래 썸네일 줄. 창을 열 때 한 번만 만들고, 넘길 때는 표시만 옮깁니다. */
+function renderGalleryLbThumbs(){
+  const wrap = document.getElementById('lbThumbs');
+  if(!wrap) return;
+  wrap.innerHTML='';
+  if(galleryLbImages.length < 2){ wrap.style.display='none'; return; }
+  wrap.style.display='flex';
+  galleryLbImages.forEach((src,i)=>{
+    const t=document.createElement('div');
+    t.className='lb-thumb'+(i===galleryLbIndex?' active':'');
+    applyThumbBg(t, src, 64);   // .lb-thumb 는 64x64 고정
+    t.addEventListener('click', ()=> jumpGalleryLightbox(i));
+    wrap.appendChild(t);
+  });
+}
+function markGalleryLbThumb(){
+  const wrap = document.getElementById('lbThumbs');
+  if(!wrap) return;
+  const items = wrap.querySelectorAll('.lb-thumb');
+  items.forEach((t,i)=> t.classList.toggle('active', i===galleryLbIndex));
+  /* 지금 보는 것이 줄 밖으로 밀려나 있으면 끌어옵니다.
+     block:'nearest' 라 뒤에 있는 화면이 세로로 딸려 움직이지 않습니다. */
+  const cur = items[galleryLbIndex];
+  if(cur) cur.scrollIntoView({ block:'nearest', inline:'nearest' });
+}
+function renderGalleryLightbox(){
+  renderGalleryLbThumbs();
+  paintGalleryLightbox();
+}
+/* 옆으로 밀리며 바뀝니다 — 나가는 방향과 들어오는 방향이 반대여야
+   '넘어갔다'는 느낌이 납니다. 사진 크기가 장마다 다르므로 칸을 고정하지 않고
+   사진 자체를 움직입니다(칸을 고정하면 작은 사진이 큰 빈칸 안에 뜹니다). */
+const LB_SLIDE_PX = 56;
+const LB_OUT_MS = 150, LB_IN_MS = 210;
+const LB_EASE = 'cubic-bezier(.4,0,.2,1)';
+function slideGalleryLightbox(dir, commit){
+  const el = document.getElementById('lightboxImg');
+  if(lbAnimating) return;
+  if(!el || !el.animate){ commit(); paintGalleryLightbox(); return; }
+  lbAnimating = true;
+  const out = el.animate(
+    [{transform:'translateX(0)', opacity:1},
+     {transform:`translateX(${-dir*LB_SLIDE_PX}px)`, opacity:0}],
+    {duration:LB_OUT_MS, easing:LB_EASE, fill:'forwards'});
+  /* 사진 교체를 애니메이션의 finish 이벤트에 맡기면 안 됩니다 — 그 이벤트는
+     화면을 다시 그릴 때 함께 보내지는 것이라, 다른 탭에 가 있는 동안에는
+     오지 않습니다. 그러면 사진이 반쯤 사라진 채로 영영 멈추고 다음 넘김도
+     막힙니다. 눈에 보이는 효과와 상관없이 시간으로 이어붙입니다. */
+  setTimeout(()=>{
+    commit();
+    paintGalleryLightbox();
+    out.cancel();          // fill:forwards 로 붙잡아 둔 위치를 놓아줍니다
+    const back = el.animate(
+      [{transform:`translateX(${dir*LB_SLIDE_PX}px)`, opacity:0},
+       {transform:'translateX(0)', opacity:1}],
+      {duration:LB_IN_MS, easing:LB_EASE});
+    /* 새로 만든 애니메이션은 첫 화면 그리기 때 시작 시각이 정해지는데,
+       다른 탭에 가 있으면 그 순간이 오지 않아 첫 장면(안 보이는 상태)에
+       머뭅니다. 시간이 지나면 무조건 걷어내 사진이 제자리로 돌아오게 합니다. */
+    setTimeout(()=>{ back.cancel(); lbAnimating = false; }, LB_IN_MS);
+  }, LB_OUT_MS);
 }
 function stepGalleryLightbox(dir){
   const next = galleryLbIndex + dir;
   if(next<0 || next>=galleryLbImages.length) return;
-  galleryLbIndex = next;
-  renderGalleryLightbox();
+  slideGalleryLightbox(dir, ()=>{ galleryLbIndex = next; });
+}
+function jumpGalleryLightbox(i){
+  if(i===galleryLbIndex || i<0 || i>=galleryLbImages.length) return;
+  slideGalleryLightbox(i>galleryLbIndex ? 1 : -1, ()=>{ galleryLbIndex = i; });
 }
 
 let galleryPage = 1;
@@ -3753,7 +4021,12 @@ function initGalleryRoot(host){
 
   initGalleryPageDrop(host);
 }
-document.getElementById('lightbox').addEventListener('click', (e)=>{ if(e.target.id==='lightbox') document.getElementById('lightbox').classList.remove('open'); });
+/* 바깥(검은 바탕)이나 사진 줄의 빈 자리를 누르면 닫습니다 —
+   썸네일·화살표·사진 자체는 각자 할 일이 있으므로 제외합니다. */
+document.getElementById('lightbox').addEventListener('click', (e)=>{
+  if(e.target.id==='lightbox' || e.target.id==='lbStage' || e.target.classList.contains('lb-row'))
+    document.getElementById('lightbox').classList.remove('open');
+});
 document.getElementById('lbPrev').addEventListener('click', (e)=>{ e.stopPropagation(); stepGalleryLightbox(-1); });
 document.getElementById('lbNext').addEventListener('click', (e)=>{ e.stopPropagation(); stepGalleryLightbox(1); });
 
@@ -4686,6 +4959,7 @@ function fillOcDetail(o){
   logHost = OC_LOG_HOST;
   pdLogPage = 1;
   currentLogFolderId = o.logFolders[0].id;
+  logSelectMode = false; logSelectedIds.clear();
   currentGalleryFolderId = o.galleryFolders[0].id;
   galleryPage = 1;
   gallerySelectMode = false;

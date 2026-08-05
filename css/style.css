@@ -16,6 +16,8 @@
     /* 상단바 제목·사이드바 이름/카테고리·HOME 카드 글자에만 쓰는 픽셀 서체.
        본문은 --mono(조선굴림체) 그대로입니다. */
     --pixel:'Galmuri9',monospace;
+    /* 종이 질감의 세기. 0 이면 안 보이고 1 이 가장 진합니다. */
+    --grain:1;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;height:100%;font-family:'JoseonGulim',monospace;}
@@ -24,6 +26,29 @@
   input,textarea,select{font-family:inherit;}
   ::-webkit-scrollbar{width:6px;height:6px;}
   ::-webkit-scrollbar-thumb{background:#d8d8dc;border-radius:10px;}
+
+  /* ---------- 종이 질감 ----------
+     화면 전체에 한 겹 덮어 인쇄물 같은 결을 냅니다.
+     그림 그릴 때 쓰는 '오버레이'와 같은 방식입니다(mix-blend-mode:overlay).
+     곱하기(multiply)로 하면 모든 색이 그냥 어두워져 빨강이 탁해지는데,
+     오버레이는 밝은 곳은 밝게 / 어두운 곳은 어둡게만 하므로 색이 살아 있습니다.
+
+     오버레이의 기준점은 '중간 회색'입니다 — 중간 회색인 자리는 아무 일도
+     일어나지 않습니다. 그런데 질감 사진의 평균 밝기는 중간 회색이 아니라서
+     (지금 쓰는 사진은 0.798) 그대로 얹으면 화면 전체가 밝아지거나 어두워집니다.
+     brightness() 로 그 평균을 정확히 0.5 에 맞춰 놓고 씁니다 — 0.5/0.798 = 0.627.
+     **질감 사진을 바꾸면 이 숫자도 같이 고쳐야 합니다.** 새 사진의 평균 밝기를
+     재서 0.5 로 나눈 값을 넣으면 됩니다. 안 그러면 화면 전체 밝기가 달라집니다.
+
+     z-index 50 은 화면 안 내용(최대 20) 위, 서랍(55~60)·창(100 이상) 아래입니다.
+     세기는 --grain 하나로만 조절합니다(1 이 가장 진하고, 낮출수록 옅어집니다).
+     더 은은하게 하려면 overlay 를 soft-light 로 바꾸면 됩니다. */
+  .paper-grain{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;
+    pointer-events:none;user-select:none;z-index:50;
+    filter:brightness(.627);
+    mix-blend-mode:overlay;opacity:var(--grain);}
+  /* 인쇄 시에는 잉크만 낭비하므로 뺍니다 */
+  @media print{ .paper-grain{display:none;} }
 
   .app-window{width:1160px;max-width:96vw;aspect-ratio:16/9;max-height:95vh;background:var(--bg);border-radius:0;border:1px solid #000;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.5);display:flex;}
   .punch-margin{flex:none;width:40px;display:flex;flex-direction:column;justify-content:space-evenly;align-items:center;padding:22px 0;background:var(--surface);}
@@ -238,6 +263,14 @@
     border:1px dashed var(--accent);background:var(--bg);color:var(--accent);
     font-family:var(--mono);font-size:10.5px;font-weight:700;padding:6px 8px;margin-top:4px;}
   .folder-dd-add:hover{background:var(--accent-soft);}
+  /* 상단바 줄의 단추(선택·글쓰기·폴더)와 그 아래 선택 줄은 제목과 같은 픽셀 서체를
+     씁니다. 창 안의 저장/취소 단추는 본문 서체 그대로여야 하므로 .topbar 안으로만
+     한정합니다 — .btn-primary/.btn-ghost 는 창에서도 쓰는 이름입니다.
+     위의 .folder-dd-* / .pair-select-bar 규칙들이 각자 var(--mono) 를 적어두고
+     있으므로, 그것들보다 뒤에 와야 이깁니다(같은 우선순위끼리는 뒤가 이깁니다). */
+  .topbar .btn-primary,.topbar .btn-ghost,
+  .folder-dd-btn,.folder-dd-item,.folder-dd-add,
+  .pair-select-bar,.pair-select-bar .btn-ghost{font-family:var(--pixel);}
   .folder-dd-sep{height:1px;background:var(--border);margin:4px 2px 0;opacity:.35;}
   .post-card{position:relative;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--bg);cursor:pointer;display:flex;flex-direction:column;min-height:0;}
   .post-card.selectable{cursor:default;}
@@ -258,7 +291,7 @@
   .thumb-panning .gt-img,.thumb-panning .an-img{cursor:move;}
   .post-info{padding:10px 12px;flex:none;}
   .post-type{font-family:var(--mono);font-size:9.5px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.05em;}
-  .post-title{font-size:13px;font-weight:700;margin-top:2px;}
+  .post-title{font-family:var(--pixel);font-size:13px;font-weight:700;margin-top:2px;}
   /* 이름을 아직 안 적은 글은 목록에서 칸이 비어 보이므로, 상세 창 입력칸의
      안내 문구와 같은 말을 옅게 대신 보여줍니다(실제로 저장된 글자는 아닙니다). */
   #view-pair .post-title:empty:before{content:'새 페어';color:var(--text-muted);font-weight:500;}
@@ -605,7 +638,7 @@
   .login-error{font-size:11.5px;color:#e0483f;margin-top:-4px;margin-bottom:10px;display:none;}
 
   /* ---- Pair detail (layout-first, inline editable) ---- */
-  .pd-title-input{font-family:var(--mono);font-size:20.7px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;border:none;outline:none;width:100%;margin:20px 0 0;color:var(--text);background:transparent;}
+  .pd-title-input{font-family:var(--pixel);font-size:20.7px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;border:none;outline:none;width:100%;margin:20px 0 0;color:var(--text);background:transparent;}
   .pd-subtitle-input{font-family:var(--mono);font-size:11px;border:none;outline:none;width:100%;margin:0 0 6px;color:var(--text-muted);background:transparent;}
   .pd-modal-wrap{position:relative;display:flex;align-items:flex-start;}
   .pd-index-tabs{position:absolute;right:100%;top:70px;display:flex;flex-direction:column;}
@@ -638,7 +671,10 @@
     overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-ms-overflow-style:none;}
   .log-folder-bar::-webkit-scrollbar{display:none;height:0;}
   .log-folder-bar .gallery-folder-tab,.log-folder-bar .gallery-folder-add{flex:none;white-space:nowrap;}
-  .log-pane-toolbar .log-add-btn{flex:none;}
+  /* 삭제 · 선택 · ＋게시글 추가 (ARCHIVE 상단바와 같은 순서) */
+  .log-tool-btns{display:flex;align-items:center;gap:6px;flex:none;}
+  .log-pane-toolbar .add-mini-btn{flex:none;}
+  .log-select-btn.active{background:var(--accent);color:#fff;}
   /* 잠긴 비밀 폴더 안내는 목록 칸 한가운데에 (갤러리와 같은 자리) */
   .log-locked{position:static;transform:none;justify-content:center;flex:1;min-height:0;}
   /* 폴더로 끌어다 옮기는 중인 줄 */
@@ -736,9 +772,40 @@
   .arc-view-content img{max-width:100%;display:block;margin:8px 0;}
   .arc-view-content pre{background:var(--surface);border:1px solid var(--border);padding:8px;overflow-x:auto;font-family:var(--mono);font-size:11px;}
   .arc-view-content blockquote{border-left:3px solid var(--accent);margin:8px 0;padding:4px 12px;color:var(--text);}
+  /* 엔터로 넘긴 줄 사이는 3.5px 을 띄웁니다 — 줄 높이 17.5px 과 합쳐 21px.
+     접기 안(.fold-body ~ .fold-body)도 같은 값이라 글 어디서나 같아집니다.
+     편집기가 엔터마다 만드는 줄 <div> 는 class 가 없으므로 :not([class]) 로
+     그것만 고릅니다. 접기·코드블록·두 칸 사진 같은 덩어리는 각자 여백을 갖고
+     있어 건드리면 안 됩니다. 맨 첫 줄은 위가 글 시작이라 띄우지 않습니다. */
+  .arc-view-content > div:not([class]),
+  .arc-editor > div:not([class]),
+  .log-editor > div:not([class]){margin-top:3.5px;}
+  .arc-view-content > div:not([class]):first-child,
+  .arc-editor > div:not([class]):first-child,
+  .log-editor > div:not([class]):first-child{margin-top:0;}
   /* OC 자유 텍스트에도 인용구 버튼이 있습니다 — 여기에도 같은 모양을 줘야
      왼쪽 세로 막대가 보입니다(전에는 규칙이 없어 평범한 글처럼 보였습니다). */
   .oc-free blockquote{border-left:3px solid var(--accent);margin:8px 0;padding:4px 12px;color:var(--text);}
+
+  /* ---- 마크다운으로 만들어지는 줄 서식 ----
+     > 인용문 · # 글머리 · | 표. 본문에 섞여 있어도 튀지 않게 크기를 낮게 잡습니다
+     (기본 본문이 12.5px 이라 h1 도 18px 을 넘기지 않습니다). */
+  .md-quote{border-left:3px solid var(--accent);margin:8px 0;padding:4px 12px;color:var(--text);}
+  .md-h{font-family:var(--mono);font-weight:700;line-height:1.35;margin:14px 0 6px;color:var(--text);}
+  .md-h:first-child{margin-top:0;}
+  h1.md-h{font-size:18px;}
+  h2.md-h{font-size:16px;}
+  h3.md-h{font-size:14.5px;}
+  h4.md-h{font-size:13.5px;}
+  h5.md-h{font-size:12.5px;}
+  h6.md-h{font-size:11.5px;color:var(--text-muted);}
+  /* 표는 창보다 넓어지면 표 안에서만 옆으로 밀리게 합니다 */
+  .md-table{display:block;overflow-x:auto;border-collapse:collapse;margin:10px 0;
+    font-size:11.5px;max-width:100%;}
+  .md-table th,.md-table td{border:1px solid var(--border);padding:6px 10px;text-align:left;
+    vertical-align:top;white-space:pre-wrap;}
+  .md-table th{background:var(--surface);font-weight:700;}
+  .md-table tbody tr:nth-child(even) td{background:rgba(0,0,0,.02);}
   .img-toolbar{position:fixed;display:flex;gap:2px;background:var(--text);border:1px solid var(--border);z-index:600;}
   .img-toolbar button{background:var(--text);color:#fff;border:none;width:24px;height:24px;font-size:11px;}
   .img-toolbar button:hover{background:var(--accent);}
@@ -812,6 +879,16 @@
      위 여백은 본문 줄 간격(12.5px x 1.4 = 약 5px 벌어짐)보다 조금 넓게 잡아
      제목과 내용이 한 문단으로 붙어 보이지 않게 합니다. */
   .fold-body{padding-left:20px;margin-top:7px;}
+  /* 위 7px 은 '접기 제목과 첫 줄 사이' 간격입니다 — 제목과 내용이 한 문단처럼
+     붙어 보이지 않게 하는 값이라 그대로 둡니다.
+     그런데 접기 하나에 .fold-body 가 여러 개 들어있는 글이 많습니다 — 예전
+     편집기가 접기 안에서 엔터를 칠 때마다 class 를 그대로 물려받은 형제 <div> 를
+     만들었기 때문입니다(아래 숨김 규칙의 주석 참고). 그 둘째 줄부터는 '제목과의
+     간격'이 아니라 '엔터로 넘긴 줄 사이 간격'이므로 따로 3.5px 을 줍니다 —
+     줄 높이 17.5px 과 합쳐 21px 이고, 접기 밖의 줄도 같은 값으로 맞춥니다
+     (아래 .arc-view-content 등의 규칙). 문단 안에서 저절로 넘어간 줄은
+     줄 높이 그대로 17.5px 입니다. */
+  .fold-body ~ .fold-body{margin-top:3.5px;}
   /* 백틱 코드블록은 접기 안에서도 .fold-body 밖(접기의 직계 자식)에 놓일 수
      있습니다 — 펜스가 있던 줄 그릇을 통째로 갈아끼우는 자리라서요(applyCodeFences
      의 localLineBoundary 참고). 그때도 .fold-body 와 같은 만큼 들여써야 사진·글과
@@ -1024,8 +1101,11 @@
      absolute 라, 표 칸 안에서는 제자리에 세웁니다. */
   .log-table th.arc-th-check + th, .log-table td.arc-td-check + td{
     width:44px;text-align:center;padding-right:20px;font-size:9px;color:var(--text-muted);}
-  /* No 칸의 오른쪽 여백 20px 을 물려받으면 상자가 왼쪽으로 7px 치우칩니다 */
+  /* No 칸의 오른쪽 여백 20px 을 물려받으면 상자가 왼쪽으로 7px 치우칩니다.
+     위아래 여백은 0 으로 둡니다 — 체크 상자(18px)가 글자(15px)보다 커서
+     그대로 두면 줄 높이가 3px 씩 늘어나고, 한 쪽 15줄이 안 들어갑니다. */
   .log-table th.arc-th-check, .log-table td.arc-td-check{padding-right:6px;}
+  .log-table td.arc-td-check{padding-top:0;padding-bottom:0;vertical-align:middle;}
   .log-table td.arc-td-check .gallery-check{position:static;margin:0 auto;}
   .log-td-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .log-pagination-slot{min-height:34px;display:flex;align-items:center;justify-content:center;flex:none;}
@@ -1067,16 +1147,39 @@
   @media (hover:hover){ .gallery-thumb.blurred:hover .gt-img{filter:none;transform:none;} }
   /* 터치 기기: hover 가 없으므로 한 번 탭하면 선명해집니다 (JS 가 .revealed 를 붙임) */
   .gallery-thumb.blurred.revealed .gt-img{filter:none;transform:none;}
-  .lightbox{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;gap:18px;z-index:200;}
+  /* 갤러리 크게보기 — [◂ 사진 ▸] 한 줄, 그 아래 같은 폴더의 썸네일 줄 */
+  .lightbox{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;
+    flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:200;}
   .lightbox.open{display:flex;}
-  .lightbox img{max-width:80vw;max-height:88vh;border-radius:6px;}
+  .lb-row{display:flex;align-items:center;justify-content:center;gap:18px;min-height:0;}
+  /* 칸은 사진 크기를 그대로 따라갑니다 — 그래야 순서 칩이 사진 아래 모서리에 붙습니다 */
+  .lb-stage{position:relative;display:flex;align-items:center;justify-content:center;min-height:0;}
+  .lightbox img{display:block;max-width:80vw;max-height:74vh;border-radius:6px;}
   .lb-nav{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;width:40px;height:40px;font-size:22px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;}
   .lb-nav:hover{background:rgba(255,255,255,.28);}
+  /* 순서 칩 — 사진 위에 겹칩니다. 마우스를 올렸을 때만 뜹니다. */
+  .lb-count{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);
+    background:rgba(0,0,0,.6);color:#fff;font-family:var(--mono);font-size:11px;
+    padding:5px 11px;border-radius:999px;pointer-events:none;
+    opacity:0;transition:opacity .15s;white-space:nowrap;}
+  .lb-stage:hover .lb-count{opacity:1;}
+  /* 마우스가 없는 기기는 올려둘 수가 없으므로 늘 띄웁니다 */
+  @media (hover:none){ .lb-count{opacity:1;} }
+  /* 썸네일 줄은 게시글 창(720px)보다 넓어지지 않게 하고, 넘치면 옆으로 밀어 봅니다 */
+  .lb-thumbs{display:flex;gap:8px;flex:none;max-width:min(720px,92vw);
+    overflow-x:auto;overflow-y:hidden;padding:2px;
+    scrollbar-width:none;-ms-overflow-style:none;}
+  .lb-thumbs::-webkit-scrollbar{display:none;height:0;}
+  .lb-thumb{width:64px;height:64px;flex:none;background-size:cover;background-position:center;
+    border:2px solid rgba(255,255,255,.25);cursor:pointer;}
+  .lb-thumb.active{border-color:var(--page-bg);}
+
   .arc-lightbox{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;gap:18px;z-index:700;}
   .arc-lightbox.open{display:flex;}
   .arc-lb-main-wrap{max-width:60vw;max-height:82vh;display:flex;align-items:center;justify-content:center;}
-  .arc-lb-main-wrap img{max-width:100%;max-height:82vh;object-fit:contain;}
-  .arc-lb-nav{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;width:40px;height:40px;font-size:22px;flex:none;display:flex;align-items:center;justify-content:center;}
+  /* 화살표 모양과 사진 모서리는 갤러리 크게보기와 같게 맞춥니다 */
+  .arc-lb-main-wrap img{max-width:100%;max-height:82vh;object-fit:contain;border-radius:6px;}
+  .arc-lb-nav{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;width:40px;height:40px;font-size:22px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;}
   .arc-lb-nav:hover{background:rgba(255,255,255,.28);}
   .arc-lb-close{position:absolute;top:20px;right:20px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;width:32px;height:32px;font-size:15px;}
   .arc-lb-close:hover{background:rgba(255,255,255,.28);}
@@ -1473,11 +1576,15 @@
     .arc-view-content,.log-editor,.arc-editor{overflow-wrap:anywhere;}
 
     /* ---------- 라이트박스 ---------- */
-    .lightbox{gap:0;}
-    .lightbox img{max-width:92vw;max-height:78vh;}
-    .lb-nav{position:absolute;width:44px;height:44px;font-size:24px;}
+    /* 화살표를 사진 위에 겹쳐 올리므로 줄 간격은 없애고, 썸네일 줄만 아래에 띄웁니다 */
+    .lightbox{gap:12px;}
+    .lb-row{gap:0;}
+    .lightbox img{max-width:92vw;max-height:64vh;}
+    .lb-nav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;font-size:24px;z-index:2;}
     #lbPrev{left:10px;}
     #lbNext{right:10px;}
+    .lb-thumbs{max-width:100vw;padding:2px 10px;}
+    .lb-thumb{width:52px;height:52px;}
     .arc-lightbox{gap:0;flex-direction:column;justify-content:center;}
     .arc-lb-main-wrap{max-width:92vw;max-height:64vh;}
     .arc-lb-main-wrap img{max-height:64vh;}
