@@ -11,7 +11,7 @@
      css/js를 고칠 때마다 이 숫자를 함께 올려주세요.
      올리지 않으면 브라우저가 옛 파일을 계속 써서
      새 HTML과 짝이 맞지 않아 화면이 깨질 수 있습니다. -->
-<link rel="stylesheet" href="css/style.css?v=68" />
+<link rel="stylesheet" href="css/style.css?v=70" />
 </head>
 <body>
 <div class="app-window">
@@ -735,10 +735,24 @@
     <div class="lb-stage" id="lbStage">
       <img id="lightboxImg" />
       <div class="lb-count" id="lbCount"></div>
+      <!-- 확대: 누르면 아래 썸네일 줄을 감추고 사진이 화면을 꽉 채웁니다.
+           아이콘은 글자가 아니라 선 그림(SVG)입니다 — 서체마다 기호가 있거나
+           없거나 빈 칸으로 들어 있어서, 글자로 두면 안 보일 수 있습니다. -->
+      <button class="lb-zoom" id="lbZoom" type="button" title="확대">
+        <svg class="lb-zoom-ico lb-zoom-in" viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 9.5 6.5M6.5 13.5h-4v-4M2.5 13.5l4-4"/></svg>
+        <svg class="lb-zoom-ico lb-zoom-out" viewBox="0 0 16 16" aria-hidden="true"><path d="M13 3 9.5 6.5M9.5 6.5h3.5M9.5 6.5V3M3 13l3.5-3.5M6.5 9.5H3M6.5 9.5V13"/></svg>
+      </button>
     </div>
     <button class="lb-nav" id="lbNext">›</button>
   </div>
-  <div class="lb-thumbs" id="lbThumbs"></div>
+  <!-- 썸네일은 한 번에 아홉 장만 띄우고, 양 끝 화살표로 사진은 그대로 둔 채
+       썸네일 줄만 넘길 수 있습니다. 화살표는 위 좌우 이동 단추와 같은 모양이라
+       .lb-nav 를 그대로 쓰고 크기만 줄입니다. -->
+  <div class="lb-thumb-bar" id="lbThumbBar">
+    <button class="lb-nav lb-thumb-nav" id="lbThumbPrev" type="button" title="이전 썸네일">‹</button>
+    <div class="lb-thumbs" id="lbThumbs"></div>
+    <button class="lb-nav lb-thumb-nav" id="lbThumbNext" type="button" title="다음 썸네일">›</button>
+  </div>
 </div>
 
 <div class="arc-lightbox" id="arcLightbox">
@@ -757,7 +771,7 @@
      맨 끝에 두어 화면 그리기를 막지 않게 합니다. -->
 <img class="paper-grain" src="img/paper-grain.jpg" alt="" aria-hidden="true" draggable="false" />
 
-<script src="js/main.js?v=68"></script>
-<script type="module" src="js/firebase-store.js?v=68"></script>
+<script src="js/main.js?v=70"></script>
+<script type="module" src="js/firebase-store.js?v=70"></script>
 </body>
 </html>

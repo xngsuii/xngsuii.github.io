@@ -3390,12 +3390,27 @@ function renderGalleryFolderBar(p){
 
 let galleryLbImages=[]; let galleryLbIndex=0;
 let lbAnimating=false;
+/* 썸네일 줄에 한 번에 보이는 장수와, 지금 줄 맨 앞에 있는 사진의 번호.
+   보고 있는 사진이 줄 한가운데(다섯 번째)에 오도록 잡습니다. */
+const LB_THUMB_WINDOW = 9;
+let lbThumbStart = 0;
+/* 앞뒤로 네 장씩 보이는 자리를 잡되, 처음과 끝에서는 채울 사진이 없으므로
+   줄이 끝에 붙습니다 — 그래서 1~4번째 사진일 때는 그냥 앞에서부터 아홉 장입니다. */
+function lbThumbWindow(idx){
+  const n = galleryLbImages.length;
+  if(n <= LB_THUMB_WINDOW) return 0;
+  const half = Math.floor(LB_THUMB_WINDOW/2);
+  return Math.max(0, Math.min(idx - half, n - LB_THUMB_WINDOW));
+}
 function openGalleryLightbox(images, idx){
   galleryLbImages = images; galleryLbIndex = idx;
   lbAnimating = false;    // 넘기는 중에 닫았다 다시 열어도 막히지 않게
+  lbThumbStart = lbThumbWindow(idx);
   prefetchImgs(images);   // 크게 보는 사진이 제일 급하다
   renderGalleryLightbox();
-  document.getElementById('lightbox').classList.add('open');
+  const lb = document.getElementById('lightbox');
+  lb.classList.remove('zoomed');   // 확대는 매번 보통 크기에서 시작합니다
+  lb.classList.add('open');
 }
 /* 사진 한 장을 그립니다 (썸네일 줄은 그대로 두고 표시만 갱신) */
 function paintGalleryLightbox(){
@@ -3417,30 +3432,55 @@ function paintGalleryLightbox(){
   }
   markGalleryLbThumb();
 }
-/* 아래 썸네일 줄. 창을 열 때 한 번만 만들고, 넘길 때는 표시만 옮깁니다. */
+/* 아래 썸네일 줄. lbThumbStart 부터 아홉 장만 그립니다. */
 function renderGalleryLbThumbs(){
+  const bar = document.getElementById('lbThumbBar');
   const wrap = document.getElementById('lbThumbs');
-  if(!wrap) return;
+  if(!bar || !wrap) return;
+  const n = galleryLbImages.length;
+  /* 인라인 style 대신 클래스로 감춥니다 — 확대 상태(.lightbox.zoomed)에서도
+     썸네일 줄을 CSS 로 접어야 하는데, 인라인 style 은 CSS 로 덮을 수 없습니다. */
+  bar.classList.toggle('hide', n < 2);
+  if(n < 2){ wrap.innerHTML=''; return; }   // 감춘 줄에 지난 사진이 남아 있지 않게
+  const paged = n > LB_THUMB_WINDOW;   // 넘길 것이 있을 때만 양 끝 화살표를 씁니다
+  bar.classList.toggle('paged', paged);
+  const end = paged ? lbThumbStart + LB_THUMB_WINDOW : n;
   wrap.innerHTML='';
-  if(galleryLbImages.length < 2){ wrap.style.display='none'; return; }
-  wrap.style.display='flex';
-  galleryLbImages.forEach((src,i)=>{
+  for(let i=lbThumbStart; i<end; i++){
     const t=document.createElement('div');
     t.className='lb-thumb'+(i===galleryLbIndex?' active':'');
-    applyThumbBg(t, src, 64);   // .lb-thumb 는 64x64 고정
+    t.dataset.i = i;
+    applyThumbBg(t, galleryLbImages[i], 64);   // .lb-thumb 는 64x64 고정
     t.addEventListener('click', ()=> jumpGalleryLightbox(i));
     wrap.appendChild(t);
-  });
+  }
+  const prev=document.getElementById('lbThumbPrev'), next=document.getElementById('lbThumbNext');
+  if(prev) prev.disabled = !paged || lbThumbStart <= 0;
+  if(next) next.disabled = !paged || lbThumbStart >= n - LB_THUMB_WINDOW;
 }
+/* 사진이 바뀌면 줄도 그 사진이 가운데 오도록 따라옵니다.
+   자리가 그대로면 표시만 옮기고 다시 그리지는 않습니다. */
 function markGalleryLbThumb(){
+  const want = lbThumbWindow(galleryLbIndex);
+  if(want !== lbThumbStart){ lbThumbStart = want; renderGalleryLbThumbs(); }
   const wrap = document.getElementById('lbThumbs');
   if(!wrap) return;
   const items = wrap.querySelectorAll('.lb-thumb');
-  items.forEach((t,i)=> t.classList.toggle('active', i===galleryLbIndex));
-  /* 지금 보는 것이 줄 밖으로 밀려나 있으면 끌어옵니다.
+  items.forEach(t=> t.classList.toggle('active', Number(t.dataset.i)===galleryLbIndex));
+  /* 줄이 화면보다 넓은 좁은 기기에서 지금 보는 것을 가운데로 끌어옵니다.
      block:'nearest' 라 뒤에 있는 화면이 세로로 딸려 움직이지 않습니다. */
-  const cur = items[galleryLbIndex];
-  if(cur) cur.scrollIntoView({ block:'nearest', inline:'nearest' });
+  const cur = wrap.querySelector('.lb-thumb.active');
+  if(cur) cur.scrollIntoView({ block:'nearest', inline:'center' });
+}
+/* 양 끝 화살표 — 보고 있는 사진은 그대로 두고 썸네일 줄만 아홉 장씩 넘깁니다.
+   그래서 다음에 사진을 넘길 때까지는 줄이 가운데로 되돌아오지 않습니다. */
+function stepGalleryLbThumbs(dir){
+  const n = galleryLbImages.length;
+  if(n <= LB_THUMB_WINDOW) return;
+  const want = Math.max(0, Math.min(lbThumbStart + dir*LB_THUMB_WINDOW, n - LB_THUMB_WINDOW));
+  if(want === lbThumbStart) return;
+  lbThumbStart = want;
+  renderGalleryLbThumbs();
 }
 function renderGalleryLightbox(){
   renderGalleryLbThumbs();
@@ -4029,6 +4069,15 @@ document.getElementById('lightbox').addEventListener('click', (e)=>{
 });
 document.getElementById('lbPrev').addEventListener('click', (e)=>{ e.stopPropagation(); stepGalleryLightbox(-1); });
 document.getElementById('lbNext').addEventListener('click', (e)=>{ e.stopPropagation(); stepGalleryLightbox(1); });
+/* 확대 — 썸네일 줄을 접고 사진이 화면을 꽉 채웁니다. 한 번 더 누르면 돌아옵니다. */
+document.getElementById('lbZoom').addEventListener('click', (e)=>{
+  e.stopPropagation();
+  const lb = document.getElementById('lightbox');
+  const on = lb.classList.toggle('zoomed');
+  e.currentTarget.title = on ? '원래 크기' : '확대';
+});
+document.getElementById('lbThumbPrev').addEventListener('click', (e)=>{ e.stopPropagation(); stepGalleryLbThumbs(-1); });
+document.getElementById('lbThumbNext').addEventListener('click', (e)=>{ e.stopPropagation(); stepGalleryLbThumbs(1); });
 
 /* --- Timeline (원형 마커 + 연결선 + 볼드 타이틀 구조)
    편집 모드(UNLOCKED)에서는 프로필 칸처럼 목록에서 바로 수정합니다.
@@ -5746,9 +5795,10 @@ function renderArchive(){
   }
   if(selDelBtn) selDelBtn.style.display = arcSelectMode ? 'inline-flex' : 'none';
 
-  // PROMPT 는 4열 x 2행(모바일은 2열 x 4행)으로 8개 고정,
+  // PROMPT 는 4열 x 2행 = 8개, 모바일은 2열 x 2행 = 4개,
   // OOC/ETC 는 데스크톱 15줄 / 모바일 10줄
-  const perPage = isGallery ? 8 : (isMobileWidth() ? 10 : 15);
+  // (여기 숫자는 CSS .arc-nai-grid 의 열 x 행과 반드시 같아야 합니다)
+  const perPage = isGallery ? (isMobileWidth() ? 4 : 8) : (isMobileWidth() ? 10 : 15);
 
   /* 세부 카테고리(OOC·PROMPT·ETC) 안에서 폴더로 한 번 더 걸러 보여줍니다.
      폴더 고르기는 목록 위 탭이 아니라 상단바 드롭다운입니다. */
@@ -5764,7 +5814,7 @@ function renderArchive(){
   /* 잠긴 비밀 폴더는 내용을 아예 그리지 않습니다 */
   if(folderLocked(folder)){
     wrap.innerHTML = folderBarHtml
-      + (isGallery ? `<div class="arc-nai-grid">${'<div class="arc-nai-slot"></div>'.repeat(8)}</div>` : '')
+      + (isGallery ? `<div class="arc-nai-grid">${'<div class="arc-nai-slot"></div>'.repeat(perPage)}</div>` : '')
       + '<div class="gallery-locked"><div class="gl-icon">🔒</div>'
       + '<div class="gl-text">비밀 폴더입니다.</div>'
       + '<button type="button" class="btn-ghost" id="arcUnlockBtn">비밀번호 입력</button></div>'
@@ -6176,10 +6226,30 @@ function initLightboxSwipe(){
     }, {passive:true});
   };
   bind('lightbox', (d)=> stepGalleryLightbox(d));
-  bind('arcLightbox', (d)=>{
-    if(arcLbImages.length < 2) return;
-    arcLbIndex = (arcLbIndex + d + arcLbImages.length) % arcLbImages.length;
-    renderArcLightbox();
+  bind('arcLightbox', (d)=> stepArcLightbox(d));
+}
+function stepArcLightbox(d){
+  if(arcLbImages.length < 2) return;
+  arcLbIndex = (arcLbIndex + d + arcLbImages.length) % arcLbImages.length;
+  renderArcLightbox();
+}
+/* ---- 라이트박스 키보드 좌우 ---- */
+function initLightboxKeys(){
+  document.addEventListener('keydown', (e)=>{
+    if(e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    /* 글을 쓰는 중이면 화살표는 글자 사이를 옮기는 키입니다 — 가로채면 안 됩니다.
+       (크게보기가 열려 있는 동안에도 뒤에서 편집 중일 수 있습니다) */
+    const t = e.target;
+    if(t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    const dir = e.key === 'ArrowRight' ? 1 : -1;
+    /* 첨부 크게보기가 갤러리 크게보기보다 위에 뜨므로(z-index 700 대 200)
+       둘 다 열려 있으면 위에 있는 쪽이 먼저입니다. */
+    if(document.getElementById('arcLightbox').classList.contains('open')){
+      e.preventDefault(); stepArcLightbox(dir); return;
+    }
+    if(document.getElementById('lightbox').classList.contains('open')){
+      e.preventDefault(); stepGalleryLightbox(dir);
+    }
   });
 }
 
@@ -6191,6 +6261,8 @@ function initResponsiveWatch(){
     if(p && document.getElementById('modalPairDetail').classList.contains('open')) renderGallery(p);
     const o = getCurrentOc();
     if(o && document.getElementById('modalOcDetail').classList.contains('open')) renderGallery(o);
+    /* ARCHIVE 도 PROMPT 가 8 ↔ 4 로 달라지므로 첫 페이지로 되돌립니다 */
+    arcPage = 1;
     if(document.getElementById('view-archive').classList.contains('active')) renderArchive();
     /* PAIR·OC 목록도 한 페이지 개수가 달라지므로(8 ↔ 4) 첫 페이지로 되돌리고 다시 그립니다 */
     pairPage = 1; ocPage = 1;
@@ -6216,6 +6288,7 @@ async function boot(){
   initMobileDrawer();
   initHomeTouchNav();
   initLightboxSwipe();
+  initLightboxKeys();
   initTouchDrag();
   initResponsiveWatch();
   initContentBlocks();
