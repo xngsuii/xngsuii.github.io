@@ -462,7 +462,13 @@
   .side-memo-box{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
     padding-bottom:26px;scrollbar-width:none;}
   .side-memo-box::-webkit-scrollbar{width:0;}
-  .side-memo{min-height:100%;font-size:11.5px;line-height:1.6;color:var(--text);outline:none;}
+  /* flow-root 는 안쪽 여백이 밖으로 새어나가지 않게 합니다.
+     인용구·코드 상자는 위아래 8px 여백을 갖는데, 이 칸이 평범한 블록이면 첫
+     덩어리의 위 여백이 이 칸의 여백으로 합쳐져 나가버립니다(margin collapsing).
+     그러면 칸은 이미 min-height:100% 로 자리를 꽉 채운 채 8px 아래로 밀려서,
+     내용이 한 줄뿐인데도 딱 그만큼 넘쳐 스크롤이 생겼습니다. */
+  .side-memo{display:flow-root;min-height:100%;font-size:11.5px;line-height:1.6;
+    color:var(--text);outline:none;}
   body.logged-in .side-memo:empty:before{content:'메모를 적어보세요...';color:var(--text-muted);}
   .side-memo img{max-width:100%;display:block;margin:8px 0;}
   .side-dots{position:absolute;left:0;right:0;bottom:0;height:26px;z-index:5;
@@ -489,7 +495,9 @@
   /* 자유 텍스트 — 길어지면 이 박스 안에서만 스크롤됩니다 */
   .oc-free-box{flex:1;min-width:0;min-height:90px;margin-top:14px;border:1px solid var(--border);
     padding:10px;overflow-y:auto;overscroll-behavior:contain;}
-  .oc-free-box .oc-free{min-height:100%;border:none;padding:0;}
+  /* flow-root 인 까닭은 메모 칸(.side-memo)과 같습니다 — 안쪽 여백이 새어나가면
+     내용이 짧아도 그만큼 넘쳐 스크롤이 생깁니다. */
+  .oc-free-box .oc-free{display:flow-root;min-height:100%;border:none;padding:0;}
   body.logged-in .oc-free-box .oc-free{border:none;padding:0;}
   body.logged-in .oc-free-box .oc-free:empty:before{content:'자유롭게 적어보세요...';color:var(--text-muted);}
 
@@ -1559,14 +1567,23 @@
     .oc-info-main .pd-profile{height:auto;min-height:0;}
     /* 라벨만 담는 칸이라 잘라내지 않습니다 (스크롤 없이 7줄까지) */
     .oc-info-main .pd-desc-box{max-height:none;}
-    /* 좁은 화면에서도 오른쪽 칸은 두 장 그대로 두되, 손가락으로 넘길 높이를 줍니다 */
-    .side-pages{min-height:280px;}
+    /* 좁은 화면에서도 넘김 칸은 장 수를 줄이지 않고, 대신 폭에 맞춰 높이를
+       크게 줍니다. 3:4 인 까닭은 세로 이미지 장이 딱 맞아떨어지는 비율이기
+       때문입니다 — 이 비율이면 사진이 칸을 가로세로 모두 꽉 채우고, 다른 장들과
+       가로폭도 같아집니다. 280px 로는 사진도 타임라인도 너무 납작했습니다.
+       높이는 바깥 칸이 갖고 .side-pages 는 그 안을 채웁니다 — 장들이
+       position:absolute 라 스스로는 높이를 만들지 못합니다. */
+    .oc-info-side,.pd-info-side{aspect-ratio:3/4;}
+    .side-pages{min-height:0;}
     /* OC 프로필만은 좁은 화면에서도 [사진 | 글] 로 나란히 둡니다.
        위의 PAIR 규칙(절을 2열로 쪼개고 프로필을 한 줄로 세우는 것)을 되돌립니다.
        PAIR 은 카드가 둘(캐릭터/페르소나)이라 그대로 둡니다. */
     .oc-info-main .pd-section:not(.pd-section-nohead){display:block;}
     .oc-info-main .pd-profile.char-layout{grid-column:auto;grid-row:auto;}
-    .oc-info-main .pd-profile{grid-template-columns:100px 1fr;gap:10px;margin:0;}
+    /* 사진 칸을 100px 에서 넓혔습니다 — 3:4 라 100px 이면 세로 133px 밖에
+       안 돼 얼굴이 잘 안 보였습니다. 오른쪽에 남는 폭은 라벨 줄(:: 이름 값)이
+       쓰는데, 393px 화면에서 177px 이라 두 칸이 아직 한 줄에 들어갑니다. */
+    .oc-info-main .pd-profile{grid-template-columns:140px 1fr;gap:10px;margin:0;}
     .oc-info-main .pd-profile-img{width:100%;max-width:none;justify-self:stretch;}
     /* 좌우 두 칸을 위아래로 세웁니다. 이 화면은 내용이 넘치면 장 안에서 스크롤되고,
        페이지는 아래 ︽ ︾ 로 넘깁니다. */
@@ -1576,8 +1593,9 @@
     .oc-info-grid{grid-template-columns:1fr;gap:12px;flex:none;}
     .oc-info-main{min-height:auto;}
     .oc-free-box{flex:none;min-height:120px;max-height:220px;}
-    /* 전체폭이면 3:4 비율 때문에 세로로 너무 길어집니다 (프로필 사진과 같은 처리) */
-    .oc-side-img{height:auto;aspect-ratio:3/4;width:100%;max-width:170px;margin:0 auto;}
+    /* 넘김 칸 자체가 3:4 이므로 사진은 칸을 그대로 채웁니다 (데스크톱과 같습니다).
+       폭을 따로 묶어두면 사진 장만 다른 장보다 좁아 보입니다. */
+    .oc-side-img{height:100%;width:100%;max-width:none;aspect-ratio:auto;margin:0;}
     .oc-kw{font-size:11px;padding:9px 4px;}
 
     /* ---------- Archive ---------- */
@@ -1645,17 +1663,17 @@
     /* 좁은 화면에서는 INFO 를 한 화면에 우겨넣지 않고 그냥 스크롤합니다 —
        데스크톱에서 쓰는 '높이 고정 + 칸 안에서만 스크롤'을 여기서 되돌립니다. */
     .pd-tab-pane[data-pdpane="info"].active{display:block;height:auto;}
-    /* 세 칸을 옆으로 늘어놓기엔 좁으므로 두 프로필만 나란히 두고,
-       넘김 칸과 RELATIONSHIP 은 그 아래로 내려 보냅니다. */
+    /* 세 칸을 옆으로 늘어놓기엔 좁으므로 두 프로필만 나란히 두고, 그 아래로
+       RELATIONSHIP, 맨 아래에 넘김 칸을 놓습니다. 넘김 칸이 화면 폭만큼
+       높아서(아래 참고) 맨 아래가 아니면 RELATIONSHIP 이 한참 밀려납니다. */
     .pd-info-grid{grid-template-columns:1fr 1fr;
-      grid-template-areas:"char persona" "center center" "rel rel";
+      grid-template-areas:"char persona" "rel rel" "center center";
       gap:14px 10px;flex:none;min-height:auto;}
     .pd-info-col{display:block;min-height:auto;}
     .pd-info-col .pd-profile{display:flex;flex:none;min-height:auto;}
     .pd-info-col .pd-profile-info{display:block;}
     .pd-info-col .pd-desc-box{flex:none;max-height:200px;}
     .pd-info-side{margin-bottom:0;}
-    .side-pages{min-height:280px;}
     /* 직계 자식만 — TIMELINE 의 제목은 .pd-section-head 안에 있고
        아래 여백을 머리줄 쪽이 갖습니다(둘의 값을 같게 맞춥니다). */
     .pd-section > h4{margin-bottom:18px;}
