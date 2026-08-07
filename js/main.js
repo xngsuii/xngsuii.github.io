@@ -238,11 +238,11 @@ function normalizeOcFolders(list){
    카테고리 없이 남아 '전체'에서만 보입니다(글 자체는 지우지 않습니다).
    PAIR 의 aichat/dream 은 이미 저장된 글이 가리키고 있는 id 라 그대로 둡니다.
 
-   OC 는 '전체' 가 없어(목록이 카테고리별 폴더까지 갈라지므로 '전체'가
-   여러 폴더 체계를 한꺼번에 보여줘야 해서 의미가 없습니다) 카테고리가
-   최소 1개 있어야 화면을 그릴 수 있습니다 — normalizeOcCats() 가 그 자리를
-   보장합니다. 첫 도입 시점에는 그 하나의 카테고리가 예전의 전역 OC 폴더
-   목록(legacyFolders)을 그대로 이어받습니다. */
+   OC 도 '전체' 가 있지만, 폴더 목록이 카테고리에 딸려 있어서(cat.folders)
+   카테고리 없는 글은 폴더를 찾지 못합니다. 그래서 카테고리가 최소 1개 있어야
+   하고 — normalizeOcCats() 가 그 자리를 보장합니다 — 카테고리를 지울 때는
+   그 안의 글을 남는 카테고리로 옮깁니다. 첫 도입 시점에는 그 하나의
+   카테고리가 예전의 전역 OC 폴더 목록(legacyFolders)을 그대로 이어받습니다. */
 const PAIR_DEFAULT_CATS = [{ id:'aichat', name:'Ai chat' }, { id:'dream', name:'Dream' }];
 const OC_DEFAULT_CAT = 'occdefault';
 function normalizeCats(list, fallback){
@@ -902,15 +902,21 @@ navItems.forEach(btn=>{
    PAIR 와 OC 가 완전히 같은 코드를 쓰도록, 다른 점은 이 두 묶음에만
    모아 둡니다. 갤러리·LOG 를 host 로 공유하는 것과 같은 방식입니다.
 
-   hasAll — PAIR 는 맨 위에 '전체' 가 있어 카테고리를 몇 개를 지우든
-   상관없습니다(지워진 카테고리의 글은 '전체'에서만 보입니다).
-   OC 는 '전체' 가 없어(카테고리마다 폴더 체계가 따로 있어 '전체'가
-   여러 폴더를 한꺼번에 보여줘야 해서 의미가 없습니다) minCats:1 로
-   마지막 하나는 지울 수 없게 막습니다 — catCtx() 의 canDelete 가 봅니다. */
+   hasAll — 둘 다 맨 위에 '전체' 가 있습니다. OC 도 '전체' 를 갖게 되면서
+   여러 카테고리·폴더의 글이 한 목록에 섞이므로, 잠긴 비밀 폴더의 글은
+   가려서 보여줍니다(renderOcPosts 의 ocLockedFolderOf 참고).
+
+   orphanOnCatDelete — 카테고리를 지울 때 그 안의 글을 카테고리 없이 남길지.
+   PAIR 은 남깁니다('전체'에서 그대로 보이고, 같은 이름으로 다시 만들면
+   되살아납니다). OC 는 안 됩니다 — 폴더 목록이 카테고리에 딸려 있어서
+   (cat.folders) 카테고리 없는 글은 폴더를 못 찾습니다. 그래서 남는 카테고리
+   하나로 옮기고, minCats:1 로 마지막 하나는 지울 수 없게 막습니다
+   (catCtx() 의 canDelete 가 봅니다). */
 const PAIR_CAT_NAV = {
   view: 'pair',
   hasAll: true,
   minCats: 0,
+  orphanOnCatDelete: true,
   subEl: ()=> pairSub,
   cats: ()=> state.pairCats,
   setCats: (v)=>{ state.pairCats = v; },
@@ -927,8 +933,9 @@ const PAIR_CAT_NAV = {
 };
 const OC_CAT_NAV = {
   view: 'oc',
-  hasAll: false,
+  hasAll: true,
   minCats: 1,
+  orphanOnCatDelete: false,
   subEl: ()=> ocSub,
   cats: ()=> state.ocCats,
   setCats: (v)=>{ state.ocCats = v; },
@@ -945,15 +952,17 @@ const OC_CAT_NAV = {
   rerender: ()=> renderOcPosts()
 };
 
-/* '전체'가 있으면 '전체', 없으면(OC) 첫 카테고리로 */
+/* 모든 글을 보여주는 칸에 화면상 붙는 이름. 안쪽 id 는 'all' 그대로입니다 —
+   저장된 글이 가리키는 값이 아니라 화면 표시용이라 여기만 바꾸면 됩니다. */
+const ALL_CAT_LABEL = 'ALL';
 function defaultCatId(nav){
   if(nav.hasAll) return 'all';
   return nav.cats()[0] ? nav.cats()[0].id : '';
 }
 /* 사이드바 제목·타이틀에 쓸 이름 */
 function catTitle(nav, id){
-  if(nav.hasAll && id==='all') return '전체';
-  return catName(nav.cats(), id) || (nav.hasAll ? '전체' : (nav.cats()[0] ? nav.cats()[0].name : ''));
+  if(nav.hasAll && id==='all') return ALL_CAT_LABEL;
+  return catName(nav.cats(), id) || (nav.hasAll ? ALL_CAT_LABEL : (nav.cats()[0] ? nav.cats()[0].name : ''));
 }
 
 let draggedCatId = null;
@@ -1021,7 +1030,7 @@ function renderNavSub(nav){
     wrap.appendChild(btn);
   };
 
-  if(nav.hasAll) addItem('all', '전체', true);
+  if(nav.hasAll) addItem('all', ALL_CAT_LABEL, true);
   nav.cats().forEach(c=> addItem(c.id, c.name, false));
 
   /* '+' 로 추가하는 중일 때만, 목록 맨 아래에 이름 입력 칸이 뜹니다.
@@ -1127,8 +1136,8 @@ function renderMoveBtns(nav){
     b.addEventListener('click', ()=> move(c.id));
     wrap.appendChild(b);
   });
-  /* OC 는 '전체'가 없어 글이 카테고리 없이 남는 상태를 만들 수 없습니다 */
-  if(nav.hasAll && nav.cats().length){
+  /* OC 는 폴더가 카테고리에 딸려 있어 글이 카테고리 없이 남을 수 없습니다 */
+  if(nav.orphanOnCatDelete && nav.cats().length){
     const b = document.createElement('button');
     b.type='button'; b.className='btn-ghost';
     b.innerText = '카테고리 없음으로';
@@ -1150,9 +1159,9 @@ function catCtx(nav){
     canDelete: ()=> nav.cats().length > (nav.minCats || 0),
     deleteWarn: (c)=>{
       const n = countIn(c);
-      if(nav.hasAll){
+      if(nav.orphanOnCatDelete){
         return n>0
-          ? `'${c.name}' 카테고리를 삭제합니다. 안에 있는 글 ${n}개는 지워지지 않고 카테고리 없이 남아 '전체'에서 볼 수 있습니다.`
+          ? `'${c.name}' 카테고리를 삭제합니다. 안에 있는 글 ${n}개는 지워지지 않고 카테고리 없이 남아 '${ALL_CAT_LABEL}'에서 볼 수 있습니다.`
           : `'${c.name}' 카테고리를 삭제합니다.`;
       }
       const fallback = nav.cats().find(x=>x.id!==c.id);
@@ -1161,17 +1170,18 @@ function catCtx(nav){
         : `'${c.name}' 카테고리를 삭제합니다.`;
     },
     onDelete: async (c)=>{
-      if(nav.hasAll){
+      if(nav.orphanOnCatDelete){
         nav.setCats(nav.cats().filter(x=> x!==c));
         if(nav.get()===c.id) nav.set('all');
         /* 글의 type 은 일부러 지우지 않습니다 — 같은 이름으로 다시 만들 일이
            있어도 되살릴 수 있고, 지워진 id 를 가리키는 글은 '전체'에만 뜹니다. */
         return;
       }
-      /* OC 는 '전체' 가 없어 글이 카테고리 없이 남으면 안 보이게 되므로,
-         남는 카테고리 중 하나로 옮겨줍니다(폴더 삭제 때 '기본' 폴더로
-         옮기는 것과 같은 방식). 그 카테고리의 폴더 목록도 함께 사라지지만,
-         옮겨간 글은 ocFolderIdOf() 가 새 카테고리의 기본 폴더로 알아서 되돌립니다. */
+      /* OC 는 폴더가 카테고리에 딸려 있어 글이 카테고리 없이 남으면 폴더를
+         찾지 못하므로, 남는 카테고리 중 하나로 옮겨줍니다(폴더 삭제 때 '기본'
+         폴더로 옮기는 것과 같은 방식). 그 카테고리의 폴더 목록도 함께
+         사라지지만, 옮겨간 글은 ocFolderIdOf() 가 새 카테고리의 기본 폴더로
+         알아서 되돌립니다. */
       const remaining = nav.cats().filter(x=> x!==c);
       const fallback = remaining[0];
       nav.posts().forEach(p=>{ if(p.type===c.id) p.type = fallback.id; });
@@ -1532,10 +1542,20 @@ function renderCards(){
    PAIR
    ============================================================ */
 let currentPairFilter='all';
-let currentOcFilter = state.ocCats[0] ? state.ocCats[0].id : '';   // OC 는 '전체'가 없어 늘 실제 카테고리를 가리킵니다
+let currentOcFilter = 'all';        // PAIR 과 마찬가지로 '전체'부터 보여줍니다
 let currentArchiveCategory='nai';   // ARCHIVE 첫 진입은 PROMPT
 let selectMode=false;
 let selectedPairIds=new Set();
+
+/* 만든 순서(새 글이 앞)로 늘어놓습니다 — PAIR·OC 목록이 함께 씁니다.
+   저장된 배열 순서를 그대로 쓰면 안 됩니다. 새 글은 맨 앞에 넣지만, 그 뒤로
+   폴더·카테고리를 옮기고 지우는 사이 순서가 섞여서 실제 데이터에서는 이미
+   만든 날짜와 어긋나 있습니다(가장 최근 글이 세 번째에 있는 식).
+   글 id 가 만든 시각(Date.now())이라 이걸로 다시 세웁니다.
+   원본 배열은 건드리지 않습니다 — 순서를 바꾸면 저장까지 따라갑니다. */
+function byNewest(list){
+  return list.slice().sort((a,b)=> (Number(b.id)||0) - (Number(a.id)||0));
+}
 
 /* 새 글은 지금 보고 있는 분류로 들어갑니다.
    '전체'를 보고 있으면 맨 앞 분류로, 분류가 하나도 없으면 분류 없이. */
@@ -1587,7 +1607,7 @@ function renderPairPosts(){
   const grid=document.getElementById('postGrid'); grid.innerHTML='';
   const pagSlot=document.getElementById('pairPagination');
   if(pagSlot) pagSlot.innerHTML='';
-  const list = state.pairPosts.filter(p=> currentPairFilter==='all' || p.type===currentPairFilter);
+  const list = byNewest(state.pairPosts.filter(p=> currentPairFilter==='all' || p.type===currentPairFilter));
   if(list.length===0){ grid.innerHTML='<div class="empty-note">아직 작성된 글이 없어요.</div>'; return; }
 
   const perPage = pairPerPage();
@@ -4413,6 +4433,17 @@ const OC_FOLDER_DD = {
 };
 function renderOcFolderBar(){ renderFolderDropdown(OC_FOLDER_DD); }
 
+/* 이 글이 잠긴 비밀 폴더 안에 있으면 그 폴더를, 아니면 null 을 돌려줍니다.
+   '전체' 목록은 카테고리를 가리지 않으므로, 글마다 자기 카테고리의 폴더
+   목록에서 찾아야 합니다(폴더는 카테고리에 딸려 있습니다). */
+function ocLockedFolderOf(o){
+  const cat = ocCatOf(o.type);
+  if(!cat) return null;
+  const id = ocFolderIdOf(o);
+  const folder = ocFoldersOf(cat.id).find(f=>f.id===id);
+  return folder && folderLocked(folder) ? folder : null;
+}
+
 function renderOcPosts(){
   const grid=document.getElementById('ocGrid');
   if(!grid) return;
@@ -4428,28 +4459,40 @@ function renderOcPosts(){
   if(selBar) selBar.style.display = ocSelectMode ? 'flex' : 'none';
   updateOcSelectCountLabel();
 
-  /* 카테고리가 지워졌거나 아직 유효한 값이 아니면(첫 렌더 등) 첫 카테고리로 되돌립니다 —
+  /* 카테고리가 지워졌거나 아직 유효한 값이 아니면(첫 렌더 등) '전체'로 되돌립니다 —
      폴더 쪽 자기 치유(바로 아래)와 같은 방식입니다. */
-  if(!state.ocCats.some(c=>c.id===currentOcFilter)) currentOcFilter = defaultCatId(OC_CAT_NAV);
+  const isAll = currentOcFilter === 'all';
+  if(!isAll && !state.ocCats.some(c=>c.id===currentOcFilter)) currentOcFilter = defaultCatId(OC_CAT_NAV);
 
-  const folders = ocFoldersOf(currentOcFilter);
-  const folder = folders.find(f=>f.id===currentOcFolderId) || folders[0];
-  currentOcFolderId = folder.id;
-  renderOcFolderBar(currentOcFilter);
+  /* 폴더는 카테고리마다 따로라서 '전체'에서는 고를 수가 없습니다 — 단추째 감춥니다 */
+  const folderDD = document.getElementById('ocFolderDD');
+  if(folderDD) folderDD.style.display = isAll ? 'none' : '';
 
-  /* 잠긴 비밀 폴더는 목록을 그리지 않습니다 */
-  if(folderLocked(folder)){
-    const panel=document.createElement('div');
-    panel.className='gallery-locked'; panel.id='ocLockedPanel';
-    panel.innerHTML='<div class="gl-icon">🔒</div><div class="gl-text">비밀 폴더입니다.</div>'
-      + '<button type="button" class="btn-ghost">비밀번호 입력</button>';
-    panel.querySelector('button').addEventListener('click', ()=> openFolderUnlock(folder, ()=> renderOcPosts()));
-    document.querySelector('.oc-body').appendChild(panel);
-    return;
+  let list;
+  if(isAll){
+    /* 카테고리·폴더를 가리지 않고 늘어놓습니다.
+       잠긴 비밀 폴더의 글도 목록에는 나오되 아래에서 가려 그립니다. */
+    list = byNewest(state.ocPosts);
+  }else{
+    const folders = ocFoldersOf(currentOcFilter);
+    const folder = folders.find(f=>f.id===currentOcFolderId) || folders[0];
+    currentOcFolderId = folder.id;
+    renderOcFolderBar(currentOcFilter);
+
+    /* 잠긴 비밀 폴더는 목록을 그리지 않습니다 */
+    if(folderLocked(folder)){
+      const panel=document.createElement('div');
+      panel.className='gallery-locked'; panel.id='ocLockedPanel';
+      panel.innerHTML='<div class="gl-icon">🔒</div><div class="gl-text">비밀 폴더입니다.</div>'
+        + '<button type="button" class="btn-ghost">비밀번호 입력</button>';
+      panel.querySelector('button').addEventListener('click', ()=> openFolderUnlock(folder, ()=> renderOcPosts()));
+      document.querySelector('.oc-body').appendChild(panel);
+      return;
+    }
+
+    list = byNewest(state.ocPosts.filter(x=>
+      x.type===currentOcFilter && ocFolderIdOf(x)===folder.id));
   }
-
-  const list = state.ocPosts.filter(x=>
-    x.type===currentOcFilter && ocFolderIdOf(x)===folder.id);
   if(list.length===0){ grid.innerHTML='<div class="empty-note">아직 만들어진 캐릭터가 없어요.</div>'; return; }
 
   const perPage = ocPerPage();
@@ -4461,18 +4504,30 @@ function renderOcPosts(){
 
   pageItems.forEach(o=>{
     const el=document.createElement('div');
-    el.className='post-card oc-card'+(ocSelectMode?' selectable':'');
+    /* 잠긴 비밀 폴더의 글은 '전체'에서만 마주칩니다 — 카테고리 안에서는 폴더째
+       가려지고, 편집 모드에서는 folderLocked() 가 늘 false 이기 때문입니다. */
+    const lockedFolder = ocLockedFolderOf(o);
+    el.className='post-card oc-card'+(ocSelectMode?' selectable':'')+(lockedFolder?' locked':'');
     el.dataset.id = o.id;
     const checked = ocSelectedIds.has(o.id);
-    /* PAIR 카드와 같은 모양이되 분류 줄(AI CHAT/DREAM)은 빼고 제목만 둡니다 */
+    /* PAIR 카드와 같은 모양이되 분류 줄(AI CHAT/DREAM)은 빼고 제목만 둡니다.
+       잠긴 글은 제목·캐치프레이즈를 빈 줄로 두고 그 위에 자물쇠를 겹칩니다 —
+       줄을 지워버리면 그 칸만 높이가 달라져 격자가 어긋납니다. */
     el.innerHTML = `${ocSelectMode?`<div class="post-check ${checked?'checked':''}">${checked?'✓':''}</div>`:''}
       <div class="post-thumb"></div>
-      <div class="post-info"><div class="post-title">${escapeHtml(o.title)}</div>
-        <div class="oc-catch">${escapeHtml(o.subtitle||'')}</div></div>`;
+      ${lockedFolder
+        ? `<div class="post-info oc-lock-info"><div class="post-title">&nbsp;</div>
+             <div class="oc-catch">&nbsp;</div><span class="oc-lock-mark">LOCKED</span></div>`
+        : `<div class="post-info"><div class="post-title">${escapeHtml(o.title)}</div>
+             <div class="oc-catch">${escapeHtml(o.subtitle||'')}</div></div>`}`;
     el.addEventListener('click', ()=>{
       if(ocSelectMode){
         if(ocSelectedIds.has(o.id)) ocSelectedIds.delete(o.id); else ocSelectedIds.add(o.id);
         renderOcPosts();
+      }else if(lockedFolder){
+        /* 폴더를 직접 열 때와 같은 창입니다. 열어둔 기록(unlockedFolders)은
+           사이트 전체가 함께 쓰므로, 여기서 풀면 그 폴더도 함께 풀립니다. */
+        openFolderUnlock(lockedFolder, ()=>{ renderOcPosts(); openOcDetail(o.id); });
       }else{
         openOcDetail(o.id);
       }
@@ -5303,7 +5358,14 @@ function initOcDetail(){
 /* ---- OC 목록 버튼 ---- */
 bindOnce(document.getElementById('ocWriteBtn'), async ()=>{
   if(!isLoggedIn) return;
-  const post = migrateOcPost({ id:Date.now(), folderId:currentOcFolderId, type:newPostType(OC_CAT_NAV) });
+  /* 카테고리 안에서 쓰면 지금 보고 있는 폴더에, '전체'에서 쓰면 잠금 여부와
+     상관없이 맨 앞 카테고리의 맨 앞 폴더에 넣습니다 — '전체'에서는 폴더를
+     고르는 단추 자체가 없으므로 남아 있던 폴더 id 를 쓰면 안 됩니다. */
+  const type = newPostType(OC_CAT_NAV);
+  const folders = ocFoldersOf(type);
+  const folderId = (currentOcFilter !== 'all' && folders.some(f=>f.id===currentOcFolderId))
+    ? currentOcFolderId : folders[0].id;
+  const post = migrateOcPost({ id:Date.now(), folderId, type });
   state.ocPosts.unshift(post);     // 새 글은 맨 앞에
   await saveOc();
   ocPage = 1;
@@ -5940,9 +6002,13 @@ function renderArchive(){
   if(selDelBtn) selDelBtn.style.display = arcSelectMode ? 'inline-flex' : 'none';
 
   // PROMPT 는 4열 x 2행 = 8개, 모바일은 2열 x 2행 = 4개,
-  // OOC/ETC 는 데스크톱 15줄 / 모바일 10줄
-  // (여기 숫자는 CSS .arc-nai-grid 의 열 x 행과 반드시 같아야 합니다)
-  const perPage = isGallery ? (isMobileWidth() ? 4 : 8) : (isMobileWidth() ? 10 : 15);
+  // OOC/ETC 는 데스크톱 15줄(읽을 때는 14줄) / 모바일 10줄
+  // (PROMPT 의 숫자는 CSS .arc-nai-grid 의 열 x 행과 반드시 같아야 합니다.
+  //  OOC/ETC 는 표라서 줄 수만 맞추면 됩니다 — 읽을 때 한 줄을 덜 두는 것은
+  //  그 아래 검색 줄이 보기 모드에만 있기 때문입니다.)
+  const perPage = isGallery
+    ? (isMobileWidth() ? 4 : 8)
+    : (isMobileWidth() ? 10 : (isLoggedIn ? 15 : 14));
 
   /* 세부 카테고리(OOC·PROMPT·ETC) 안에서 폴더로 한 번 더 걸러 보여줍니다.
      폴더 고르기는 목록 위 탭이 아니라 상단바 드롭다운입니다. */

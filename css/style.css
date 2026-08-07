@@ -375,6 +375,23 @@
   /* 제목 아래 캐치프레이즈 한 줄 */
   .oc-catch{font-size:10.5px;color:var(--text-muted);margin-top:2px;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  /* ---- '전체'에서 만나는 잠긴 비밀 폴더의 글 ----
+     사진만 흐리게, 제목·캐치프레이즈 자리에는 LOCKED 만 겹쳐 놓습니다.
+     두 줄은 지우지 않고 빈 채로 남겨야(&nbsp;) 칸 높이가 다른 카드와 같습니다.
+     마우스를 올렸을 때 커지는 효과는 여기서는 끕니다 — 확대되면 흐림 너머로
+     원래 그림이 짐작되고, 무엇보다 '열 수 있다'는 오해를 줍니다. */
+  .post-card.locked .post-thumb{filter:blur(10px);transform:scale(1.14);}
+  @media (hover:hover){
+    .post-card.locked:hover .post-thumb{transform:scale(1.14);}
+  }
+  /* 흐린 사진을 1.14 배로 키우는 것은 흐림이 만드는 흐릿한 가장자리를 칸 밖으로
+     밀어내기 위한 것입니다. 그런데 아래쪽으로 밀려난 부분이 제목 칸까지 덮습니다
+     (제목 칸에는 원래 바탕색이 없습니다). 제목 칸에 바탕을 깔고 위로 올려
+     블러가 사진 영역에만 보이게 막습니다. */
+  .oc-lock-info{position:relative;z-index:1;background:var(--bg);}
+  .oc-lock-mark{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.12em;
+    color:var(--text-muted);}
 
   /* ---- OC 상세 ----
      인덱스 탭이 없고 프로필/갤러리/로그 세 장이 위아래로 넘어갑니다. */
@@ -679,7 +696,12 @@
   #view-archive.active{display:flex;flex-direction:column;min-height:0;}
   /* 아래 여백은 페이지 버튼과 검색창 사이 간격이 됩니다(20px→10px).
      줄어든 10px 은 flex:1 인 격자/표가 그대로 가져가므로 썸네일이 그만큼 높아집니다. */
-  .archive-body{padding:20px 28px 10px;display:flex;flex-direction:column;gap:14px;flex:1;min-height:0;}
+  /* 아래 여백이 4px 인 것은 눈대중이 아닙니다 — 보기 모드의 14줄짜리 표가 딱
+     6px 넘쳐서 목록 칸에만 스크롤 막대가 생겼습니다(표 472 / 칸 466).
+     10px 이던 것을 4px 로 줄여 그 6px 을 목록 칸에 돌려주면 표가 정확히
+     들어맞고, 페이지 버튼은 그만큼 아래로 내려갑니다. PROMPT 의 격자도 같은
+     flex:1 이라 함께 6px 커지므로 세 카테고리의 버튼 높이가 그대로 같습니다. */
+  .archive-body{padding:20px 28px 4px;display:flex;flex-direction:column;gap:14px;flex:1;min-height:0;}
   /* OOC/ETC 표는 길어지면 표 영역만 스크롤 (페이지 버튼은 아래에 고정) */
   .archive-table-scroll{flex:1;min-height:0;overflow-y:auto;}
   .arc-item{border:1px solid var(--border);border-radius:var(--radius);padding:14px;position:relative;background:var(--bg);}
@@ -1046,7 +1068,12 @@
   .arc-kebab-menu.open{display:flex;}
   .arc-kebab-menu button{border:none;background:var(--bg);padding:9px 6px;text-align:center;font-size:11.5px;font-family:var(--mono);color:var(--text);}
   .arc-kebab-menu button:hover{background:var(--surface-2);}
-  .arc-pin-tag{color:var(--accent);}
+  /* 고정 표시 — 그림글자(📌)는 제 글자 크기보다 훨씬 큰 줄 상자를 차지해서,
+     제목 줄에 그냥 얹으면 그 줄만 세로로 늘어납니다. 크기를 줄이고 줄 상자를
+     글자 크기에 붙여(line-height:1) 표 줄 높이가 달라지지 않게 합니다.
+     inline-block 이라 이 상자 밖으로는 영향을 주지 않습니다. */
+  .arc-pin-tag{color:var(--accent);display:inline-block;font-size:9px;line-height:1;
+    vertical-align:middle;}
   .rt-toolbar[data-editonly]{display:none;}
   body.logged-in .rt-toolbar[data-editonly]{display:flex;}
   /* padding:0 + flex 가운데 정렬이 필요합니다 — 브라우저 기본 버튼 여백(좌우 6px)이
