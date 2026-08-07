@@ -16,6 +16,16 @@
     src:url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_one@1.0/Chosunilbo_myungjo.woff') format('woff');
     font-weight:normal;font-style:normal;font-display:swap;
   }
+  /* 프로필 이름 전용 서체 — 프리젠테이션(Freesentation) ExtraBold(800).
+     KoPub 돋움은 굵기가 보통(400)과 굵게(700) 두 벌뿐이라 더 두껍게 할 방법이
+     없습니다. 700 위에 획을 덧그려(-webkit-text-stroke) 흉내낼 수는 있지만
+     17px 안팎의 한글에서는 획 사이가 메워져 뭉개집니다. 그래서 굵은 벌이 실제로
+     있는 서체를 이름 칸에만 따로 받습니다. */
+  @font-face{
+    font-family:'Freesentation';
+    src:url('https://cdn.jsdelivr.net/gh/fonts-archive/Freesentation/Freesentation-8ExtraBold.woff2') format('woff2');
+    font-weight:800;font-style:normal;font-display:swap;
+  }
   :root{
     --bg:#f4f1ea;--surface:#ece7d9;--surface-2:#e2dbc8;--border:#1a1a1a;
     --text:#1a1a1a;--text-muted:#6b675e;--accent:#c1440e;--accent-soft:#f4dcce;
@@ -26,6 +36,8 @@
        (변수 이름 --pixel 은 예전에 픽셀 서체를 쓰던 흔적이라 그대로 둡니다 —
         쓰는 곳이 많아 이름만 바꾸면 놓치는 자리가 생깁니다.) */
     --pixel:'ChosunilboMyungjo',serif;
+    /* OC·PAIR 프로필 이름에만 쓰는 서체 (위 @font-face 설명 참고) */
+    --name-font:'Freesentation',sans-serif;
     /* 종이 질감의 세기. 0 이면 안 보이고 1 이 가장 진합니다. */
     --grain:1;
     /* 크게보기에서 확대/축소가 움직이는 시간. 사진·썸네일 줄·줄 간격이
@@ -442,6 +454,17 @@
   .side-page[data-sidepage="timeline"] .timeline-list{flex:1;min-height:0;overflow-y:auto;
     overscroll-behavior:contain;padding-bottom:26px;scrollbar-width:none;}
   .side-page[data-sidepage="timeline"] .timeline-list::-webkit-scrollbar{width:0;}
+  /* 메모 장 — 제목·테두리·바탕 없이 글자만 놓습니다. 글이 길어지면 이 안에서만
+     스크롤되고, 아래 26px 은 점이 앉을 자리라 비웁니다. */
+  /* 좁은 칸(PAIR 244px)에 한 줄로 들어가야 해서 밑줄·취소선은 빼두었습니다.
+     남은 것으로 8×24 + 구분선 9 + 사이 여백 32 = 233px 입니다. */
+  .rt-toolbar-memo{flex:none;margin-bottom:8px;flex-wrap:nowrap;}
+  .side-memo-box{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+    padding-bottom:26px;scrollbar-width:none;}
+  .side-memo-box::-webkit-scrollbar{width:0;}
+  .side-memo{min-height:100%;font-size:11.5px;line-height:1.6;color:var(--text);outline:none;}
+  body.logged-in .side-memo:empty:before{content:'메모를 적어보세요...';color:var(--text-muted);}
+  .side-memo img{max-width:100%;display:block;margin:8px 0;}
   .side-dots{position:absolute;left:0;right:0;bottom:0;height:26px;z-index:5;
     display:flex;align-items:center;justify-content:center;gap:6px;pointer-events:none;}
   .side-dot{width:5px;height:5px;border-radius:50%;pointer-events:auto;cursor:pointer;
@@ -824,13 +847,31 @@
   .pd-profile-info .pd-meta-row{margin-bottom:2px;}
   .pd-profile-info .pd-name-input,
   body.logged-in .pd-profile-info .pd-name-input{padding-bottom:0;}
+  /* PAIR 쪽만 차례가 [소개] [이름] [키워드 칩] 입니다 (OC 는 [이름] [소개] 그대로).
+     소개가 위로 올라갔으니 붙여야 할 여백도 반대편으로 옮깁니다 — 이름 칸의
+     위 안쪽 여백을 걷어내고, 아래는 칩 줄이 자기 여백을 갖게 둡니다. */
+  .pd-info-col .pd-profile-info .pd-sub-input{font-size:9.5px;margin-bottom:2px;}
+  .pd-info-col .pd-profile-info .pd-name-input,
+  body.logged-in .pd-info-col .pd-profile-info .pd-name-input{padding-top:0;padding-bottom:4px;}
+  .pd-info-col .pd-profile-info .pd-meta-row{margin-bottom:0;}
+  /* 칩은 줄어든 소개 글씨와 같은 크기입니다. 칸이 좁아 세 개가 한 줄에 다
+     안 들어가면 다음 줄로 접힙니다. */
+  .pd-info-col .pd-kw-row{gap:4px;margin-bottom:0;}
+  .pd-info-col .kw-chip{font-size:9.5px;padding:3px 7px;}
+  /* 비어 있는 칩은 읽을 때 색 조각만 남아 보이므로 감춥니다
+     (고칠 때는 '키워드' 안내 글자가 들어가 있어 그대로 보입니다) */
+  body:not(.logged-in) .kw-chip:has(.kw-text:empty){display:none;}
   /* display:block 이어야 합니다 — input 은 기본이 inline-block 이라
      블록 흐름에 놓이면 줄 상자의 여유 높이가 위에 4px 쯤 더 붙습니다. */
+  /* 왼쪽 1px 은 이름 칸과 시작선을 맞추기 위한 것입니다 — 이름 칸은 input 이라
+     .pd-input 의 투명 테두리 1px 을 두르고 있어 글자가 그만큼 안쪽에서 시작합니다.
+     이 칸은 테두리가 없어 딱 1px 왼쪽으로 튀어나와 보였습니다. 이걸 맞추고 나면
+     남는 차이는 서체마다 다른 글자 여백뿐인데, 재보니 0.4px 안쪽입니다. */
   .pd-sub-input{display:block;width:100%;border:none;outline:none;background:transparent;
-    padding:0;margin:0;font-family:var(--mono);font-size:10.5px;color:var(--text-muted);}
+    padding:0 0 0 1px;margin:0;font-family:var(--mono);font-size:10.5px;color:var(--text-muted);}
   .pd-input{border:1px solid transparent;border-radius:0;padding:4px 0;font-size:12.5px;background:transparent;outline:none;color:var(--text);}
   body.logged-in .pd-input{border-color:var(--border);background:var(--surface);padding:4px 6px;}
-  .pd-name-input{font-family:var(--mono);font-weight:700;font-size:16.7px;width:150px;}
+  .pd-name-input{font-family:var(--name-font);font-weight:800;font-size:16.7px;width:150px;}
   .pd-kw-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
   .kw-chip{display:inline-flex;align-items:center;gap:4px;border-radius:0;padding:4px 10px;font-family:var(--mono);font-size:10px;font-weight:700;}
   .kw-text{outline:none;min-width:14px;}
@@ -857,7 +898,8 @@
   .log-editor > div:not([class]):first-child{margin-top:0;}
   /* OC 자유 텍스트에도 인용구 버튼이 있습니다 — 여기에도 같은 모양을 줘야
      왼쪽 세로 막대가 보입니다(전에는 규칙이 없어 평범한 글처럼 보였습니다). */
-  .oc-free blockquote{border-left:3px solid var(--accent);margin:8px 0;padding:4px 12px;color:var(--text);}
+  .oc-free blockquote,
+  .side-memo blockquote{border-left:3px solid var(--accent);margin:8px 0;padding:4px 12px;color:var(--text);}
 
   /* ---- 마크다운으로 만들어지는 줄 서식 ----
      > 인용문 · # 글머리 · | 표. 본문에 섞여 있어도 튀지 않게 크기를 낮게 잡습니다
@@ -1674,6 +1716,9 @@
     /* 글자가 커진 만큼 가운데 맞춤 보정도 같은 비율로 키웁니다 (11px→2.5, 14px→3.2) */
     .rt-toolbar button{width:38px;height:38px;font-size:14px;padding-top:3.2px;}
     .rt-toolbar button:has(.rt-ico){padding-top:0;}
+    /* 메모 툴바는 PC 에서만 한 줄입니다 — 손가락 크기(38px)로 커지면 어차피
+       한 줄에 못 들어가고, nowrap 인 채로 두면 칸 밖으로 삐져나갑니다. */
+    .rt-toolbar-memo{flex-wrap:wrap;}
     .rt-color{width:38px;height:38px;}
     .rt-colorbar .rt-colorcell{min-width:52px;}
     .rt-colorbar .rt-colorcell input[type=color]{height:18px;}

@@ -296,6 +296,7 @@ function migrateOcPost(o){
   migrateThemeSongs(o);
   if(!Array.isArray(o.keywords) || o.keywords.length !== 3) o.keywords = ['','',''];
   if(o.freeText == null) o.freeText = '';
+  if(o.memo == null) o.memo = '';   // 오른쪽 넘김 칸의 메모 장
   /* 사이드바 세부 카테고리 — 실제로 존재하는 카테고리로 맞추는 일은
      loadState() 가 카테고리 목록을 다 읽은 뒤에 한 번에 합니다(아래 참고). */
   if(o.type == null) o.type = '';
@@ -349,10 +350,14 @@ function migratePost(old){
     old.persona.image = normalizeImg(old.persona.image);
     old.char.keywords = old.char.keywords && old.char.keywords.length===3 ? old.char.keywords : defaultKw();
     old.persona.keywords = old.persona.keywords && old.persona.keywords.length===3 ? old.persona.keywords : defaultKw();
+    [old.char, old.persona].forEach(side=>{
+      side.keywords.forEach(kw=>{ if(kw.color===KW_COLOR_LEGACY) kw.color=KW_COLOR_DEFAULT; });
+    });
     if(old.relLabelCharToPersona===undefined) old.relLabelCharToPersona='Relationship';
     if(old.relLabelPersonaToChar===undefined) old.relLabelPersonaToChar='Relationship';
     if(old.char.subtitle == null) old.char.subtitle = '';
     if(old.persona.subtitle == null) old.persona.subtitle = '';
+    if(old.memo == null) old.memo = '';   // 가운데 넘김 칸의 메모 장
     old.sideImage = normalizeImg(old.sideImage);
     migrateThemeSongs(old);
     migrateMessages(old);
@@ -368,7 +373,7 @@ function migratePost(old){
     char:{ name:'', subtitle:'', gender:'', age:'', height:'', keywords:defaultKw(), intro: old.charProfile||'', metaHtml:'', image: normalizeImg(old.charImg) },
     persona:{ name:'', subtitle:'', gender:'', age:'', height:'', keywords:defaultKw(), intro: old.personaProfile||'', metaHtml:'', image: normalizeImg(old.personaImg) },
     relCharToPersona:'', relPersonaToChar:'',
-    relLabelCharToPersona:'', relLabelPersonaToChar:'',
+    relLabelCharToPersona:'', relLabelPersonaToChar:'', memo:'',
     log: old.log||[], gallery: old.gallery||[], timeline: old.timeline||[]
   };
   splitLegacyIntro(migrated.char);
@@ -445,8 +450,14 @@ function migrateGalleryFolders(p){
     }
   });
 }
+/* 키워드 칩의 기본 색 — 사이트 바탕과 같은 계열의 주황입니다.
+   KW_COLOR_LEGACY 는 칩이 화면에 나오기 전에 쓰이던 파랑입니다. 그때는 아무도
+   고를 수 없던 색이라 남아 있는 것은 전부 '고르지 않은 기본값'입니다 —
+   그것만 새 기본색으로 바꿉니다(직접 고른 색은 건드리지 않습니다). */
+const KW_COLOR_DEFAULT = '#c1440e';
+const KW_COLOR_LEGACY  = '#4b4bff';
 /* 예시 글자는 값이 아니라 자리 표시로 둡니다 — 지우고 다시 쓸 필요가 없게 */
-function defaultKw(){ return [{text:'',color:'#4b4bff'},{text:'',color:'#4b4bff'},{text:'',color:'#4b4bff'}]; }
+function defaultKw(){ return [0,0,0].map(()=>({ text:'', color:KW_COLOR_DEFAULT })); }
 function migrateArchiveItem(item){
   if(item.title!==undefined && item.date!==undefined && item.kind===undefined){
     if(!item.category) item.category='ooc';
@@ -1686,6 +1697,8 @@ function fillPairDetail(p){
   bindMeta('pdCharSub','subtitle',p.char);
   bindMeta('pdPersonaName','name',p.persona);
   bindMeta('pdPersonaSub','subtitle',p.persona);
+  renderKeywords('pdCharKwRow', p.char);
+  renderKeywords('pdPersonaKwRow', p.persona);
 
   bindMetaContainer('pdCharMeta', p.char);
   bindBodyText('pdCharIntro', p.char);
@@ -1706,6 +1719,7 @@ function fillPairDetail(p){
   PAIR_THEME_HOST.idx = 0;
   renderThemeSongs(PAIR_THEME_HOST);
   renderMessages(p);
+  fillMemoBox('pdMemo', p, 'memo', savePair);
   if(pdSidePager) pdSidePager.set(0, false);
 
   bindRichTextToolbars();
@@ -1833,6 +1847,7 @@ function bindRichTextToolbars(){
     if(tb.classList.contains('rt-toolbar-arc')) return;
     if(tb.classList.contains('rt-toolbar-log')) return;
     if(tb.classList.contains('rt-toolbar-ocfree')) return;
+    if(tb.classList.contains('rt-toolbar-memo')) return;   // 메모 칸은 bindFreeToolbar 가 맡습니다
     const targetEl = document.getElementById(tb.dataset.target); // 본문 영역 (B/I/색상 적용 대상)
     const metaEl = document.getElementById(tb.dataset.metaTarget); // 라벨 컨테이너 (+ 버튼 대상)
     // 본문 없이 라벨만 다루는 툴바(OC)도 있으므로 각각 따로 겁니다
@@ -2120,7 +2135,7 @@ function fenceLineBoundary(root, point, after){
   return localLineBoundary(el, point.container, after ? 1 : -1);
 }
 
-function makeCodeBlock(code){
+function makeCodeBlock(code, fontSize){
   const box = document.createElement('div');
   box.className = 'code-block';
   box.setAttribute('contenteditable','false');
@@ -2129,8 +2144,25 @@ function makeCodeBlock(code){
   const pre = document.createElement('pre');
   pre.className = 'code-block-body';
   pre.textContent = code.replace(NBSP_RE,' ').replace(/^\n+|\n+$/g,'');
+  if(fontSize) pre.style.fontSize = fontSize;
   box.appendChild(btn); box.appendChild(pre);
   return box;
+}
+
+/* 코드 상자는 글자만 담습니다 — 안에 든 서식은 코드로 보여야 하니까요. 그래서
+   ˄ ˅ 로 줄여둔 글자 크기도 그릴 때 함께 사라집니다. 크기만은 챙겨서 상자에
+   옮겨 답니다. 지울 구간 안에 걸린 크기를 먼저 보고, 없으면 구간 전체를 감싸고
+   있는 바깥쪽(잘라낸 조각에는 안 들어오는 자리)을 글 칸까지 거슬러 봅니다. */
+function fenceFontSize(root, range, point){
+  const frag = range.cloneContents();
+  const inner = frag.querySelector('[style*="font-size"]');
+  if(inner && inner.style.fontSize) return inner.style.fontSize;
+  let node = point.container.nodeType === 3 ? point.container.parentNode : point.container;
+  while(node && node !== root && node.nodeType === 1){
+    if(node.style && node.style.fontSize) return node.style.fontSize;
+    node = node.parentNode;
+  }
+  return '';
 }
 
 /* ``` 로 감싼 구간을 코드 블록으로 바꿉니다.
@@ -2189,8 +2221,9 @@ function applyCodeFences(root){
       const range = document.createRange();
       range.setStart(startPoint.container, startPoint.offset);
       range.setEnd(endPoint.container, endPoint.offset);
+      const size = fenceFontSize(root, range, openPoint);
       range.deleteContents();
-      range.insertNode(makeCodeBlock(code));
+      range.insertNode(makeCodeBlock(code, size));
       claimedFrom = delStart;
     }catch(e){ /* 예상 밖의 DOM 모양이면 이 블록은 건드리지 않고 넘어갑니다 */ }
   }
@@ -2479,6 +2512,12 @@ function initFoldEnter(editorId){
     const range = sel.getRangeAt(0);
     const startEl = range.startContainer.nodeType===1 ? range.startContainer : range.startContainer.parentElement;
 
+    /* 인용구 안이면 인용구 쪽 처리에 맡깁니다 — 접기 안에 인용구가 들어 있으면
+       두 처리가 같은 엔터를 함께 받아버립니다(preventDefault 는 다른 리스너를
+       막지 못합니다). 안쪽인 인용구가 임자입니다. */
+    const inQuote = startEl && startEl.closest('blockquote');
+    if(inQuote && editor.contains(inQuote)) return;
+
     const title = startEl && startEl.closest('.fold-title');
     if(title && editor.contains(title)){
       e.preventDefault();
@@ -2529,6 +2568,73 @@ function insertBlockquote(editorId){
   r.collapse(collapsed);
   sel.removeAllRanges();
   sel.addRange(r);
+}
+
+/* 인용구를 풀어 평범한 글로 되돌립니다 (안에 있던 내용은 그대로 둡니다) */
+function unwrapBlockquote(bq, sel){
+  const parent = bq.parentNode;
+  if(!parent) return;
+  const frag = document.createDocumentFragment();
+  while(bq.firstChild) frag.appendChild(bq.firstChild);
+  if(!frag.childNodes.length) frag.appendChild(document.createElement('br'));
+  const first = frag.firstChild;
+  parent.insertBefore(frag, bq);
+  bq.remove();
+  const r = document.createRange();
+  r.setStartBefore(first);
+  r.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(r);
+}
+
+/* 인용구 안에서의 키 — 인용구 단추가 있는 편집기가 모두 함께 씁니다.
+   · 엔터 : 브라우저 기본 동작은 인용구를 하나 더 만들어버립니다. 커서 뒤에
+            남은 내용(있다면)은 새 문단으로 옮기고 그 문단으로 나가서, 인용구는
+            하나만 남고 이어서 평범하게 씁니다. Shift+엔터는 그대로 둬서
+            인용구 안에서 줄바꿈하는 기본 동작(<br> 삽입)이 계속 됩니다.
+   · 백스페이스 : 인용구 맨 앞에서 누르면 인용구를 풉니다. 글의 맨 처음에 있는
+            인용구는 앞에 합쳐 넣을 곳이 없어 브라우저가 아무 일도 하지 않았고,
+            그래서 지울 방법이 아예 없었습니다. */
+function initBlockquoteKeys(editorId){
+  const editor = document.getElementById(editorId);
+  if(!editor) return;
+  editor.addEventListener('keydown', (e)=>{
+    if(e.shiftKey) return;
+    if(e.key !== 'Enter' && e.key !== 'Backspace') return;
+    const sel = window.getSelection();
+    if(!sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    const startEl = range.startContainer.nodeType===1 ? range.startContainer : range.startContainer.parentElement;
+    const bq = startEl && startEl.closest('blockquote');
+    if(!bq || !editor.contains(bq)) return;
+
+    if(e.key === 'Backspace'){
+      if(!range.collapsed) return;          // 골라서 지우는 것은 기본 동작 그대로
+      const head = document.createRange();
+      head.selectNodeContents(bq);
+      head.setEnd(range.startContainer, range.startOffset);
+      const before = head.cloneContents();
+      // 커서 앞에 뭔가 있으면 맨 앞이 아니므로 평범하게 한 글자 지웁니다
+      if(before.textContent.length || before.querySelector('img,hr')) return;
+      e.preventDefault();
+      unwrapBlockquote(bq, sel);
+      return;
+    }
+
+    e.preventDefault();
+    const afterRange = range.cloneRange();
+    afterRange.selectNodeContents(bq);
+    afterRange.setStart(range.endContainer, range.endOffset);
+    const rest = afterRange.extractContents();
+    const p = document.createElement('div');
+    if(rest.textContent.trim() || rest.querySelector('img,hr')) p.appendChild(rest);
+    else p.innerHTML = '<br>';
+    bq.parentNode.insertBefore(p, bq.nextSibling);
+    if(!bq.textContent.trim() && !bq.querySelector('img,hr')) bq.remove();
+    const r = document.createRange();
+    r.selectNodeContents(p); r.collapse(true);
+    sel.removeAllRanges(); sel.addRange(r);
+  });
 }
 
 /* 저장할 본문을 꺼냅니다 — 펼쳐둔 접기 블록은 접힌 상태로 되돌립니다 */
@@ -4503,6 +4609,15 @@ function makeSidePager(pagesEl, dotsEl){
       });
     }
   }
+  /* 이 칸은 overflow:hidden 이지만 그래도 '굴릴 수는' 있습니다 — 안쪽 글 칸에
+     커서가 가거나 글자를 고르면 브라우저가 그 자리를 보이게 하려고 몰래 굴립니다.
+     막대가 없어 되돌릴 방법이 없고, 한 번 굴러가면 장 전체가 어긋난 채 남으므로
+     굴러가는 즉시 제자리로 돌려놓습니다. */
+  pagesEl.addEventListener('scroll', ()=>{
+    if(pagesEl.scrollLeft) pagesEl.scrollLeft = 0;
+    if(pagesEl.scrollTop)  pagesEl.scrollTop  = 0;
+  });
+
   /* 가로 휠(트랙패드 좌우, 마우스는 Shift+휠) */
   let lock=0;
   pagesEl.addEventListener('wheel', (e)=>{
@@ -4928,39 +5043,92 @@ function stepFontSize(editorId, delta){
     sel.addRange(r);
   }
 }
-(function initOcFreeToolbar(){
-  const toolbar=document.querySelector('.rt-toolbar-ocfree');
-  const editor=document.getElementById('ocFree');
+/* 자유 글 서식 툴바 — OC 자유 텍스트 칸과 메모 칸이 함께 씁니다.
+   툴바가 세 벌(OC 자유 글, OC 메모, PAIR 메모)이라 버튼을 id 로 찾을 수 없어,
+   무슨 버튼인지는 data-rt 로 적어둡니다(B·I·U·S 는 예전처럼 data-cmd). */
+function bindFreeToolbar(toolbar, editorId, save){
+  const editor = toolbar && document.getElementById(editorId);
   if(!toolbar || !editor) return;
+  /* 어느 단추를 누르든 글 칸을 먼저 '고쳐 쓸 수 있는 상태'로 만듭니다.
+     메모 칸은 보여줄 때 ``` 을 코드 블록으로 바꿔두므로, 그 상태에서 고치면
+     저장할 원문이 아니게 됩니다(_toRaw 가 원문으로 되돌립니다).
+     이미 커서가 있으면 focus() 는 아무 일도 하지 않아 골라둔 구간이 그대로입니다. */
+  /* preventScroll 이 꼭 필요합니다 — 메모 칸은 옆으로 밀어 넘기는 칸 안에 있어서,
+     아직 화면 밖에 있는 장의 글 칸에 커서를 주면 브라우저가 그 칸을 보이게
+     하려고 바깥 상자를 몰래 굴립니다. 그 상자는 overflow:hidden 이라 굴러간
+     만큼 되돌아오지 않고 칸 전체가 어긋난 채 남습니다. */
+  const enter = ()=>{ if(editor._toRaw) editor._toRaw(); editor.focus({preventScroll:true}); };
   // 버튼을 눌러도 본문 선택이 풀리지 않도록
   toolbar.querySelectorAll('button').forEach(b=> b.addEventListener('mousedown', e=> e.preventDefault()));
   toolbar.querySelectorAll('button[data-cmd]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      editor.focus();
-      if(btn.dataset.cmd==='blockquote') insertBlockquote('ocFree');
+      enter();
+      if(btn.dataset.cmd==='blockquote') insertBlockquote(editorId);
       else document.execCommand(btn.dataset.cmd, false, null);
-      saveOcFree();
+      save();
     });
   });
-  const color=document.getElementById('ocFreeColor');
+  const color = toolbar.querySelector('.rt-color');
   if(color) color.addEventListener('input', (e)=>{
-    editor.focus();
+    enter();
     document.execCommand('foreColor', false, e.target.value);
-    saveOcFree();
+    save();
   });
-  const up=document.getElementById('ocFreeSizeUp');
-  if(up) up.addEventListener('click', ()=>{ stepFontSize('ocFree', 1); saveOcFree(); });
-  const down=document.getElementById('ocFreeSizeDown');
-  if(down) down.addEventListener('click', ()=>{ stepFontSize('ocFree', -1); saveOcFree(); });
-  const fold=document.getElementById('ocFreeFoldBtn');
-  if(fold) fold.addEventListener('click', ()=>{ insertFoldBlock('ocFree'); saveOcFree(); });
-  initFoldEnter('ocFree');
-  const divider=document.getElementById('ocFreeDividerBtn');
-  if(divider) divider.addEventListener('click', ()=>{
-    editor.focus();
-    document.execCommand('insertHTML', false, '<hr><br>');
-    saveOcFree();
-  });
+  const on = (key, fn)=>{
+    const btn = toolbar.querySelector('[data-rt="'+key+'"]');
+    if(btn) btn.addEventListener('click', ()=>{ enter(); fn(); save(); });
+  };
+  on('sizeUp',   ()=> stepFontSize(editorId, 1));
+  on('sizeDown', ()=> stepFontSize(editorId, -1));
+  on('fold',     ()=> insertFoldBlock(editorId));
+  on('divider',  ()=>{ editor.focus(); document.execCommand('insertHTML', false, '<hr><br>'); });
+  initFoldEnter(editorId);
+  initBlockquoteKeys(editorId);
+}
+
+/* ---- 메모 칸 (OC·PAIR 공용) ----
+   오른쪽(가운데) 넘김 칸의 한 장입니다. 저장은 적은 그대로 두고, 보여줄 때만
+   ``` 을 코드 블록으로 바꿉니다. 고쳐 쓸 때는 원문이 다시 보여야 하므로
+   커서가 들어오면 되돌립니다 — 되돌리는 시점이 focus 가 아니라 mousedown 인
+   것은, 커서가 놓이기 *전에* 글이 바뀌어야 누른 자리에 커서가 남기 때문입니다.
+   그래서 편집 모드에서는 코드 블록의 복사 단추를 누를 수 없습니다(누르는 순간
+   원문으로 돌아갑니다). 복사는 보기 모드에서 하는 것이라 그대로 둡니다. */
+function fillMemoBox(editorId, obj, field, persist){
+  const el = document.getElementById(editorId);
+  if(!el) return;
+  /* 지금 화면이 꾸며진 상태인지는 따로 표시해 두지 않고 화면을 직접 봅니다 —
+     표시로 두면 focus 가 안 뜨는 경우(이미 커서가 있던 칸을 다시 그릴 때)에
+     실제 화면과 어긋납니다. */
+  const isDecorated = ()=> !!el.querySelector('.code-block');
+  const showRaw = ()=>{ el.innerHTML = obj[field] || ''; };
+  const paint   = ()=>{ showRaw(); applyCodeFences(el); };
+  paint();
+  el.contentEditable = isLoggedIn ? 'true' : 'false';
+  el._toRaw = ()=>{ if(isLoggedIn && isDecorated()) showRaw(); };
+  el.onmousedown = el._toRaw;
+  el.onfocus = el._toRaw;
+  /* 저장은 언제나 이 함수로만 합니다 — 꾸며진(코드 블록이 만들어진) 화면을
+     그대로 저장하면 원문의 ``` 이 사라져 다시는 고칠 수 없게 됩니다. */
+  el._save = ()=>{
+    if(!isLoggedIn || isDecorated()) return;
+    const html = editorHtml(editorId);
+    if(obj[field] === html) return;
+    obj[field] = html;
+    persist();
+  };
+  el.onblur = ()=>{ el._save(); paint(); };
+}
+function saveMemoBox(editorId){
+  const el = document.getElementById(editorId);
+  if(el && el._save) el._save();
+}
+
+(function initFreeToolbars(){
+  bindFreeToolbar(document.querySelector('.rt-toolbar-ocfree'), 'ocFree', saveOcFree);
+  bindFreeToolbar(document.querySelector('#ocSidePages .rt-toolbar-memo'), 'ocMemo',
+    ()=> saveMemoBox('ocMemo'));
+  bindFreeToolbar(document.querySelector('#pdSidePages .rt-toolbar-memo'), 'pdMemo',
+    ()=> saveMemoBox('pdMemo'));
 })();
 
 function fillOcDetail(o){
@@ -4990,6 +5158,7 @@ function fillOcDetail(o){
   renderOcKeywords(o);
   OC_THEME_HOST.idx = 0;
   renderThemeSongs(OC_THEME_HOST);
+  fillMemoBox('ocMemo', o, 'memo', saveOc);
   if(ocSidePager) ocSidePager.set(0, false);   // 오른쪽 칸은 언제나 세로 이미지부터
 
   const free=document.getElementById('ocFree');
@@ -5070,7 +5239,7 @@ function initOcDetail(){
   const consumedByInnerScroll = (target, down)=>{
     if(!target || !target.closest) return false;
     // 좁은 화면에서는 장 자체도 스크롤됩니다 (.oc-page)
-    const box = target.closest('.oc-free-box, .log-table-scroll, .oc-page');
+    const box = target.closest('.oc-free-box, .side-memo-box, .log-table-scroll, .oc-page');
     if(!box) return false;
     if(box.scrollHeight <= box.clientHeight + 1) return false;
     const atTop = box.scrollTop <= 0;
@@ -5212,32 +5381,7 @@ document.getElementById('arcColorInput').addEventListener('input', (e)=>{
   document.execCommand('foreColor', false, e.target.value);
 });
 
-/* 인용구 안에서 엔터 — 브라우저 기본 동작은 인용구를 하나 더 만들어버립니다.
-   커서 뒤에 남은 내용(있다면)은 새 문단으로 옮기고 그 문단으로 나가서,
-   인용구는 하나만 남고 이어서 평범하게 씁니다. Shift+엔터는 그대로 둬서
-   인용구 안에서 줄바꿈하는 기본 동작(<br> 삽입)이 계속 됩니다. */
-document.getElementById('arcContentEditor').addEventListener('keydown', (e)=>{
-  if(e.key !== 'Enter' || e.shiftKey) return;
-  const sel = window.getSelection();
-  if(!sel.rangeCount) return;
-  const range = sel.getRangeAt(0);
-  const startEl = range.startContainer.nodeType===1 ? range.startContainer : range.startContainer.parentElement;
-  const bq = startEl && startEl.closest('blockquote');
-  if(!bq || !document.getElementById('arcContentEditor').contains(bq)) return;
-  e.preventDefault();
-  const afterRange = range.cloneRange();
-  afterRange.selectNodeContents(bq);
-  afterRange.setStart(range.endContainer, range.endOffset);
-  const rest = afterRange.extractContents();
-  const p = document.createElement('div');
-  if(rest.textContent.trim() || rest.querySelector('img,hr')) p.appendChild(rest);
-  else p.innerHTML = '<br>';
-  bq.parentNode.insertBefore(p, bq.nextSibling);
-  if(!bq.textContent.trim() && !bq.querySelector('img,hr')) bq.remove();
-  const r = document.createRange();
-  r.selectNodeContents(p); r.collapse(true);
-  sel.removeAllRanges(); sel.addRange(r);
-});
+initBlockquoteKeys('arcContentEditor');
 /* 구분선 삽입 (LOG 편집기와 같은 방식) */
 const arcDividerBtn = document.getElementById('arcDividerBtn');
 if(arcDividerBtn){
@@ -5806,8 +5950,12 @@ function renderArchive(){
   const folderDD = document.getElementById('arcFolderDD');
   if(folderDD) folderDD.style.display = '';
   const folders = arcFoldersOf(currentArchiveCategory);
+  /* 고른 폴더가 없으면 맨 위 폴더를 봅니다. 여기서 그 결과를 기억해두면 안 됩니다 —
+     이 화면은 데이터가 오기 전에도 한 번 그려지는데, 그때 폴더 목록은 임시로 만든
+     '기본' 한 개뿐입니다. 그 id 를 기억해버리면 진짜 목록이 온 뒤에도 그 폴더가
+     골라진 것으로 남아, 맨 위가 아닌 폴더가 늘 먼저 열렸습니다.
+     기억은 사람이 직접 고를 때(ARC_FOLDER_DD.select)만 합니다. */
   const folder = folders.find(f=>f.id===curArcFolderId()) || folders[0];
-  setCurArcFolderId(folder.id);
   let catItems = state.archive.filter(x=>
     (x.category||'ooc')===currentArchiveCategory && arcFolderIdOf(x)===folder.id);
 

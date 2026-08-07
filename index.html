@@ -11,7 +11,7 @@
      css/js를 고칠 때마다 이 숫자를 함께 올려주세요.
      올리지 않으면 브라우저가 옛 파일을 계속 써서
      새 HTML과 짝이 맞지 않아 화면이 깨질 수 있습니다. -->
-<link rel="stylesheet" href="css/style.css?v=70" />
+<link rel="stylesheet" href="css/style.css?v=73" />
 </head>
 <body>
 <div class="app-window">
@@ -234,10 +234,12 @@
                     <button class="adj-change" data-editonly>📷</button>
                   </div>
                   <div class="pd-profile-info">
+                    <!-- 소개 한 줄이 이름 위, 키워드 칩 세 개가 이름 아래입니다 -->
+                    <input class="pd-sub-input" id="pdCharSub" placeholder="소개" readonly />
                     <div class="pd-meta-row">
                       <input class="pd-input pd-name-input" id="pdCharName" placeholder="이름" readonly />
                     </div>
-                    <input class="pd-sub-input" id="pdCharSub" placeholder="소개" readonly />
+                    <div class="pd-kw-row" id="pdCharKwRow"></div>
                     <div class="pd-profile-divider"></div>
                     <div class="rt-toolbar" data-editonly data-target="pdCharIntro" data-meta-target="pdCharMeta">
                       <button type="button" class="rt-add-row" title="정보 행 추가">＋</button>
@@ -256,10 +258,11 @@
             <div class="pd-info-col pd-info-col-persona">
                 <div class="pd-profile persona-layout">
                   <div class="pd-profile-info">
+                    <input class="pd-sub-input" id="pdPersonaSub" placeholder="소개" readonly />
                     <div class="pd-meta-row">
                       <input class="pd-input pd-name-input" id="pdPersonaName" placeholder="이름" readonly />
                     </div>
-                    <input class="pd-sub-input" id="pdPersonaSub" placeholder="소개" readonly />
+                    <div class="pd-kw-row" id="pdPersonaKwRow"></div>
                     <div class="pd-profile-divider"></div>
                     <div class="rt-toolbar" data-editonly data-target="pdPersonaIntro" data-meta-target="pdPersonaMeta">
                       <button type="button" class="rt-add-row" title="정보 행 추가">＋</button>
@@ -280,7 +283,7 @@
                 </div>
             </div>
 
-            <!-- 가운데 칸은 네 장입니다 — 세로 이미지 / TIMELINE / 메시지 / 테마곡.
+            <!-- 가운데 칸은 다섯 장입니다 — 세로 이미지 / 메모 / TIMELINE / 메시지 / 테마곡.
                  옆으로 밀거나(터치·가로 휠) 아래 점을 눌러 넘깁니다. -->
             <div class="pd-info-side">
               <div class="side-pages" id="pdSidePages">
@@ -322,6 +325,23 @@
                     </div>
                     <div class="oc-theme-list"></div>
                     <div class="oc-theme-foot"></div>
+                  </div>
+                </div>
+                <!-- 메모 — 제목·테두리·바탕 없이 글자만 놓는 마지막 장입니다 -->
+                <div class="side-page" data-sidepage="memo">
+                  <div class="rt-toolbar rt-toolbar-memo" data-editonly>
+                    <button type="button" data-cmd="bold" title="볼드"><b>B</b></button>
+                    <button type="button" data-cmd="italic" title="이탤릭"><i>I</i></button>
+                    <input type="color" class="rt-color" value="#1a1a1a" title="글자색" />
+                    <span class="rt-sep"></span>
+                    <button type="button" data-rt="sizeUp" title="글자 크게"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 10.5 8 5.5l5 5"/></svg></button>
+                    <button type="button" data-rt="sizeDown" title="글자 작게"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5.5 8 10.5l5-5"/></svg></button>
+                    <button type="button" data-rt="fold" title="접기">▾</button>
+                    <button type="button" data-cmd="blockquote" title="인용구">❝</button>
+                    <button type="button" data-rt="divider" title="구분선">―</button>
+                  </div>
+                  <div class="side-memo-box">
+                    <div class="side-memo" id="pdMemo" contenteditable="false"></div>
                   </div>
                 </div>
                 <!-- 점은 칸 안쪽 아래에 겹쳐 놓습니다 -->
@@ -458,20 +478,20 @@
                 <button type="button" data-cmd="italic" title="이탤릭"><i>I</i></button>
                 <button type="button" data-cmd="underline" title="밑줄"><u>U</u></button>
                 <button type="button" data-cmd="strikeThrough" title="취소선"><s>S</s></button>
-                <input type="color" class="rt-color" id="ocFreeColor" value="#1a1a1a" title="글자색" />
+                <input type="color" class="rt-color" value="#1a1a1a" title="글자색" />
                 <span class="rt-sep"></span>
-                <button type="button" id="ocFreeSizeUp" title="글자 크게"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 10.5 8 5.5l5 5"/></svg></button>
-                <button type="button" id="ocFreeSizeDown" title="글자 작게"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5.5 8 10.5l5-5"/></svg></button>
-                <button type="button" id="ocFreeFoldBtn" title="접기">▾</button>
+                <button type="button" data-rt="sizeUp" title="글자 크게"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 10.5 8 5.5l5 5"/></svg></button>
+                <button type="button" data-rt="sizeDown" title="글자 작게"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5.5 8 10.5l5-5"/></svg></button>
+                <button type="button" data-rt="fold" title="접기">▾</button>
                 <button type="button" data-cmd="blockquote" title="인용구">❝</button>
-                <button type="button" id="ocFreeDividerBtn" title="구분선">―</button>
+                <button type="button" data-rt="divider" title="구분선">―</button>
               </div>
               <!-- 자유 텍스트 — 길어지면 이 안에서만 스크롤됩니다 -->
               <div class="oc-free-box">
                 <div class="profile-view-text oc-free" id="ocFree" contenteditable="false"></div>
               </div>
             </div>
-            <!-- 세로 이미지 ↔ 테마곡. 옆으로 밀거나 아래 점을 눌러 넘깁니다.
+            <!-- 세로 이미지 ↔ 메모 ↔ 테마곡. 옆으로 밀거나 아래 점을 눌러 넘깁니다.
                  안쪽 조각은 id 가 아니라 클래스로 찾습니다 — PAIR 쪽에도 같은
                  테마곡 칸이 있어서 같은 id 를 둘 수 없기 때문입니다. -->
             <div class="oc-info-side">
@@ -498,6 +518,23 @@
                     <div class="oc-theme-list"></div>
                     <!-- 아래 띠는 점이 앉을 자리입니다 -->
                     <div class="oc-theme-foot"></div>
+                  </div>
+                </div>
+                <!-- 메모 — 제목·테두리·바탕 없이 글자만 놓는 마지막 장입니다 -->
+                <div class="side-page" data-sidepage="memo">
+                  <div class="rt-toolbar rt-toolbar-memo" data-editonly>
+                    <button type="button" data-cmd="bold" title="볼드"><b>B</b></button>
+                    <button type="button" data-cmd="italic" title="이탤릭"><i>I</i></button>
+                    <input type="color" class="rt-color" value="#1a1a1a" title="글자색" />
+                    <span class="rt-sep"></span>
+                    <button type="button" data-rt="sizeUp" title="글자 크게"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 10.5 8 5.5l5 5"/></svg></button>
+                    <button type="button" data-rt="sizeDown" title="글자 작게"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5.5 8 10.5l5-5"/></svg></button>
+                    <button type="button" data-rt="fold" title="접기">▾</button>
+                    <button type="button" data-cmd="blockquote" title="인용구">❝</button>
+                    <button type="button" data-rt="divider" title="구분선">―</button>
+                  </div>
+                  <div class="side-memo-box">
+                    <div class="side-memo" id="ocMemo" contenteditable="false"></div>
                   </div>
                 </div>
                 <!-- 점은 칸 안쪽 아래에 겹쳐 놓습니다 (이미지 장에서는 사진 위로) -->
@@ -771,7 +808,7 @@
      맨 끝에 두어 화면 그리기를 막지 않게 합니다. -->
 <img class="paper-grain" src="img/paper-grain.jpg" alt="" aria-hidden="true" draggable="false" />
 
-<script src="js/main.js?v=70"></script>
-<script type="module" src="js/firebase-store.js?v=70"></script>
+<script src="js/main.js?v=73"></script>
+<script type="module" src="js/firebase-store.js?v=73"></script>
 </body>
 </html>

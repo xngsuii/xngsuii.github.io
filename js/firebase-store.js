@@ -22,7 +22,7 @@ import {
   getFirestore, doc, getDoc, setDoc, deleteDoc,
   collection, getDocs, writeBatch
 } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
-import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=70';
+import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=73';
 
 const app  = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -545,10 +545,34 @@ const listeners = new Set();
 let authResolved = false;
 function notify() { listeners.forEach(fn => { try { fn(isAdmin); } catch (e) { console.error(e); } }); }
 
+/* '사용자가 직접 로그아웃을 눌렀다'는 표시.
+   signOut(auth) 은 실패할 수 있고(IndexedDB 가 막혔거나 네트워크가 끊긴 경우)
+   실패해도 조용합니다. 그러면 로그인 기록이 브라우저에 그대로 남아, 새로고침을
+   하거나 토큰이 갱신될 때 '아직 로그인 중'이라는 알림이 다시 와서 저절로 편집
+   모드로 돌아갑니다 — 아무리 눌러도 로그아웃이 안 되는 것처럼 보이는 원인입니다.
+   그래서 이 표시를 브라우저에 남겨두고(새로고침해도 살아남습니다), 표시가 있는
+   동안 오는 로그인 알림은 무시하면서 조용히 다시 로그아웃을 시도합니다.
+   로그인을 다시 시도하는 순간 표시는 지웁니다. */
+const SIGNED_OUT_KEY = 'siteSignedOut';
+function markSignedOut(on) {
+  try { on ? localStorage.setItem(SIGNED_OUT_KEY, '1') : localStorage.removeItem(SIGNED_OUT_KEY); }
+  catch (e) { /* 저장이 막혀 있어도 이번 세션 안에서는 아래 로직이 그대로 돕니다 */ }
+}
+function signedOutByUser() {
+  try { return localStorage.getItem(SIGNED_OUT_KEY) === '1'; } catch (e) { return false; }
+}
+
 await setPersistence(auth, browserLocalPersistence).catch(() => {});
 onAuthStateChanged(auth, (user) => {
-  isAdmin = !!user && user.uid === ADMIN_UID;
+  const admin = !!user && user.uid === ADMIN_UID;
   authResolved = true;
+  if (admin && signedOutByUser()) {
+    isAdmin = false;
+    notify();
+    signOut(auth).catch(() => {});   // 지난번에 못 끝낸 로그아웃을 마저 합니다
+    return;
+  }
+  isAdmin = admin;
   notify();
   if (isAdmin) collectGarbage();
 });
@@ -573,6 +597,9 @@ const SiteStore = {
   },
 
   async signIn(email, password) {
+    /* 표시를 먼저 지웁니다 — 로그인 알림은 아래 await 가 끝나기 전에 오기도 해서,
+       나중에 지우면 방금 한 로그인을 위 감시가 내쫓아버립니다. */
+    markSignedOut(false);
     const cred = await signInWithEmailAndPassword(auth, email, password);
     if (cred.user.uid !== ADMIN_UID) {
       await signOut(auth);
@@ -586,6 +613,9 @@ const SiteStore = {
      flushNow() 가 영영 끝나지 않아 로그아웃 버튼이 아무 반응도 하지 않는
      것처럼 보입니다. 3초만 기다렸다가 그냥 로그아웃합니다. */
   async signOut() {
+    /* 표시부터 남깁니다 — 아래에서 무엇이 실패하든, 다음에 열었을 때 저절로
+       편집 모드로 돌아가지 않고 위 감시가 로그아웃을 마저 끝냅니다. */
+    markSignedOut(true);
     const wait = (ms) => new Promise(res => setTimeout(res, ms));
     await Promise.race([flushNow().catch(() => {}), wait(3000)]);
     /* signOut 자체도 기다려주지 않을 수 있습니다(IndexedDB·네트워크가 막힌 경우).
@@ -593,10 +623,10 @@ const SiteStore = {
        보기 모드로 되돌립니다. 서버 권한은 어차피 Firestore 규칙이 봅니다. */
     try { await Promise.race([signOut(auth), wait(4000)]); }
     catch (e) { console.error('로그아웃 처리 중 오류', e); }
-    if (isAdmin) {
-      isAdmin = false;
-      listeners.forEach(fn => { try { fn(false); } catch (e) { console.error(e); } });
-    }
+    /* isAdmin 이 이미 false 여도 알립니다 — 화면 쪽이 편집 모드에 남아 있을 수
+       있고(알림을 놓쳤거나 그리다 걸린 경우), 한 번 더 알리는 것은 해가 없습니다. */
+    isAdmin = false;
+    notify();
   },
 
   async load() { await loadAll(); },
