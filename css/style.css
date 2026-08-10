@@ -27,7 +27,15 @@
     font-weight:800;font-style:normal;font-display:swap;
   }
   :root{
-    --bg:#f4f1ea;--surface:#ece7d9;--surface-2:#e2dbc8;--border:#1a1a1a;
+    /* 창(엽서) 색. 세 가지가 한 계열이라 하나만 밝히면 단이 어긋나므로
+       늘 같은 비율로 함께 올립니다(지금은 원래 색에서 흰색 쪽으로 30%).
+       --bg 는 본문 바탕, --surface 는 사이드바·머리줄, --surface-2 는 그보다
+       한 단 진한 자리(썸네일 빈칸 등)입니다.
+       머리줄·닫기 단추처럼 반투명이 필요한 자리는 var() 를 쓸 수 없어
+       --bg 와 같은 값을 rgba 로 적어 둡니다 — 여기를 고치면 그 네 곳
+       (.topbar / .cards-topbar / .modal-close / .arc-kebab-btn / .pd-header-fade)
+       도 같이 고쳐야 합니다. */
+    --bg:#f7f5f0;--surface:#f2eee4;--surface-2:#ebe6d9;--border:#1a1a1a;
     --text:#1a1a1a;--text-muted:#6b675e;--accent:#c1440e;--accent-soft:#f4dcce;
     --page-bg:#EF3921;
     --radius:0px;--radius-sm:0px;--mono:'KoPubDotum',sans-serif;font-family:'KoPubDotum',sans-serif;
@@ -114,9 +122,21 @@
 
   /* ---------- Sidebar ---------- */
   .sidebar{width:230px;flex:none;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:20px 16px;gap:16px;overflow-y:auto;}
-  .profile-block{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;padding:4px 4px 14px;border-bottom:1px solid var(--border);}
+  /* 위아래 여백은 눈대중이 아니라 맞춘 값입니다 — 이름 위와 소개글 아래가
+     둘 다 38.75px 로 같습니다.
+       위: 사이드바 여백 20 + 여기 17.75 + 입력칸 여백 1   = 38.75
+       아래: 입력칸 아래 여백 2 + 여기 36.75              = 38.75
+     빈 자리를 소개글 칸(min-height)이 아니라 여기 여백으로 잡는 것이 중요합니다.
+     칸에 넣으면 두 줄까지는 그 안에 들어가 버려서 칸이 자라지 않습니다. */
+  .profile-block{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;padding:17.75px 4px 36.75px;border-bottom:1px solid var(--border);}
   .profile-name{font-family:var(--pixel);font-size:14px;font-weight:700;letter-spacing:.02em;border:none;background:transparent;text-align:center;width:100%;color:var(--text);outline:none;}
-  .profile-bio{font-size:11.5px;color:var(--text-muted);border:none;background:transparent;text-align:center;width:100%;resize:none;outline:none;line-height:1.5;height:44px;}
+  /* 칸 높이는 적힌 줄 수 그대로입니다(한 줄이면 한 줄 높이). 두 줄이 되는
+     순간 칸이 자라 구분선과 메뉴를 아래로 밀어냅니다. 아래 빈 자리는 위
+     .profile-block 의 padding 이 맡습니다.
+     높이는 JS(autoGrowBio)가 내용에 맞춰 넣고, min-height 는 아무것도 안
+     적혔을 때의 한 줄분입니다.
+     overflow:hidden 이 없으면 늘리는 도중 잠깐 스크롤막대가 비칩니다. */
+  .profile-bio{font-size:11.5px;color:var(--text-muted);border:none;background:transparent;text-align:center;width:100%;resize:none;outline:none;line-height:1.5;padding:2px;min-height:21.25px;height:21.25px;overflow:hidden;}
 
   .nav{display:flex;flex-direction:column;gap:2px;}
   .nav-item{display:flex;align-items:center;justify-content:space-between;padding:9px 10px;border-radius:var(--radius-sm);font-family:var(--pixel);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);background:transparent;border:none;text-align:left;width:100%;}
@@ -189,7 +209,7 @@
      보기 모드에서는 버튼이 사라져 44px 로 줄어들고 LOVE INTEREST 바는 50px 라,
      화면을 옮기거나 로그인할 때마다 제목 줄이 위아래로 튀었습니다.
      .cards-topbar 도 같은 값으로 맞춰 세 화면의 머리줄이 한 높이로 이어집니다. */
-  .topbar{position:sticky;top:0;background:rgba(244,241,234,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;z-index:20;}
+  .topbar{position:sticky;top:0;background:rgba(247,245,240,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;z-index:20;}
   .topbar h2{font-family:var(--pixel);font-size:14px;margin:0;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
   .btn-primary{background:var(--text);color:#fff;border:none;border-radius:var(--radius-sm);padding:8px 14px;font-size:12.5px;font-weight:600;}
   .btn-primary:hover{opacity:.85;}
@@ -217,7 +237,10 @@
   .home-pages-wrap.show-cards #home-intro-page{transform:translateY(-100%);}
   .home-pages-wrap.show-cards #home-cards-page{transform:translateY(0);}
 
-  .intro-card{width:100%;max-width:420px;border:1px solid var(--border);border-radius:0;padding:26px 24px 30px;text-align:center;background:var(--bg);font-family:var(--pixel);}
+  /* 바깥 테두리 없이 사진·이름·소개글만 놓습니다. 배너 사진에는 자기 테두리가
+     따로 있어서, 상자를 두르면 선이 겹쳐 보였습니다.
+     좌우 여백(24px)은 남깁니다 — 없애면 소개글이 배너보다 넓어져 폭이 어긋납니다. */
+  .intro-card{width:100%;max-width:420px;border:none;border-radius:0;padding:0 24px;text-align:center;background:var(--bg);font-family:var(--pixel);}
   .intro-banner{width:100%;aspect-ratio:3/1;border-radius:0;border:1px solid var(--border);margin-bottom:16px;}
   .intro-sitename{font-family:inherit;font-size:17px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;border:none;background:transparent;text-align:center;width:100%;outline:none;color:var(--text);}
   .intro-divider{color:var(--text-muted);font-size:12px;margin:10px 0;}
@@ -229,7 +252,7 @@
      왼쪽 패딩을 없애고 align-items:stretch 로 자식들이 바 높이를 물려받게 합니다. */
   /* 높이를 고정합니다 — 아이콘 칸을 정사각형으로 잡으려면 바 높이가 확정돼야 하고,
      .topbar(PAIR/ARCHIVE)와 같은 60px 를 써서 화면을 옮겨도 머리줄이 이어져 보입니다. */
-  .cards-topbar{position:sticky;top:0;background:rgba(244,241,234,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:0 28px 0 0;display:flex;align-items:stretch;gap:0;z-index:5;height:60px;}
+  .cards-topbar{position:sticky;top:0;background:rgba(247,245,240,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:0 28px 0 0;display:flex;align-items:stretch;gap:0;z-index:5;height:60px;}
   .to-intro-btn{width:28px;height:28px;border-radius:0;border:1px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:13px;}
   .cards-topbar h3{font-family:var(--pixel);font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin:0;flex:1;}
   .li-title{display:flex;align-items:stretch;gap:0;}
@@ -352,8 +375,11 @@
   .thumb-panning{cursor:move;}
   .thumb-panning .gt-img,.thumb-panning .an-img{cursor:move;}
   .post-info{padding:10px 12px;flex:none;}
-  .post-type{font-family:var(--mono);font-size:9.5px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.05em;}
   .post-title{font-family:var(--pixel);font-size:13px;font-weight:700;margin-top:2px;}
+  /* 제목 아래 타이틀(부제) 한 줄 — PAIR·OC 목록이 함께 씁니다.
+     한 줄을 넘기면 자르고 … 로 줄입니다(칸 높이가 달라지면 격자가 어긋납니다). */
+  .post-catch{font-size:10.5px;color:var(--text-muted);margin-top:2px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   /* 이름을 아직 안 적은 글은 목록에서 칸이 비어 보이므로, 상세 창 입력칸의
      안내 문구와 같은 말을 옅게 대신 보여줍니다(실제로 저장된 글자는 아닙니다). */
   #view-pair .post-title:empty:before{content:'새 페어';color:var(--text-muted);font-weight:500;}
@@ -368,13 +394,10 @@
 
   /* ---- OC 목록 ----
      PAIR 목록과 같은 4열 x 2행 격자 + PROMPT 방식 폴더 탭.
-     카드에는 분류 줄이 없고 제목만 들어갑니다. */
+     카드 아래에는 제목과 타이틀(부제) 두 줄이 들어갑니다 — PAIR 목록도 같습니다. */
   #view-oc.active{display:flex;flex-direction:column;min-height:0;}
   #view-oc .topbar{flex:none;}
   .oc-body{padding:20px 28px 10px;display:flex;flex-direction:column;gap:14px;flex:1;min-height:0;position:relative;}
-  /* 제목 아래 캐치프레이즈 한 줄 */
-  .oc-catch{font-size:10.5px;color:var(--text-muted);margin-top:2px;
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   /* ---- '전체'에서 만나는 잠긴 비밀 폴더의 글 ----
      사진만 흐리게, 제목·캐치프레이즈 자리에는 LOCKED 만 겹쳐 놓습니다.
      두 줄은 지우지 않고 빈 채로 남겨야(&nbsp;) 칸 높이가 다른 카드와 같습니다.
@@ -737,10 +760,10 @@
      바뀝니다. 보기 창은 예전처럼 .modal 기본값(창 전체 스크롤)을 그대로 씁니다. */
   #modalArcWrite .modal.wide.arc-modal{display:flex;flex-direction:column;}
   .modal h3{margin:0 0 16px;font-family:var(--mono);font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
-  .modal-close{position:absolute;top:14px;right:14px;background:rgba(244,241,234,.9);border:1px solid var(--border);width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text);z-index:10;}
+  .modal-close{position:absolute;top:14px;right:14px;background:rgba(247,245,240,.9);border:1px solid var(--border);width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text);z-index:10;}
   .modal.pd-modal{padding:0;}
   .pd-header-banner{width:100%;aspect-ratio:3.25/1;border-radius:0;margin:0;}
-  .pd-header-fade{height:56px;margin-top:-56px;position:relative;z-index:2;background:linear-gradient(to bottom, rgba(244,241,234,0), var(--bg));pointer-events:none;}
+  .pd-header-fade{height:56px;margin-top:-56px;position:relative;z-index:2;background:linear-gradient(to bottom, rgba(247,245,240,0), var(--bg));pointer-events:none;}
   .pd-modal-body{padding:0 28px 8px;}
   .form-row{margin-bottom:12px;}
   .form-row label{display:block;font-size:11.5px;font-weight:700;color:var(--text-muted);margin-bottom:5px;}
@@ -1060,7 +1083,7 @@
   .arc-view-head h3{margin:0;}
   /* LOG 게시글 보기: 제목과 게시일 간격을 ARCHIVE 와 동일하게(2px) */
   #modalLogView h3{margin:0 0 2px;padding-right:36px;}
-  .arc-kebab-btn{position:absolute;top:14px;right:48px;background:rgba(244,241,234,.9);border:1px solid var(--border);width:26px;height:26px;display:none;align-items:center;justify-content:center;font-size:15px;color:var(--text);z-index:10;}
+  .arc-kebab-btn{position:absolute;top:14px;right:48px;background:rgba(247,245,240,.9);border:1px solid var(--border);width:26px;height:26px;display:none;align-items:center;justify-content:center;font-size:15px;color:var(--text);z-index:10;}
   body.logged-in .arc-kebab-btn{display:flex;}
   /* 항목 앞 기호를 없앤 만큼 폭도 줄였습니다 (120 -> 60px).
      항목이 모두 두 글자라 60px 안에 넉넉히 들어갑니다. */
@@ -1527,7 +1550,7 @@
 
     /* ---------- Home ---------- */
     #home-intro-page{padding:20px 16px 56px;}
-    .intro-card{padding:20px 16px 24px;}
+    .intro-card{padding:0 16px;}
     .intro-sitename{font-size:16px;}
     .home-intro{font-size:14px;line-height:1.8;}
     /* 휠이 없으므로 페이지 전환 화살표를 실제로 보여줍니다 */
@@ -1789,7 +1812,9 @@
     .form-row textarea,.form-row select,
     .log-editor,.arc-editor,#arcCodeInput,
     .profile-name,.pd-input{font-size:13px;}
-    .profile-bio{font-size:12px;height:46px;}
+    /* 높이는 JS 가 내용에 맞춰 넣으므로 여기서는 한 줄분 바닥값만 올립니다
+       (12px x 1.5 + 위아래 여백 4 = 22) */
+    .profile-bio{font-size:12px;min-height:22px;}
     .form-row input[type=text],.form-row input[type=password],
     .form-row input[type=email],.form-row select{padding:9px 10px;}
     .profile-view-text,.arc-view-content{font-size:12.5px;line-height:1.55;}

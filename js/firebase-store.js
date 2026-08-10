@@ -22,7 +22,7 @@ import {
   getFirestore, doc, getDoc, setDoc, deleteDoc,
   collection, getDocs, writeBatch
 } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
-import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=79';
+import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=80';
 
 const app  = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -55,6 +55,12 @@ const CHUNK_CHARS = 700000;
    ------------------------------------------------------------ */
 let cache = {};            // key -> 화면에 넘길 값 (사진 자리에는 blob:// 참조가 그대로 들어 있음)
 let savedJson = {};         // "key/docId" -> 마지막으로 저장한 JSON (변경 감지용)
+/* "key/docId" -> 마지막으로 저장한 순서(__order).
+   순서는 위 JSON 에 들어 있지 않습니다(stripMeta 가 빼고 저장합니다). 그래서
+   순서만 바꾸면 모든 항목의 JSON 이 그대로라 "바뀐 게 없다"고 보고 아무것도
+   쓰지 않았고, 새로고침하면 예전 순서로 돌아왔습니다. 순서를 따로 기억해
+   내용과 함께 견줍니다. */
+let savedOrder = {};
 let blobCache = new Map();  // blobId -> data URL (도착한 것부터 채워집니다)
 let knownBlobIds = new Set();
 let loaded = false;
@@ -344,7 +350,14 @@ async function loadAll() {
     const items = listSnaps[n].docs
       .map(d => ({ ...d.data(), __docId: d.id }))
       .sort((a, b) => (a.__order ?? 0) - (b.__order ?? 0));
-    items.forEach(it => { savedJson[`${key}/${it.__docId}`] = JSON.stringify(stripMeta(it)); });
+    items.forEach((it, i) => {
+      savedJson[`${key}/${it.__docId}`] = JSON.stringify(stripMeta(it));
+      /* 서버에 적힌 순서가 아니라 정렬한 뒤의 자리(i)를 기억합니다 — 저장할 때
+         넣는 값도 배열에서의 자리라 같은 기준이어야 합니다. 예전에 저장돼
+         __order 가 아예 없는 문서는 위 정렬에서 전부 0 으로 몰려 자리만
+         남으므로, 다음 저장 때 제 번호를 받아 갑니다. */
+      savedOrder[`${key}/${it.__docId}`] = i;
+    });
     raw[key] = items.map(stripMeta);
   });
 
@@ -425,6 +438,7 @@ async function flush() {
      먼저 갱신해버리면, 쓰기가 실패했을 때 다음번에
      "바뀐 게 없다"고 판단해 변경분을 영영 잃게 됩니다. */
   const nextSaved = {};
+  const nextOrder = {};
   const dropSaved = [];
 
   for (const key of keys) {
@@ -451,9 +465,12 @@ async function flush() {
       seen.add(docId);
       const stored = await deflate(item, pending);
       const json = JSON.stringify(stored);
-      if (savedJson[`${key}/${docId}`] !== json) {
+      const sk = `${key}/${docId}`;
+      // 내용이 같아도 자리가 달라졌으면 써야 합니다 (순서만 바꾼 경우)
+      if (savedJson[sk] !== json || savedOrder[sk] !== i) {
         listWrites.push({ key, docId, data: { ...stored, __order: i } });
-        nextSaved[`${key}/${docId}`] = json;
+        nextSaved[sk] = json;
+        nextOrder[sk] = i;
       }
     }
     // 사라진 항목 삭제
@@ -487,7 +504,8 @@ async function flush() {
     }
 
     Object.assign(savedJson, nextSaved);
-    dropSaved.forEach(sk => { delete savedJson[sk]; });
+    Object.assign(savedOrder, nextOrder);
+    dropSaved.forEach(sk => { delete savedJson[sk]; delete savedOrder[sk]; });
   } catch (e) {
     keys.forEach(k => dirty.add(k));       // 저장 기록을 건드리지 않았으므로 그대로 재시도됨
     throw e;

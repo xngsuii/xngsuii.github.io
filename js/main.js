@@ -508,6 +508,7 @@ async function loadState(){
 function renderAll(){
   document.getElementById('profileName').value = state.profile.name;
   document.getElementById('profileBio').value = state.profile.bio;
+  autoGrowBio();
   document.getElementById('siteName').value = state.siteName;
   document.getElementById('homeIntro').innerText = state.homeIntro;
   renderNavSubs();
@@ -1337,7 +1338,21 @@ guardUnsavedClose('modalLogWrite', ()=> JSON.stringify([
 /* ============================================================
    PROFILE
    ============================================================ */
+/* 사이드바 소개글은 줄이 늘어도 안에서 스크롤되지 않고 칸이 아래로 자랍니다.
+   textarea 는 스스로 커지지 않으므로 내용 높이(scrollHeight)를 직접 넣어 줍니다.
+   재기 전에 높이를 0 으로 눌러야 줄어드는 경우도 제대로 잽니다 — 넣어 둔
+   높이가 남아 있으면 scrollHeight 가 그 아래로 내려가지 않습니다.
+   'auto' 로 두면 안 됩니다. textarea 의 auto 는 '내용에 맞춤'이 아니라
+   rows 속성(기본 2줄) 높이라, 한 줄만 적어도 두 줄 높이가 나옵니다.
+   실제로 0 이 되지는 않습니다 — CSS 의 min-height 가 한 줄분 바닥입니다. */
+function autoGrowBio(){
+  const el = document.getElementById('profileBio');
+  if(!el) return;
+  el.style.height = '0px';
+  el.style.height = el.scrollHeight + 'px';
+}
 document.getElementById('profileName').addEventListener('change', e=>{ if(!isLoggedIn)return; state.profile.name=e.target.value; storageSet('profile',state.profile); });
+document.getElementById('profileBio').addEventListener('input', autoGrowBio);
 document.getElementById('profileBio').addEventListener('change', e=>{ if(!isLoggedIn)return; state.profile.bio=e.target.value; storageSet('profile',state.profile); });
 document.getElementById('siteName').addEventListener('change', e=>{ if(!isLoggedIn)return; state.siteName=e.target.value; storageSet('siteName',state.siteName); });
 
@@ -1623,7 +1638,8 @@ function renderPairPosts(){
     const checked = selectedPairIds.has(p.id);
     el.innerHTML = `${selectMode?`<div class="post-check ${checked?'checked':''}">${checked?'✓':''}</div>`:''}
       <div class="post-thumb" style="background-image:url('${(p.headerImage&&p.headerImage.src)||''}')"></div>
-      <div class="post-info"><div class="post-type">${escapeHtml(catName(state.pairCats, p.type))}</div><div class="post-title">${escapeHtml(p.title)}</div></div>`;
+      <div class="post-info"><div class="post-title">${escapeHtml(p.title)}</div>
+        <div class="post-catch">${escapeHtml(p.subtitle||'')}</div></div>`;
     el.addEventListener('click', ()=>{
       if(selectMode){
         if(selectedPairIds.has(p.id)) selectedPairIds.delete(p.id); else selectedPairIds.add(p.id);
@@ -4517,9 +4533,9 @@ function renderOcPosts(){
       <div class="post-thumb"></div>
       ${lockedFolder
         ? `<div class="post-info oc-lock-info"><div class="post-title">&nbsp;</div>
-             <div class="oc-catch">&nbsp;</div><span class="oc-lock-mark">LOCKED</span></div>`
+             <div class="post-catch">&nbsp;</div><span class="oc-lock-mark">LOCKED</span></div>`
         : `<div class="post-info"><div class="post-title">${escapeHtml(o.title)}</div>
-             <div class="oc-catch">${escapeHtml(o.subtitle||'')}</div></div>`}`;
+             <div class="post-catch">${escapeHtml(o.subtitle||'')}</div></div>`}`;
     el.addEventListener('click', ()=>{
       if(ocSelectMode){
         if(ocSelectedIds.has(o.id)) ocSelectedIds.delete(o.id); else ocSelectedIds.add(o.id);
