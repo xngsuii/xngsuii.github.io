@@ -11,7 +11,7 @@
      css/js를 고칠 때마다 이 숫자를 함께 올려주세요.
      올리지 않으면 브라우저가 옛 파일을 계속 써서
      새 HTML과 짝이 맞지 않아 화면이 깨질 수 있습니다. -->
-<link rel="stylesheet" href="css/style.css?v=80" />
+<link rel="stylesheet" href="css/style.css?v=81" />
 </head>
 <body>
 <div class="app-window">
@@ -366,7 +366,6 @@
 
         <div class="pd-tab-pane pd-tab-pane-gallery" data-pdpane="gallery">
           <div class="gallery-folder-bar" id="galleryFolderBar"></div>
-          <div class="gallery-select-info" id="gallerySelectInfo" style="display:none;"></div>
           <div class="gallery-grid-wrap" id="galleryGridWrap">
             <div class="gallery-scroll-hint up" id="galleryScrollHintUp" style="display:none;">︽</div>
             <div class="gallery-grid" id="galleryGrid"></div>
@@ -382,7 +381,11 @@
           <div class="gallery-fab-row">
             <button class="gallery-fab gallery-add" id="addGalleryBtn" data-editonly title="이미지 추가">＋</button>
             <button class="gallery-fab gallery-select-toggle" id="gallerySelectBtn" data-editonly title="선택">✓</button>
+            <button class="gallery-fab gallery-select-stack" id="gallerySelectStackBtn" data-editonly title="선택한 사진 묶기" style="display:none;">
+              <svg class="gf-ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="5.5" width="9" height="9" rx="1"/><path d="M5 5.5v-3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-3"/></svg>
+            </button>
             <button class="gallery-fab gallery-select-delete" id="gallerySelectDeleteBtn" data-editonly title="선택 삭제" style="display:none;">🗑</button>
+            <div class="gallery-select-info" id="gallerySelectInfo" style="display:none;"></div>
           </div>
         </div>
 
@@ -546,7 +549,6 @@
 
         <div class="oc-page oc-page-gallery" data-ocpage="gallery">
           <div class="gallery-folder-bar" id="ocGalleryFolderBar"></div>
-          <div class="gallery-select-info" style="display:none;"></div>
           <!-- .horiz: 이미지 페이지를 가로로 넘깁니다 (세로 스크롤은 창 페이지 넘김에 씁니다) -->
           <div class="gallery-grid-wrap horiz">
             <div class="gallery-scroll-hint up" style="display:none;">《</div>
@@ -562,7 +564,11 @@
           <div class="gallery-fab-row">
             <button class="gallery-fab gallery-add" data-editonly title="이미지 추가">＋</button>
             <button class="gallery-fab gallery-select-toggle" data-editonly title="선택">✓</button>
+            <button class="gallery-fab gallery-select-stack" data-editonly title="선택한 사진 묶기" style="display:none;">
+              <svg class="gf-ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="5.5" width="9" height="9" rx="1"/><path d="M5 5.5v-3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-3"/></svg>
+            </button>
             <button class="gallery-fab gallery-select-delete" data-editonly title="선택 삭제" style="display:none;">🗑</button>
+            <div class="gallery-select-info" style="display:none;"></div>
           </div>
         </div>
 
@@ -770,8 +776,15 @@
   <div class="lb-row">
     <button class="lb-nav" id="lbPrev">‹</button>
     <div class="lb-stage" id="lbStage">
+      <!-- 스택(사진 묶음)을 보고 있을 때 사진 뒤에 비스듬히 깔리는 다음 장들.
+           사진보다 뒤에 있어야 하므로 순서상 앞에 둡니다. -->
+      <div class="lb-stack-back" id="lbStackBack"></div>
       <img id="lightboxImg" />
       <div class="lb-count" id="lbCount"></div>
+      <!-- 스택 편집 — 편집 모드에서 스택을 보고 있을 때만 확대 단추 왼쪽에 나옵니다 -->
+      <button class="lb-zoom lb-stack-edit" id="lbStackEdit" type="button" title="스택 편집" style="display:none;">
+        <svg class="lb-zoom-ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="5.5" width="9" height="9" rx="1"/><path d="M5 5.5v-3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-3"/></svg>
+      </button>
       <!-- 확대: 누르면 아래 썸네일 줄을 감추고 사진이 화면을 꽉 채웁니다.
            아이콘은 글자가 아니라 선 그림(SVG)입니다 — 서체마다 기호가 있거나
            없거나 빈 칸으로 들어 있어서, 글자로 두면 안 보일 수 있습니다. -->
@@ -789,6 +802,19 @@
     <button class="lb-nav lb-thumb-nav" id="lbThumbPrev" type="button" title="이전 썸네일">‹</button>
     <div class="lb-thumbs" id="lbThumbs"></div>
     <button class="lb-nav lb-thumb-nav" id="lbThumbNext" type="button" title="다음 썸네일">›</button>
+  </div>
+  <!-- 스택 편집 판 — 크게보기 위에 덮입니다. 정사각 썸네일을 끌어 순서를 바꾸고,
+       썸네일마다 ✕ 로 한 장씩 빼며, '풀기'로 묶음을 해제합니다. -->
+  <div class="stack-edit" id="stackEdit">
+    <div class="stack-edit-box">
+      <div class="stack-edit-head">
+        <span class="se-title">스택 편집</span>
+        <button class="se-unstack" id="seUnstack" type="button">풀기</button>
+        <button class="se-close" id="seClose" type="button" title="닫기">✕</button>
+      </div>
+      <div class="stack-edit-grid" id="seGrid"></div>
+      <div class="se-hint">끌어서 순서를 바꿉니다 · 사진을 누르면 스택에서 빠집니다(지워지지 않습니다)</div>
+    </div>
   </div>
 </div>
 
@@ -808,7 +834,7 @@
      맨 끝에 두어 화면 그리기를 막지 않게 합니다. -->
 <img class="paper-grain" src="img/paper-grain.jpg" alt="" aria-hidden="true" draggable="false" />
 
-<script src="js/main.js?v=80"></script>
-<script type="module" src="js/firebase-store.js?v=80"></script>
+<script src="js/main.js?v=81"></script>
+<script type="module" src="js/firebase-store.js?v=81"></script>
 </body>
 </html>

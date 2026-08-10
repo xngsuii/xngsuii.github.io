@@ -433,6 +433,34 @@ function logFolderIdOf(p, entry){
   const id = entry.folderId || fallback;
   return folders.some(f=>f.id===id) ? id : fallback;
 }
+/* ---- 스택(사진 묶음) ----
+   폴더의 images 배열 한 칸에는 사진 한 장(글자)이 들어가거나, 사진 여러 장을
+   담은 스택({images:[...]})이 들어갑니다. 격자에서는 스택도 칸 하나만
+   차지하므로 페이지 나눔·순서 바꾸기·삭제는 예전 그대로 동작합니다.
+   낱장은 지금까지와 똑같은 글자 그대로라 예전 데이터는 손댈 것이 없습니다. */
+function isStack(v){ return !!v && typeof v==='object' && Array.isArray(v.images); }
+function stackImagesOf(v){ return isStack(v) ? v.images : [v]; }
+function entryCover(v){ return isStack(v) ? (v.images[0]||'') : v; }
+function entryCount(v){ return isStack(v) ? v.images.length : 1; }
+/* 불러온 폴더의 칸 목록을 손질합니다.
+   원래는 "글자가 아닌 것은 전부 버린다"였습니다 — 예전에 폴더로 끌어다 놓을
+   때 생기던 빈 칸을 걷어내려던 것인데, 스택은 글자가 아니라 덩어리라
+   그대로 두면 새로 만든 묶음이 새로고침할 때마다 통째로 사라집니다.
+   그래서 '글자이거나 사진이 든 스택'만 남기는 것으로 바꿉니다.
+   한 장만 남은 스택은 묶여 있을 이유가 없으므로 낱장으로 되돌립니다. */
+function normalizeGalleryEntries(list){
+  const out = [];
+  list.forEach(v=>{
+    if(typeof v === 'string'){ if(v) out.push(v); return; }
+    if(!isStack(v)) return;
+    const imgs = v.images.filter(s=> typeof s === 'string' && s);
+    if(imgs.length === 0) return;
+    if(imgs.length === 1){ out.push(imgs[0]); return; }
+    v.images = imgs;
+    out.push(v);
+  });
+  return out;
+}
 function migrateGalleryFolders(p){
   if(!p.galleryFolders || p.galleryFolders.length===0){
     p.galleryFolders = [{ id:'default', name:'기본', images: p.gallery||[] }];
@@ -443,11 +471,7 @@ function migrateGalleryFolders(p){
     if(f.pwHash == null) f.pwHash = '';
     if(f.blur   == null) f.blur   = false;
     if(!Array.isArray(f.images)) f.images = [];
-    /* 예전에 폴더로 끌어다 놓을 때 생기던 빈 칸(썸네일만 남고 그림이 없던 것)을
-       불러오면서 걷어냅니다. 지금은 만들어지지 않지만 이미 저장된 것이 있습니다. */
-    else if(f.images.some(src=> typeof src !== 'string' || !src)){
-      f.images = f.images.filter(src=> typeof src === 'string' && src);
-    }
+    else f.images = normalizeGalleryEntries(f.images);
   });
 }
 /* 키워드 칩의 기본 색 — 사이트 바탕과 같은 계열의 주황입니다.
@@ -1771,6 +1795,7 @@ function fillPairDetail(p){
   gallerySelectedIdx.clear();
   gq('.gallery-select-info').style.display='none';
   gq('.gallery-select-delete').style.display='none';
+  if(gq('.gallery-select-stack')) gq('.gallery-select-stack').style.display='none';
   gq('.gallery-select-toggle').innerText='✓';
   gq('.gallery-select-toggle').classList.remove('active');
   document.querySelectorAll('.pd-index-tab').forEach(t=>t.classList.toggle('active', t.dataset.pdtab==='info'));
@@ -3530,29 +3555,77 @@ function renderGalleryFolderBar(p){
   }
 }
 
-let galleryLbImages=[]; let galleryLbIndex=0;
+/* ---- 크게보기가 쓰는 두 가지 셈 ----
+   화살표로 넘기는 것은 '낱장' 기준입니다 — 스택 안이든 밖이든 한 번 누르면
+   사진 한 장이 넘어가고, 아래 순서 칩도 폴더의 사진 전체를 셉니다.
+   반대로 아래 썸네일 줄은 '칸' 기준입니다 — 스택은 몇 장이 들었든 한 칸이고,
+   그 칸에는 지금 보고 있는 장이 보입니다.
+   그래서 셈이 둘 필요합니다: galleryLbFlat 이 낱장 목록이고 각 낱장이 어느
+   칸(e)의 몇 번째(s)인지 들고 있습니다. galleryLbIndex 는 낱장 번호입니다. */
+let galleryLbEntries=[];   // 폴더의 칸 목록 (사진 또는 스택)
+let galleryLbFlat=[];      // [{src, e, s, len}] — 낱장 하나에 한 칸
+let galleryLbImages=[];    // 위의 src 만 뽑은 것 (그리는 쪽이 그대로 씁니다)
+let galleryLbIndex=0;      // 낱장 기준 번호
+let galleryLbFolder=null;  // 스택을 고치려면 원본 폴더가 필요합니다 (없으면 편집 불가)
 let lbAnimating=false;
-/* 썸네일 줄에 한 번에 보이는 장수와, 지금 줄 맨 앞에 있는 사진의 번호.
-   보고 있는 사진이 줄 한가운데(다섯 번째)에 오도록 잡습니다. */
+function flattenEntries(entries){
+  const flat = [];
+  entries.forEach((v,e)=>{
+    const imgs = stackImagesOf(v);
+    imgs.forEach((src,s)=> flat.push({ src, e, s, len:imgs.length }));
+  });
+  return flat;
+}
+/* 지금 보고 있는 낱장이 속한 칸 */
+function lbCurEntryIdx(){
+  const f = galleryLbFlat[galleryLbIndex];
+  return f ? f.e : 0;
+}
+function lbCurEntry(){ return galleryLbEntries[lbCurEntryIdx()]; }
+/* 썸네일 줄에 한 번에 보이는 칸 수와, 지금 줄 맨 앞에 있는 칸의 번호.
+   보고 있는 칸이 줄 한가운데(다섯 번째)에 오도록 잡습니다. */
 const LB_THUMB_WINDOW = 9;
 let lbThumbStart = 0;
-/* 앞뒤로 네 장씩 보이는 자리를 잡되, 처음과 끝에서는 채울 사진이 없으므로
-   줄이 끝에 붙습니다 — 그래서 1~4번째 사진일 때는 그냥 앞에서부터 아홉 장입니다. */
+/* 앞뒤로 네 칸씩 보이는 자리를 잡되, 처음과 끝에서는 채울 것이 없으므로
+   줄이 끝에 붙습니다 — 그래서 1~4번째 칸일 때는 그냥 앞에서부터 아홉 칸입니다. */
 function lbThumbWindow(idx){
-  const n = galleryLbImages.length;
+  const n = galleryLbEntries.length;
   if(n <= LB_THUMB_WINDOW) return 0;
   const half = Math.floor(LB_THUMB_WINDOW/2);
   return Math.max(0, Math.min(idx - half, n - LB_THUMB_WINDOW));
 }
-function openGalleryLightbox(images, idx){
-  galleryLbImages = images; galleryLbIndex = idx;
+/* entries 는 폴더의 칸 목록, entryIdx 는 그중 몇 번째 칸을 열지,
+   stackIdx 는 그 칸이 스택일 때 몇 번째 장부터 볼지입니다.
+   folder 를 넘기면 그 안에서 스택을 고칠 수 있습니다(편집 모드에 한해). */
+function openGalleryLightbox(entries, entryIdx, stackIdx, folder){
+  galleryLbEntries = entries;
+  galleryLbFolder = folder || null;
+  galleryLbFlat = flattenEntries(entries);
+  galleryLbImages = galleryLbFlat.map(f=> f.src);
+  const at = galleryLbFlat.findIndex(f=> f.e===entryIdx && f.s===(stackIdx||0));
+  galleryLbIndex = at<0 ? 0 : at;
   lbAnimating = false;    // 넘기는 중에 닫았다 다시 열어도 막히지 않게
-  lbThumbStart = lbThumbWindow(idx);
-  prefetchImgs(images);   // 크게 보는 사진이 제일 급하다
+  lbBackShown = 0;        // 스택으로 바로 열면 카드가 펼쳐지며 시작합니다
+  lbThumbStart = lbThumbWindow(entryIdx);
+  prefetchImgs(galleryLbImages);   // 크게 보는 사진이 제일 급하다
   renderGalleryLightbox();
   const lb = document.getElementById('lightbox');
   lb.classList.remove('zoomed');   // 확대는 매번 보통 크기에서 시작합니다
   lb.classList.add('open');
+}
+/* 스택을 고친 뒤 다시 셈합니다. keep 은 계속 보고 싶은 낱장 번호입니다.
+   폴더가 비면 크게보기를 닫습니다. */
+function refreshGalleryLb(keep){
+  galleryLbFlat = flattenEntries(galleryLbEntries);
+  galleryLbImages = galleryLbFlat.map(f=> f.src);
+  if(galleryLbFlat.length===0){
+    document.getElementById('lightbox').classList.remove('open');
+    closeStackEdit();
+    return;
+  }
+  galleryLbIndex = Math.max(0, Math.min(keep, galleryLbFlat.length-1));
+  lbThumbStart = lbThumbWindow(lbCurEntryIdx());
+  renderGalleryLightbox();
 }
 /* 사진 한 장을 그립니다 (썸네일 줄은 그대로 두고 표시만 갱신) */
 function paintGalleryLightbox(){
@@ -3572,60 +3645,250 @@ function paintGalleryLightbox(){
     cnt.style.display = many ? '' : 'none';
     cnt.innerText = `${galleryLbIndex+1} / ${galleryLbImages.length}`;
   }
+  paintLbStackBack();
+  const seBtn = document.getElementById('lbStackEdit');
+  if(seBtn) seBtn.style.display = (isLoggedIn && galleryLbFolder && isStack(lbCurEntry())) ? '' : 'none';
   markGalleryLbThumb();
 }
-/* 아래 썸네일 줄. lbThumbStart 부터 아홉 장만 그립니다. */
+/* ---- 사진 뒤에 비스듬히 깔리는 다음 장들 ----
+   스택을 보고 있을 때만, 그 스택에 '아직 남은' 장을 최대 세 장까지 깝니다.
+   끝으로 갈수록 깔리는 장이 줄어들다 사라지고, 마지막 장에서는 아무것도
+   깔리지 않습니다 — 화살표를 한 번 더 누르면 스택 밖 다음 칸으로 넘어갑니다.
+   칸(.lb-stage)이 지금 사진 크기에 딱 맞춰져 있으므로, 뒤 카드는 그 칸을
+   그대로 채우고(object-fit:cover) 기울기와 밀기만 다르게 줍니다 — 사진마다
+   가로세로가 달라도 카드 뭉치처럼 같은 모양으로 겹칩니다. */
+const LB_BACK_MAX = 3;
+let lbBackShown = 0;          // 지난번에 깔려 있던 장수
+/* 다음에 뒤 카드를 그릴 때 어떻게 움직일지.
+   'fan'  : 사진 뒤에서 하나씩 펼쳐져 나옴 (스택에 처음 들어왔을 때)
+   'up'   : 한 칸씩 앞으로 당겨짐 (▸ 로 넘겼을 때 — 2번이 1번 자리로)
+   'down' : 한 칸씩 뒤로 밀림 (◂ 로 되감았을 때)
+   null   : 그냥 그림
+   paint 한 번에만 쓰이고 곧바로 비워집니다. */
+let lbBackAnim = null;
+const LB_FAN_MS = 260, LB_FAN_GAP = 70, LB_SHIFT_MS = 240;
+/* CSS 의 .lb-back-1~3 변형과 **같은 값이어야 합니다**.
+   여기서 다시 적는 것은, 카드를 붙이자마자 getComputedStyle 로 세 번 읽으면
+   그때마다 화면 계산이 강제로 일어나 첫 프레임이 끊기기 때문입니다. */
+const LB_BACK_CENTER = 'translate(-50%,-50%)';
+const LB_BACK_OFFSET = {
+  1:'translate(2.4%,-2.4%) rotate(3deg) scale(.985)',
+  2:'translate(4.8%,-4.8%) rotate(6deg) scale(.97)',
+  3:'translate(7.2%,-7.2%) rotate(9deg) scale(.955)'
+};
+const LB_BACK_DIM = { 0:1, 1:.86, 2:.72, 3:.6 };
+/* d = 0 은 '사진이 있는 자리'입니다 — 맨 앞 카드가 앞으로 나오거나
+   보던 사진이 뒤로 가라앉을 때의 끝점으로 씁니다. */
+function lbBackTf(d){ return d<=0 ? LB_BACK_CENTER : LB_BACK_CENTER+' '+LB_BACK_OFFSET[d]; }
+function lbBackDim(d){ return 'brightness('+(LB_BACK_DIM[Math.min(d,3)] || .6)+')'; }
+function paintLbStackBack(){
+  const wrap = document.getElementById('lbStackBack');
+  const mode = lbBackAnim; lbBackAnim = null;
+  if(!wrap) return;
+  wrap.innerHTML = '';
+  const cur = galleryLbFlat[galleryLbIndex];
+  const entry = lbCurEntry();
+  if(!cur || !isStack(entry)){ wrap.classList.remove('on'); lbBackShown = 0; return; }
+  const rest = entry.images.length - 1 - cur.s;      // 이 스택에 남은 장수
+  const depth = Math.min(LB_BACK_MAX, rest);
+  wrap.classList.toggle('on', depth > 0);
+  /* 넘기라는 지시가 따로 없으면, 없다가 생겼을 때만 펼칩니다 */
+  const anim = mode || (depth > lbBackShown && lbBackShown === 0 ? 'fan' : null);
+  lbBackShown = depth;
+  if(depth <= 0) return;
+  /* 먼 것부터 붙여야 가까운 카드가 위에 옵니다 (뒤에 붙은 것이 위) */
+  const cards = [];
+  for(let d=depth; d>=1; d--){
+    const img = document.createElement('img');
+    img.className = 'lb-back lb-back-'+d;
+    const src = entry.images[cur.s + d];
+    img.src = imgUrl(src);
+    whenImgArrives(src, img, ()=>{ img.src = imgUrl(src); });
+    img.addEventListener('click', (e)=>{ e.stopPropagation(); stepGalleryLightbox(1); });
+    wrap.appendChild(img);
+    cards.push({ el:img, d });
+  }
+  if(!anim) return;
+  /* 어느 자리에서 시작해 제자리로 갈지만 정해 주면 나머지는 같습니다.
+     'up' 은 한 칸 뒤에서, 'down' 은 한 칸 앞에서 옵니다 — 카드 뭉치 전체가
+     한 칸씩 미끄러지는 모양이 됩니다.
+     펼치기(fan)는 사진과 같은 자리에서 시작해 하나씩 어긋나며 나오는데,
+     **맨 앞장이 먼저** 나오도록 지연을 깊이로 줍니다(붙이는 순서와 반대).
+     애니메이션이 시작되지 않는 상황(다른 탭)에서 첫 장면에 머물지 않도록
+     시간이 지나면 무조건 걷어냅니다 — 끝 상태는 CSS 에 이미 있습니다. */
+  const run = ()=>{
+    cards.forEach(({el, d})=>{
+      el.style.opacity = '';
+      if(!el.animate) return;
+      const from = anim==='up' ? d+1 : anim==='down' ? d-1 : 0;
+      const ms = anim==='fan' ? LB_FAN_MS : LB_SHIFT_MS;
+      const delay = anim==='fan' ? (d-1)*LB_FAN_GAP : 0;
+      const a = el.animate(
+        [{opacity: anim==='fan' ? 0 : 1, transform: lbBackTf(from), filter: lbBackDim(from)},
+         {opacity: 1, transform: lbBackTf(d), filter: lbBackDim(d)}],
+        {duration:ms, delay, easing:LB_EASE, fill:'backwards'});
+      setTimeout(()=>{ a.cancel(); }, ms + delay + 60);
+    });
+  };
+  /* 펼치기는 사진이 다 온 뒤에 시작합니다. 스택을 처음 열 때는 뒤 카드 사진이
+     아직 도착하지 않은 경우가 있어서, 그냥 시작하면 도착하는 순서대로 하나씩
+     튀어나와 따다닥 끊겨 보입니다. 그 사이에는 감춰 둡니다(끝 자리에 먼저
+     보였다가 시작 자리로 되돌아가는 깜빡임도 이걸로 막힙니다).
+     한 장이 끝내 안 와도 반 초 뒤에는 시작합니다. */
+  if(anim === 'fan'){
+    cards.forEach(({el})=> el.style.opacity = '0');
+    let left = cards.length, done = false;
+    const go = ()=>{ if(done) return; done = true; run(); };
+    cards.forEach(({el})=>{
+      if(el.complete && el.naturalWidth){ if(--left === 0) go(); return; }
+      const on = ()=>{ el.removeEventListener('load', on); el.removeEventListener('error', on);
+                       if(--left === 0) go(); };
+      el.addEventListener('load', on); el.addEventListener('error', on);
+    });
+    setTimeout(go, 500);
+  }else{
+    run();
+  }
+}
+/* 아래 썸네일 줄. lbThumbStart 부터 아홉 '칸'만 그립니다 (스택은 한 칸). */
 function renderGalleryLbThumbs(){
   const bar = document.getElementById('lbThumbBar');
   const wrap = document.getElementById('lbThumbs');
   if(!bar || !wrap) return;
-  const n = galleryLbImages.length;
+  const n = galleryLbEntries.length;
   /* 인라인 style 대신 클래스로 감춥니다 — 확대 상태(.lightbox.zoomed)에서도
-     썸네일 줄을 CSS 로 접어야 하는데, 인라인 style 은 CSS 로 덮을 수 없습니다. */
-  bar.classList.toggle('hide', n < 2);
-  if(n < 2){ wrap.innerHTML=''; return; }   // 감춘 줄에 지난 사진이 남아 있지 않게
+     썸네일 줄을 CSS 로 접어야 하는데, 인라인 style 은 CSS 로 덮을 수 없습니다.
+     칸이 하나라도 그 안에 여러 장이 들었으면(스택) 줄을 띄웁니다. */
+  bar.classList.toggle('hide', n < 2 && galleryLbFlat.length < 2);
+  if(bar.classList.contains('hide')){ wrap.innerHTML=''; return; }
   const paged = n > LB_THUMB_WINDOW;   // 넘길 것이 있을 때만 양 끝 화살표를 씁니다
   bar.classList.toggle('paged', paged);
   const end = paged ? lbThumbStart + LB_THUMB_WINDOW : n;
+  const curE = lbCurEntryIdx(), curS = galleryLbFlat[galleryLbIndex] ? galleryLbFlat[galleryLbIndex].s : 0;
   wrap.innerHTML='';
   for(let i=lbThumbStart; i<end; i++){
+    const entry = galleryLbEntries[i];
+    if(entry === undefined) continue;
     const t=document.createElement('div');
-    t.className='lb-thumb'+(i===galleryLbIndex?' active':'');
-    t.dataset.i = i;
-    applyThumbBg(t, galleryLbImages[i], 64);   // .lb-thumb 는 64x64 고정
-    t.addEventListener('click', ()=> jumpGalleryLightbox(i));
+    const stack = isStack(entry);
+    t.className='lb-thumb'+(i===curE?' active':'')+(stack?' stack':'');
+    t.dataset.e = i;
+    /* 보고 있는 스택 칸에는 지금 보는 장을, 그 밖에는 대표(첫 장)를 보여줍니다 */
+    const shown = stack ? (i===curE ? entry.images[curS] : entry.images[0]) : entry;
+    applyThumbBg(t, shown, 64);   // .lb-thumb 는 64x64 고정
+    if(stack){
+      const tag=document.createElement('span');
+      tag.className='lb-thumb-count'; tag.innerText='+'+(entry.images.length-1);
+      t.appendChild(tag);
+    }
+    /* 보고 있는 스택 칸을 누르면 그 안이 작게 펼쳐지고, 거기서 고르면 그
+       장으로 갑니다 — 이 칸은 이미 보고 있는 칸이라 '이동'할 데가 없습니다.
+       나머지 칸은 예전대로 눌러서 그 칸으로 갑니다. */
+    if(stack && i===curE){
+      t.appendChild(buildLbThumbPop(entry, i));
+      bindLbThumbPop(t);
+    }else{
+      t.addEventListener('click', ()=>{
+        const at = galleryLbFlat.findIndex(f=> f.e===i);
+        if(at>=0) jumpGalleryLightbox(at);
+      });
+    }
     wrap.appendChild(t);
   }
   const prev=document.getElementById('lbThumbPrev'), next=document.getElementById('lbThumbNext');
   if(prev) prev.disabled = !paged || lbThumbStart <= 0;
   if(next) next.disabled = !paged || lbThumbStart >= n - LB_THUMB_WINDOW;
 }
-/* 사진이 바뀌면 줄도 그 사진이 가운데 오도록 따라옵니다.
-   자리가 그대로면 표시만 옮기고 다시 그리지는 않습니다. */
+/* 작은 묶음 판은 position:fixed 라 자리를 직접 넣어 줘야 합니다
+   (썸네일 줄의 overflow 에 잘리지 않으려면 fixed 여야 합니다 — CSS 설명 참고).
+   썸네일 바로 위, 가운데를 맞추되 화면 밖으로 나가지 않게 좌우를 붙듭니다. */
+function openLbPop(t){
+  const pop = t.querySelector('.lb-thumb-pop');
+  if(!pop) return;
+  t.classList.add('pop-open');           // 재려면 먼저 보이게 해야 합니다
+  const r = t.getBoundingClientRect();
+  const w = pop.offsetWidth, h = pop.offsetHeight;
+  const left = Math.max(8, Math.min(r.left + r.width/2 - w/2, window.innerWidth - w - 8));
+  pop.style.left = left + 'px';
+  pop.style.top  = Math.max(8, r.top - h - 10) + 'px';
+}
+function closeAllLbPops(){
+  document.querySelectorAll('.lb-thumb.pop-open').forEach(t=> t.classList.remove('pop-open'));
+}
+/* 눌러서 펴고, 다른 데를 누르면 닫습니다.
+   마우스를 올리면 펴지는 방식이었는데, 판까지 마우스를 옮기는 사이 칸을
+   벗어나 닫혀 버려서 누르기가 어려웠습니다. 마우스가 없는 기기에서도 같은
+   방식이라 따로 나눌 것이 없습니다. */
+function bindLbThumbPop(t){
+  t.addEventListener('click', (e)=>{
+    if(e.target.closest('.lb-thumb-pop')) return;   // 판 안쪽(작은 사진)은 제 할 일이 있습니다
+    e.stopPropagation();                            // 이 누름이 '바깥 누름'으로 되돌아오지 않게
+    if(t.classList.contains('pop-open')) closeAllLbPops();
+    else { closeAllLbPops(); openLbPop(t); }
+  });
+}
+/* 판 바깥을 누르면 닫습니다. 판이나 그 칸 안쪽은 빼고 봅니다. */
+document.addEventListener('click', (e)=>{
+  if(!document.querySelector('.lb-thumb.pop-open')) return;
+  if(e.target.closest && e.target.closest('.lb-thumb.pop-open')) return;
+  closeAllLbPops();
+});
+function buildLbThumbPop(entry, entryIdx){
+  const pop=document.createElement('div'); pop.className='lb-thumb-pop';
+  entry.images.forEach((src,s)=>{
+    const m=document.createElement('div');
+    m.className='lb-pop-thumb'+(galleryLbFlat[galleryLbIndex] && galleryLbFlat[galleryLbIndex].s===s ? ' active':'');
+    applyThumbBg(m, src, 44);
+    m.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const at = galleryLbFlat.findIndex(f=> f.e===entryIdx && f.s===s);
+      if(at>=0) jumpGalleryLightbox(at);
+    });
+    pop.appendChild(m);
+  });
+  return pop;
+}
+/* 사진이 바뀌면 줄도 그 칸이 가운데 오도록 따라옵니다.
+   스택 칸은 보여주는 장이 바뀌므로 같은 칸에 머물러도 다시 그립니다. */
+let lbThumbShownE = -1;   // 줄을 마지막으로 그렸을 때 활성이던 칸
 function markGalleryLbThumb(){
-  const want = lbThumbWindow(galleryLbIndex);
-  if(want !== lbThumbStart){ lbThumbStart = want; renderGalleryLbThumbs(); }
+  const e = lbCurEntryIdx();
+  const want = lbThumbWindow(e);
+  const wrap0 = document.getElementById('lbThumbs');
+  /* 줄을 다시 그려야 하는 경우: 창이 움직였거나, 스택 칸이 얽혀 있을 때입니다.
+     스택 칸은 보여주는 장이 바뀌고 그 위에 뜨는 작은 묶음도 따라가야 하므로,
+     같은 칸에 머물러도 다시 그려야 합니다. 낱장끼리 옮겨 다닐 때는 표시만
+     바꾸면 됩니다 — 매번 다시 그리면 아홉 장을 헛되이 다시 만듭니다. */
+  const heavy = want !== lbThumbStart
+             || isStack(galleryLbEntries[e])
+             || isStack(galleryLbEntries[lbThumbShownE])
+             || !wrap0 || !wrap0.children.length;
+  lbThumbStart = want;
+  if(heavy){ lbThumbShownE = e; renderGalleryLbThumbs(); }
+  else {
+    lbThumbShownE = e;
+    wrap0.querySelectorAll('.lb-thumb').forEach(t=> t.classList.toggle('active', Number(t.dataset.e)===e));
+  }
   const wrap = document.getElementById('lbThumbs');
   if(!wrap) return;
-  const items = wrap.querySelectorAll('.lb-thumb');
-  items.forEach(t=> t.classList.toggle('active', Number(t.dataset.i)===galleryLbIndex));
   /* 줄이 화면보다 넓은 좁은 기기에서 지금 보는 것을 가운데로 끌어옵니다.
      block:'nearest' 라 뒤에 있는 화면이 세로로 딸려 움직이지 않습니다. */
   const cur = wrap.querySelector('.lb-thumb.active');
   if(cur) cur.scrollIntoView({ block:'nearest', inline:'center' });
 }
-/* 양 끝 화살표 — 보고 있는 사진은 그대로 두고 썸네일 줄만 아홉 장씩 넘깁니다.
+/* 양 끝 화살표 — 보고 있는 사진은 그대로 두고 썸네일 줄만 아홉 칸씩 넘깁니다.
    그래서 다음에 사진을 넘길 때까지는 줄이 가운데로 되돌아오지 않습니다. */
 function stepGalleryLbThumbs(dir){
-  const n = galleryLbImages.length;
+  const n = galleryLbEntries.length;
   if(n <= LB_THUMB_WINDOW) return;
   const want = Math.max(0, Math.min(lbThumbStart + dir*LB_THUMB_WINDOW, n - LB_THUMB_WINDOW));
   if(want === lbThumbStart) return;
   lbThumbStart = want;
   renderGalleryLbThumbs();
 }
+/* 썸네일 줄은 paintGalleryLightbox 안의 markGalleryLbThumb 이 그리므로
+   여기서 따로 부르지 않습니다 (부르면 두 번 그립니다). */
 function renderGalleryLightbox(){
-  renderGalleryLbThumbs();
   paintGalleryLightbox();
 }
 /* 옆으로 밀리며 바뀝니다 — 나가는 방향과 들어오는 방향이 반대여야
@@ -3661,13 +3924,100 @@ function slideGalleryLightbox(dir, commit){
     setTimeout(()=>{ back.cancel(); lbAnimating = false; }, LB_IN_MS);
   }, LB_OUT_MS);
 }
+/* ---- 스택 안에서 넘길 때 ----
+   ▸ 를 누르면 보던 장이 카드를 던지듯 **왼쪽으로** 빠지고, 뒤에 깔려 있던
+   장이 그 자리로 올라옵니다. ◂ 를 누르면 그 움직임을 그대로 되감습니다 —
+   던져 나갔던 카드가 왼쪽에서 되돌아 들어오고, 보던 장은 뒤로 가라앉아
+   깔린 카드가 됩니다.
+   교체 시점을 애니메이션의 finish 에 맡기지 않는 것은 옆으로 미는 쪽과 같은
+   이유입니다 — 다른 탭에 가 있으면 그 이벤트가 오지 않아 반쯤 사라진 채
+   멈춥니다. 시간으로 이어붙입니다. */
+const LB_DEAL_MS = 240;
+const LB_DEAL_AWAY = 'translate(-42%,-10%) rotate(-12deg)';
+function dealGalleryLightbox(commit){
+  const el = document.getElementById('lightboxImg');
+  const front = document.querySelector('#lbStackBack .lb-back-1');
+  if(lbAnimating) return;
+  if(!el || !el.animate || !front){ commit(); paintGalleryLightbox(); return; }
+  lbAnimating = true;
+  const away = el.animate(
+    [{transform:'none', opacity:1},
+     {transform:LB_DEAL_AWAY, opacity:0}],
+    {duration:LB_DEAL_MS, easing:LB_EASE, fill:'forwards'});
+  /* 맨 앞 뒤 카드가 놓여 있던 자리에서 사진 자리로 올라옵니다 */
+  const rise = front.animate(
+    [{transform:lbBackTf(1), filter:lbBackDim(1)},
+     {transform:lbBackTf(0), filter:lbBackDim(0)}],
+    {duration:LB_DEAL_MS, easing:LB_EASE, fill:'forwards'});
+  /* 뒤에 깔려 있는 동안의 크기 — 뒤 카드는 지금 사진 칸 안에 들어가는 만큼만
+     줄여 놓기 때문에, 가로로 긴 사진은 꽤 작아져 있습니다. 그대로 자리를
+     바꾸면 그 순간 확 커지므로, 바뀐 뒤에 그 크기에서 제 크기로 키웁니다. */
+  const fromW = front.offsetWidth;
+  setTimeout(()=>{
+    commit();
+    away.cancel(); rise.cancel();
+    /* 남은 카드들은 한 칸씩 앞으로 당겨집니다 — 그냥 다시 그리면 2번 카드가
+       1번 자리로 순간이동해 딱딱해 보입니다. */
+    lbBackAnim = 'up';
+    paintGalleryLightbox();
+    growLightboxFrom(fromW);
+    lbAnimating = false;
+  }, LB_DEAL_MS);
+}
+/* 뒤 카드 크기(fromW)에서 지금 사진의 제 크기로 부드럽게 커집니다.
+   사진이 바뀌면 크기는 바로 알 수 없으므로(브라우저가 새 사진을 읽어야 합니다)
+   다 읽은 뒤에 잽니다. 차이가 거의 없으면 아무것도 하지 않습니다 —
+   세로 사진처럼 뒤에서도 크기가 비슷했던 경우에 괜히 움찔거리지 않게. */
+const LB_GROW_MS = 220;
+function growLightboxFrom(fromW){
+  const el = document.getElementById('lightboxImg');
+  if(!el || !el.animate || !fromW) return;
+  const run = ()=>{
+    const to = el.offsetWidth;
+    if(!to) return;
+    const s = fromW / to;
+    if(Math.abs(s-1) < 0.03) return;
+    const a = el.animate(
+      [{transform:'scale('+s+')'}, {transform:'none'}],
+      {duration:LB_GROW_MS, easing:LB_EASE, fill:'backwards'});
+    setTimeout(()=>{ a.cancel(); }, LB_GROW_MS + 60);
+  };
+  if(el.complete && el.naturalWidth) run();
+  else el.addEventListener('load', run, {once:true});
+}
+/* 되감기 — 먼저 사진을 바꿔 놓고, 새로 온 사진을 던져 나갔던 자리에서
+   제자리로 되돌립니다. 방금까지 보던 장은 그 사이 맨 앞 뒤 카드가 되어
+   있으므로, 제자리에서 뒤 카드 자리로 가라앉힙니다. */
+function dealBackGalleryLightbox(commit){
+  const el = document.getElementById('lightboxImg');
+  if(lbAnimating) return;
+  if(!el || !el.animate){ commit(); paintGalleryLightbox(); return; }
+  lbAnimating = true;
+  commit();
+  /* 카드 뭉치는 한 칸씩 뒤로 밀립니다. 맨 앞 카드(방금까지 보던 사진)는
+     사진 자리(d=0)에서 시작하므로 '가라앉는' 움직임이 저절로 됩니다. */
+  lbBackAnim = 'down';
+  paintGalleryLightbox();
+  const back = el.animate(
+    [{transform:LB_DEAL_AWAY, opacity:0},
+     {transform:'none', opacity:1}],
+    {duration:LB_DEAL_MS, easing:LB_EASE, fill:'backwards'});
+  setTimeout(()=>{
+    back.cancel();
+    lbAnimating = false;
+  }, LB_DEAL_MS);
+}
 function stepGalleryLightbox(dir){
   const next = galleryLbIndex + dir;
-  if(next<0 || next>=galleryLbImages.length) return;
-  slideGalleryLightbox(dir, ()=>{ galleryLbIndex = next; });
+  if(next<0 || next>=galleryLbFlat.length) return;
+  const cur = galleryLbFlat[galleryLbIndex], nx = galleryLbFlat[next];
+  const sameStack = cur && nx && cur.e===nx.e;   // 같은 스택 안에서의 이동
+  if(sameStack && dir>0) dealGalleryLightbox(()=>{ galleryLbIndex = next; });
+  else if(sameStack)     dealBackGalleryLightbox(()=>{ galleryLbIndex = next; });
+  else slideGalleryLightbox(dir, ()=>{ galleryLbIndex = next; });
 }
 function jumpGalleryLightbox(i){
-  if(i===galleryLbIndex || i<0 || i>=galleryLbImages.length) return;
+  if(i===galleryLbIndex || i<0 || i>=galleryLbFlat.length) return;
   slideGalleryLightbox(i>galleryLbIndex ? 1 : -1, ()=>{ galleryLbIndex = i; });
 }
 
@@ -3790,17 +4140,26 @@ function renderGallery(p){
   const start=(galleryPage-1)*perPage;
   const pageImages = folder.images.slice(start, start+perPage);
 
-  pageImages.forEach((src, i)=>{
+  pageImages.forEach((entry, i)=>{
     const idx = start+i;
     const key = folder.id+'::'+idx;
+    const src = entryCover(entry);
     const el=document.createElement('div');
-    el.className='gallery-thumb'+(folder.blur?' blurred':'');
+    el.className='gallery-thumb'+(folder.blur?' blurred':'')+(isStack(entry)?' stacked':'');
     // 이미지는 안쪽 레이어에 — 블러가 보더까지 번지지 않게, 선택 체크 표시도 선명하게 유지
     const img=document.createElement('div');
     img.className='gt-img';
     img.style.backgroundImage=`url('${imgUrl(src)}')`;
     applyThumbBg(img, src, 128);   // 실측 박스 123.6px
     el.appendChild(img);
+    /* 몇 장이 더 있는지 — 흐림 폴더에서도 이 숫자는 선명하게 둡니다.
+       흐림은 안쪽 .gt-img 에만 걸려 있어서 형제로 두면 저절로 그렇게 됩니다. */
+    if(isStack(entry)){
+      const tag=document.createElement('span');
+      tag.className='gt-stack-count';
+      tag.innerText='+'+(entry.images.length-1);
+      el.appendChild(tag);
+    }
     el.dataset.key = key;
     if(gallerySelectMode){
       const checked = gallerySelectedIdx.has(key);
@@ -3808,6 +4167,10 @@ function renderGallery(p){
       el.appendChild(chk);
       el.addEventListener('click', ()=>{
         if(gallerySelectedIdx.has(key)) gallerySelectedIdx.delete(key); else gallerySelectedIdx.add(key);
+        /* 고른 개수를 여기서 갱신합니다. 예전에는 선택 모드를 켜고 끌 때만
+           불러서, 사진을 골라도 '몇 개 선택됨'이 뜨지 않았습니다.
+           묶기 단추를 누를 수 있는지도 이 개수로 정해집니다. */
+        updateGallerySelectCount();
         renderGallery(p);
       });
       if(isLoggedIn){
@@ -3849,8 +4212,11 @@ function renderGallery(p){
             const sameSet = pageIdx.length === pageImages.length
               && pageIdx.every(i=> i>=start && i<start+pageImages.length);
             const reordered = pageIdx.map(i=> folder.images[i]);
-            // 배열이 그새 줄어들어 빈 칸이 섞였으면 되쓰지 않는다
-            if(stillSameFolder && sameSet && reordered.every(src=> typeof src === 'string')){
+            /* 배열이 그새 줄어들어 빈 칸이 섞였으면 되쓰지 않는다.
+               스택(덩어리)도 정상적인 칸이므로 '글자인지'가 아니라
+               '빈 칸이 아닌지'로 가립니다 — 예전 검사대로 두면 스택이 낀
+               페이지는 순서를 바꿔도 조용히 저장되지 않습니다. */
+            if(stillSameFolder && sameSet && reordered.every(v=> typeof v === 'string' ? !!v : isStack(v))){
               folder.images.splice(start, reordered.length, ...reordered);
               await gallerySave();
             }
@@ -3868,7 +4234,9 @@ function renderGallery(p){
           el.classList.add('revealed');
           return;
         }
-        openGalleryLightbox(folder.images.slice(), idx);
+        /* 폴더의 칸 목록을 그대로(복사하지 않고) 넘깁니다 —
+           스택 편집이 이 배열을 직접 고쳐야 하기 때문입니다. */
+        openGalleryLightbox(folder.images, idx, 0, folder);
       });
     }
     grid.appendChild(el);
@@ -4059,10 +4427,28 @@ function initGalleryPageDrop(host){
     finishGalleryDrag();
   });
 }
+/* 고른 칸에 든 사진이 모두 몇 장인지 — 스택은 칸 하나라도 안에 든 만큼 셉니다.
+   지우기 확인 문구와 '몇 개 선택됨'이 이 셈을 씁니다(낱장 하나 + 세 장짜리
+   스택 하나를 골랐으면 4장). */
+function selectedPhotoCount(){
+  const p = galleryPost();
+  if(!p) return gallerySelectedIdx.size;
+  let n = 0;
+  gallerySelectedIdx.forEach(key=>{
+    const [folderId, idxStr] = key.split('::');
+    const folder = getFolder(p, folderId);
+    const entry = folder && folder.images[Number(idxStr)];
+    n += entry === undefined ? 0 : entryCount(entry);
+  });
+  return n;
+}
 function updateGallerySelectCount(){
   const info=gq('.gallery-select-info');
-  if(gallerySelectedIdx.size>0){ info.style.display='block'; info.innerText=`${gallerySelectedIdx.size}개 선택됨`; }
+  if(gallerySelectedIdx.size>0){ info.style.display='block'; info.innerText=`${selectedPhotoCount()}개 선택됨`; }
   else{ info.style.display='none'; }
+  /* 묶을 것이 두 칸은 돼야 누를 수 있습니다 */
+  const stackBtn = gq('.gallery-select-stack');
+  if(stackBtn) stackBtn.disabled = gallerySelectedIdx.size < 2;
 }
 /* ---- 갤러리 조각 하나에 조작을 붙입니다 (PAIR 상세 / OC 상세가 각각 한 번씩) ---- */
 function initGalleryRoot(host){
@@ -4072,6 +4458,7 @@ function initGalleryRoot(host){
 
   const selBtn = root.querySelector('.gallery-select-toggle');
   const delBtn = root.querySelector('.gallery-select-delete');
+  const stackBtn = root.querySelector('.gallery-select-stack');
   const addBtn = root.querySelector('.gallery-add');
   const unlockBtn = root.querySelector('.gallery-unlock-btn');
 
@@ -4081,15 +4468,49 @@ function initGalleryRoot(host){
     gallerySelectedIdx.clear();
     selBtn.innerText = gallerySelectMode ? '✕' : '✓';
     selBtn.classList.toggle('active', gallerySelectMode);
+    const on = (gallerySelectMode && isLoggedIn) ? 'flex' : 'none';
+    if(delBtn) delBtn.style.display = on;
+    if(stackBtn) stackBtn.style.display = on;
     updateGallerySelectCount();
-    if(delBtn) delBtn.style.display = (gallerySelectMode && isLoggedIn) ? 'flex' : 'none';
     renderGallery(galleryPost());
+  });
+
+  /* ---- 묶기 ----
+     고른 칸들을 스택 하나로 만듭니다. 폴더를 옮기면 고른 것이 지워지므로
+     여기 모인 칸은 언제나 같은 폴더입니다.
+     이미 스택인 칸이 섞여 있으면 그 안의 사진이 먼저, 낱장이 그 뒤에 붙습니다
+     — '있던 스택 맨 뒤에 낱장을 넣는다'가 그대로 됩니다. 스택 여러 개를 고르면
+     앞 칸의 스택부터 차례로 이어 붙습니다. 스택 안에 스택은 만들지 않습니다.
+     새 스택은 고른 것 중 맨 앞 칸 자리에 놓입니다. */
+  if(stackBtn) stackBtn.addEventListener('click', async ()=>{
+    use();
+    if(gallerySelectedIdx.size < 2) return;
+    const p = galleryPost();
+    const keys = Array.from(gallerySelectedIdx);
+    const folder = getFolder(p, keys[0].split('::')[0]);
+    if(!folder) return;
+    const idxs = keys.map(k=> Number(k.split('::')[1]))
+                     .filter(i=> folder.images[i] !== undefined)
+                     .sort((a,b)=> a-b);
+    if(idxs.length < 2) return;
+    const stacked = [], loose = [];
+    idxs.forEach(i=>{
+      const v = folder.images[i];
+      if(isStack(v)) stacked.push(...v.images); else loose.push(v);
+    });
+    const at = idxs[0];
+    for(let n=idxs.length-1; n>=0; n--) folder.images.splice(idxs[n], 1);
+    folder.images.splice(at, 0, { images: stacked.concat(loose) });
+    await gallerySave();
+    gallerySelectedIdx.clear();
+    updateGallerySelectCount();
+    renderGallery(p);
   });
 
   if(delBtn) delBtn.addEventListener('click', async ()=>{
     use();
     if(gallerySelectedIdx.size===0) return;
-    if(!await siteConfirm(`선택한 ${gallerySelectedIdx.size}장의 이미지를 삭제할까요?`)) return;
+    if(!await siteConfirm(`선택한 ${selectedPhotoCount()}장의 이미지를 삭제할까요?`)) return;
     const p = galleryPost();
     const bySrc = [];
     gallerySelectedIdx.forEach(key=>{
@@ -4206,8 +4627,10 @@ function initGalleryRoot(host){
 /* 바깥(검은 바탕)이나 사진 줄의 빈 자리를 누르면 닫습니다 —
    썸네일·화살표·사진 자체는 각자 할 일이 있으므로 제외합니다. */
 document.getElementById('lightbox').addEventListener('click', (e)=>{
-  if(e.target.id==='lightbox' || e.target.id==='lbStage' || e.target.classList.contains('lb-row'))
+  if(e.target.id==='lightbox' || e.target.id==='lbStage' || e.target.classList.contains('lb-row')){
     document.getElementById('lightbox').classList.remove('open');
+    closeStackEdit();   // 크게보기를 닫으면 그 위의 스택 편집 판도 함께 닫습니다
+  }
 });
 document.getElementById('lbPrev').addEventListener('click', (e)=>{ e.stopPropagation(); stepGalleryLightbox(-1); });
 document.getElementById('lbNext').addEventListener('click', (e)=>{ e.stopPropagation(); stepGalleryLightbox(1); });
@@ -4220,6 +4643,135 @@ document.getElementById('lbZoom').addEventListener('click', (e)=>{
 });
 document.getElementById('lbThumbPrev').addEventListener('click', (e)=>{ e.stopPropagation(); stepGalleryLbThumbs(-1); });
 document.getElementById('lbThumbNext').addEventListener('click', (e)=>{ e.stopPropagation(); stepGalleryLbThumbs(1); });
+
+/* ============================================================
+   스택 편집 (편집 모드 전용)
+   ------------------------------------------------------------
+   크게보기 위에 덮이는 판입니다. 스택 안의 사진을 정사각 격자로 늘어놓고
+   끌어서 순서를 바꾸며, 한 장씩 빼거나 묶음을 통째로 풀 수 있습니다.
+   순서를 바꾸면 첫 장이 바뀌므로 격자의 대표 사진도 함께 바뀝니다.
+   끌기는 여느 자리와 같은 HTML5 방식이라 손가락으로도 (길게 눌러) 됩니다.
+   ============================================================ */
+let seDragEl = null;
+function stackEditTarget(){
+  if(!isLoggedIn || !galleryLbFolder) return null;
+  const e = lbCurEntryIdx();
+  const entry = galleryLbEntries[e];
+  return isStack(entry) ? { e, entry } : null;
+}
+function openStackEdit(){
+  if(!stackEditTarget()) return;
+  document.getElementById('stackEdit').classList.add('open');
+  renderStackEdit();
+}
+function closeStackEdit(){
+  const el = document.getElementById('stackEdit');
+  if(!el) return;
+  el.classList.remove('open');
+  const grid = document.getElementById('seGrid');
+  if(grid) grid.innerHTML='';   // 닫힌 판에 지난 스택이 남아 있지 않게
+}
+function renderStackEdit(){
+  const grid = document.getElementById('seGrid');
+  const t = stackEditTarget();
+  if(!grid) return;
+  if(!t){ closeStackEdit(); return; }
+  grid.innerHTML='';
+  t.entry.images.forEach((src, s)=>{
+    const cell=document.createElement('div');
+    cell.className='se-cell';
+    cell.draggable = true;
+    cell.dataset.s = s;
+    const img=document.createElement('div');
+    img.className='se-img';
+    applyThumbBg(img, src, 96);
+    cell.appendChild(img);
+    const x=document.createElement('div'); x.className='se-x'; x.innerText='✕';
+    cell.appendChild(x);
+    cell.addEventListener('click', ()=> removeFromStack(Number(cell.dataset.s)));
+    cell.addEventListener('dragstart', ()=>{ seDragEl=cell; cell.classList.add('dragging'); });
+    cell.addEventListener('dragover', (e)=>{
+      e.preventDefault();
+      if(!seDragEl || seDragEl===cell) return;
+      const rects = flipCapture(grid, '.se-cell');
+      const r = cell.getBoundingClientRect();
+      const before = (e.clientX - r.left) < r.width/2;
+      grid.insertBefore(seDragEl, before?cell:cell.nextSibling);
+      flipPlay(rects);
+    });
+    cell.addEventListener('dragend', async ()=>{
+      cell.classList.remove('dragging');
+      if(!seDragEl){ return; }
+      seDragEl = null;
+      /* 끌어 놓은 뒤의 화면 순서를 그대로 스택에 옮겨 적습니다.
+         원본 배열을 직접 고치므로 대표 사진(첫 장)도 함께 바뀝니다. */
+      const order = Array.from(grid.querySelectorAll('.se-cell')).map(c=> Number(c.dataset.s));
+      const cur = stackEditTarget();
+      if(!cur) return;
+      const moved = order.map(i=> cur.entry.images[i]);
+      if(moved.some(v=> typeof v !== 'string')) { renderStackEdit(); return; }
+      cur.entry.images = moved;
+      await gallerySave();
+      /* 보고 있던 장이 어디로 갔는지 따라갑니다 */
+      const wasS = galleryLbFlat[galleryLbIndex] ? galleryLbFlat[galleryLbIndex].s : 0;
+      const nowS = Math.max(0, order.indexOf(wasS));
+      refreshGalleryLb(galleryLbFlat.findIndex(f=> f.e===cur.e && f.s===nowS));
+      renderStackEdit();
+      renderGallery(galleryPost());
+    });
+    grid.appendChild(cell);
+  });
+  /* 끌기와 누르기가 한 칸에 같이 붙어 있어도 엇갈리지 않습니다 — 마우스로
+     끌면 브라우저가 뒤이어 click 을 보내지 않고, 손가락은 initTouchDrag 이
+     끌고 난 뒤의 click 한 번을 막아 줍니다. */
+}
+/* 스택에서 한 장 빼기 — **사진을 지우는 것이 아닙니다.** 묶음에서만 빠져서
+   스택 바로 뒤에 낱장으로 놓입니다(폴더에는 그대로 남습니다).
+   두 장짜리에서 한 장을 빼면 남은 한 장도 묶여 있을 이유가 없으므로 함께
+   낱장이 되고 판을 닫습니다. */
+async function removeFromStack(s){
+  /* 사진이 없어지는 것이 아니라 묶음에서만 빠지는 것이라 따로 묻지 않습니다.
+     되돌리고 싶으면 다시 골라 묶으면 됩니다. */
+  const cur = stackEditTarget();
+  if(!cur || !cur.entry.images[s]) return;
+  const folder = galleryLbFolder;
+  const wasS = galleryLbFlat[galleryLbIndex] ? galleryLbFlat[galleryLbIndex].s : 0;
+  const taken = cur.entry.images.splice(s, 1)[0];
+  /* 뺀 사진을 스택 바로 뒤에 놓습니다. 한 장만 남은 스택은 그 자리에서
+     낱장으로 풀리므로, 두 장이 나란히 남습니다. */
+  if(cur.entry.images.length === 1) folder.images.splice(cur.e, 1, cur.entry.images[0], taken);
+  else if(cur.entry.images.length === 0) folder.images.splice(cur.e, 1, taken);
+  else folder.images.splice(cur.e + 1, 0, taken);
+  await gallerySave();
+  /* 지운 장이 보고 있던 장보다 앞이면 번호가 하나 당겨집니다.
+     범위를 벗어나면 refreshGalleryLb 가 알아서 끝으로 맞춥니다. */
+  refreshGalleryLb(galleryLbIndex - (s <= wasS ? 1 : 0));
+  if(stackEditTarget()) renderStackEdit(); else closeStackEdit();
+  renderGallery(galleryPost());
+}
+/* 풀기 — 스택이 있던 자리에 그 안의 사진을 순서대로 늘어놓습니다.
+   낱장 목록에서의 자리는 그대로라 보고 있던 사진이 그대로 남습니다. */
+async function unstackCurrent(){
+  const t = stackEditTarget();
+  if(!t) return;
+  if(!await siteConfirm(`${t.entry.images.length}장을 낱장으로 풀까요?`)) return;
+  const cur = stackEditTarget();
+  if(!cur) return;
+  const keep = galleryLbIndex;
+  galleryLbFolder.images.splice(cur.e, 1, ...cur.entry.images);
+  await gallerySave();
+  galleryLbEntries = galleryLbFolder.images;
+  closeStackEdit();
+  refreshGalleryLb(keep);
+  renderGallery(galleryPost());
+}
+document.getElementById('lbStackEdit').addEventListener('click', (e)=>{ e.stopPropagation(); openStackEdit(); });
+document.getElementById('seClose').addEventListener('click', (e)=>{ e.stopPropagation(); closeStackEdit(); });
+document.getElementById('seUnstack').addEventListener('click', (e)=>{ e.stopPropagation(); unstackCurrent(); });
+// 판 바깥(어두운 바탕)을 누르면 닫습니다
+document.getElementById('stackEdit').addEventListener('click', (e)=>{
+  if(e.target.id==='stackEdit') closeStackEdit();
+});
 
 /* --- Timeline (원형 마커 + 연결선 + 볼드 타이틀 구조)
    편집 모드(UNLOCKED)에서는 프로필 칸처럼 목록에서 바로 수정합니다.
