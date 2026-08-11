@@ -124,8 +124,14 @@
   ::-webkit-scrollbar-thumb{background:var(--accent);border-radius:0;}
   ::-webkit-scrollbar-thumb:hover{background:#a63a0c;}
   ::-webkit-scrollbar-track{background:transparent;}
-  /* 파이어폭스는 가로대 두께·색을 이 두 줄로만 받습니다 */
-  *{scrollbar-width:thin;scrollbar-color:var(--accent) transparent;}
+  /* 파이어폭스는 위 규칙을 모르고 아래 두 줄로만 받습니다.
+     그런데 요즘 크롬은 둘 다 아는데, scrollbar-color 가 적혀 있으면 위쪽
+     ::-webkit-scrollbar 규칙을 통째로 무시하고 자기 방식으로 그립니다 —
+     그 막대는 모서리가 둥글고 각지게 만들 방법이 없습니다.
+     그래서 ::-webkit-scrollbar 를 모르는 브라우저에서만 쓰도록 가둡니다. */
+  @supports not selector(::-webkit-scrollbar){
+    *{scrollbar-width:thin;scrollbar-color:var(--accent) transparent;}
+  }
 
   /* ---------- 종이 질감 ----------
      화면 전체에 한 겹 덮어 인쇄물 같은 결을 냅니다.
@@ -177,7 +183,7 @@
      (아래 border-bottom 이 예전 .profile-block 이 갖고 있던 그 선입니다).
      사이드바 안쪽 폭이 198px 라 왼쪽 글·단추와 오른쪽 LP 가 나눠 씁니다. */
   /* 구분선 없이, 위아래로 넉넉히 띄웁니다 (아래 여백이 메뉴와의 간격입니다) */
-  .music-block{padding:16px 2px 26px;}
+  .music-block{padding:6px 2px 26px;}
   .mb-body{display:flex;align-items:center;gap:8px;}
   .mb-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px;}
   .mb-top{display:flex;align-items:baseline;justify-content:space-between;gap:4px;}
@@ -312,7 +318,7 @@
   .topbar{position:sticky;top:0;background:rgba(247,245,240,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;z-index:20;}
   /* 상단바 제목은 G마켓 산스, 다만 PAIR·OC 만 프리젠테이션입니다 */
   .topbar h2{font-family:var(--font-gm);font-size:14px;margin:0;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
-  #pairTitle, #ocTitle{font-family:var(--font-free);}
+  /* 게시글 제목(.post-title / .pd-title-input)만 프리젠테이션입니다 — 상단바 제목은 아닙니다 */
   .btn-primary{background:var(--text);color:#fff;border:none;border-radius:var(--radius-sm);padding:8px 14px;font-size:12.5px;font-weight:600;}
   .btn-primary:hover{opacity:.85;}
   .btn-ghost{background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:8px 14px;font-size:12.5px;font-weight:600;}
@@ -1623,7 +1629,7 @@
   .stack-edit-box{background:var(--bg);border:1px solid var(--border);width:min(520px,92vw);
     max-height:min(620px,86vh);display:flex;flex-direction:column;padding:16px 18px 14px;}
   .stack-edit-head{display:flex;align-items:center;gap:10px;flex:none;margin-bottom:12px;}
-  .se-title{font-family:var(--font-gm);font-size:14px;font-weight:700;flex:1;}
+  .se-title{font-family:var(--mono);font-size:14px;font-weight:700;flex:1;}
   .se-unstack{border:1px solid var(--border);background:var(--bg);color:var(--text);
     font-family:var(--mono);font-size:11px;padding:5px 12px;flex:none;}
   .se-unstack:hover{background:var(--surface-2);}
