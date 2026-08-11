@@ -148,6 +148,17 @@ function imgReady(v){
 function prefetchImgs(v){
   try{ window.SiteStore.prefetch(v); }catch(e){}
 }
+/* 글을 크게 열 때 미리 부를 사진 — 갤러리는 뺍니다.
+   글 전체를 넘기면 그 인물의 갤러리 폴더 전부(란시는 138장)를 받아버립니다.
+   사진을 미리 다 받던 시절에는 '순서만 앞당기기'라 공짜였지만, 지금은 부른 것만
+   받으므로 그대로 두면 창 한 번 여는 데 읽기 수백 건이 나갑니다.
+   갤러리는 지금 보고 있는 폴더의 한 페이지(15장)만 필요하고, 그건 격자를
+   그리면서 applyThumbBg 가 알아서 부릅니다. */
+function prefetchDetailImgs(o){
+  if(!o) return;
+  const { galleryFolders, gallery, ...rest } = o;   // 나머지: 표지·프로필·메시지·연혁 등
+  prefetchImgs(rest);
+}
 const pendingPaints = [];
 function whenImgArrives(v, el, redraw){
   if(imgReady(v)) return;
@@ -1711,7 +1722,7 @@ function getCurrentPost(){ return state.pairPosts.find(x=>x.id===currentPairPost
 function openPairDetail(id){
   currentPairPostId=id;
   const p=getCurrentPost();
-  prefetchImgs(p);   // 지금 보는 글의 사진을 대기열 맨 앞으로
+  prefetchDetailImgs(p);   // 갤러리를 뺀 첫 화면 사진만
   /* 창을 먼저 열고 나서 그립니다 — 숨은 상태에서는 사진 칸의 폭·높이가 0 이라
      '꽉 채우는 배율'을 계산할 수 없어 확대가 안 된 크기로 한 번 그렸다가
      곧바로 확대되는 것이 눈에 보입니다. 같은 작업 안에서 이어 하므로
@@ -3045,7 +3056,13 @@ let currentLogViewId = null;
 /* 편집기는 값을 읽어서 도로 저장하는 자리라, 사진이 다 온 뒤에 채웁니다.
    안 온 사진을 빈 자리로 그려놓고 저장하면 그 사진이 지워집니다. */
 async function fillLogEditor(entry){
-  if(entry) await window.SiteStore.ensure(entry.content);
+  if(entry && !(await window.SiteStore.ensure(entry.content))){
+    /* 사진을 못 받았습니다. 이대로 채우면 그 자리가 빈 <img> 가 되고,
+       저장하는 순간 사진이 영영 사라집니다. 창을 닫는 편이 낫습니다. */
+    closeModal('modalLogWrite');
+    alert('사진을 다 불러오지 못했어요. 이대로 수정하면 사진이 사라질 수 있어서 창을 닫았습니다.\n인터넷 연결을 확인하고 다시 열어주세요.');
+    return;
+  }
   document.getElementById('logTitle').value = entry ? entry.title : '';
   document.getElementById('logContent').innerHTML = entry ? imgUrl(logContentToHtml(entry.content)) : '';
   document.getElementById('logSubColor').value       = (entry && entry.subColor)       || LOG_SUB_COLOR_DEFAULT;
@@ -3607,7 +3624,7 @@ function openGalleryLightbox(entries, entryIdx, stackIdx, folder){
   lbAnimating = false;    // 넘기는 중에 닫았다 다시 열어도 막히지 않게
   lbBackShown = 0;        // 스택으로 바로 열면 카드가 펼쳐지며 시작합니다
   lbThumbStart = lbThumbWindow(entryIdx);
-  prefetchImgs(galleryLbImages);   // 크게 보는 사진이 제일 급하다
+  prefetchLbWindow();
   renderGalleryLightbox();
   const lb = document.getElementById('lightbox');
   lb.classList.remove('zoomed');   // 확대는 매번 보통 크기에서 시작합니다
@@ -3627,10 +3644,21 @@ function refreshGalleryLb(keep){
   lbThumbStart = lbThumbWindow(lbCurEntryIdx());
   renderGalleryLightbox();
 }
+/* 크게 보는 중에는 지금 장과 그 앞뒤 몇 장만 부릅니다.
+   폴더 전체를 한꺼번에 부르면 사진 500장짜리 폴더를 한 번 여는 것만으로
+   하루 읽기 한도의 상당 부분이 나갑니다. 넘길 때마다 창이 따라 움직여
+   다음 장은 미리 와 있습니다. */
+const LB_PREFETCH_BACK = 2, LB_PREFETCH_AHEAD = 5;
+function prefetchLbWindow(){
+  const a = Math.max(0, galleryLbIndex - LB_PREFETCH_BACK);
+  const b = Math.min(galleryLbImages.length, galleryLbIndex + LB_PREFETCH_AHEAD + 1);
+  prefetchImgs(galleryLbImages.slice(a, b));
+}
 /* 사진 한 장을 그립니다 (썸네일 줄은 그대로 두고 표시만 갱신) */
 function paintGalleryLightbox(){
   const el = document.getElementById('lightboxImg');
   const src = galleryLbImages[galleryLbIndex];
+  prefetchLbWindow();
   el.src = imgUrl(src);
   whenImgArrives(src, el, ()=>{
     // 그 사이 다른 사진으로 넘어갔으면 덮어쓰지 않는다
@@ -3756,6 +3784,11 @@ function renderGalleryLbThumbs(){
   const wrap = document.getElementById('lbThumbs');
   if(!bar || !wrap) return;
   const n = galleryLbEntries.length;
+  /* 무엇을 그렸는지 적어 둡니다 — 아래 markGalleryLbThumb 이 '다시 그릴
+     필요가 있나'를 판단할 때, 원하는 것과 화면에 실제로 있는 것을 견줍니다. */
+  lbThumbShownStart = lbThumbStart;
+  lbThumbShownFor = galleryLbEntries;
+  lbThumbShownN = n;
   /* 인라인 style 대신 클래스로 감춥니다 — 확대 상태(.lightbox.zoomed)에서도
      썸네일 줄을 CSS 로 접어야 하는데, 인라인 style 은 CSS 로 덮을 수 없습니다.
      칸이 하나라도 그 안에 여러 장이 들었으면(스택) 줄을 띄웁니다. */
@@ -3850,7 +3883,10 @@ function buildLbThumbPop(entry, entryIdx){
 }
 /* 사진이 바뀌면 줄도 그 칸이 가운데 오도록 따라옵니다.
    스택 칸은 보여주는 장이 바뀌므로 같은 칸에 머물러도 다시 그립니다. */
-let lbThumbShownE = -1;   // 줄을 마지막으로 그렸을 때 활성이던 칸
+let lbThumbShownE = -1;      // 줄을 마지막으로 그렸을 때 활성이던 칸
+let lbThumbShownStart = -1;  // 그때 줄 맨 앞에 있던 칸
+let lbThumbShownFor = null;  // 그때의 칸 목록 (어느 폴더의 것인지)
+let lbThumbShownN = -1;      // 그때의 칸 수
 function markGalleryLbThumb(){
   const e = lbCurEntryIdx();
   const want = lbThumbWindow(e);
@@ -3858,8 +3894,21 @@ function markGalleryLbThumb(){
   /* 줄을 다시 그려야 하는 경우: 창이 움직였거나, 스택 칸이 얽혀 있을 때입니다.
      스택 칸은 보여주는 장이 바뀌고 그 위에 뜨는 작은 묶음도 따라가야 하므로,
      같은 칸에 머물러도 다시 그려야 합니다. 낱장끼리 옮겨 다닐 때는 표시만
-     바꾸면 됩니다 — 매번 다시 그리면 아홉 장을 헛되이 다시 만듭니다. */
-  const heavy = want !== lbThumbStart
+     바꾸면 됩니다 — 매번 다시 그리면 아홉 장을 헛되이 다시 만듭니다.
+
+     견주는 대상은 '지금 화면에 그려져 있는 줄'이지 lbThumbStart 가 아닙니다.
+     openGalleryLightbox / refreshGalleryLb 가 부르기 전에 lbThumbStart 를
+     미리 채워 두는 바람에, 여기 오면 want 와 lbThumbStart 가 늘 같아서 —
+     즉 '줄이 움직였나'를 판단할 근거 자체가 지워진 채로 — 같은 폴더에서
+     사진을 다시 열면 줄이 앞서 보던 자리에 그대로 멈춰 있었습니다.
+     (27칸 폴더에서 15번째 칸을 보다 닫고 1번째 칸을 열면 줄은 10~18 그대로.)
+
+     칸 목록도 함께 봅니다. 다른 인물의 첫 칸을 열면 줄 시작이 둘 다 0 이라
+     시작만으로는 같아 보이는데, 목록은 폴더의 배열 그 자체라 폴더가 다르면
+     다른 배열입니다. 스택을 묶거나 풀어 칸 수만 달라진 경우는 길이로 잡습니다. */
+  const heavy = want !== lbThumbShownStart
+             || lbThumbShownFor !== galleryLbEntries
+             || lbThumbShownN !== galleryLbEntries.length
              || isStack(galleryLbEntries[e])
              || isStack(galleryLbEntries[lbThumbShownE])
              || !wrap0 || !wrap0.children.length;
@@ -5821,7 +5870,7 @@ function openOcDetail(id){
   currentOcId = id;
   const o = getCurrentOc();
   if(!o) return;
-  prefetchImgs(o);   // 지금 보는 글의 사진을 대기열 맨 앞으로
+  prefetchDetailImgs(o);   // 갤러리를 뺀 첫 화면 사진만
   /* 창을 먼저 열고 나서 그립니다 (PAIR 과 같은 이유 — 위 주석 참고) */
   openModal('modalOcDetail');
   fillOcDetail(o);
@@ -5978,7 +6027,12 @@ async function openArcWriteModal(existingItem){
   arcAttachments = [];
   renderArcAttachList();
   openModal('modalArcWrite');
-  if(existingItem) await window.SiteStore.ensure([existingItem.content, existingItem.files || []]);
+  if(existingItem && !(await window.SiteStore.ensure([existingItem.content, existingItem.files || []]))){
+    /* fillLogEditor 과 같은 이유 — 빈 자리로 채운 뒤 저장하면 사진이 사라집니다 */
+    closeModal('modalArcWrite');
+    alert('사진을 다 불러오지 못했어요. 이대로 수정하면 사진이 사라질 수 있어서 창을 닫았습니다.\n인터넷 연결을 확인하고 다시 열어주세요.');
+    return;
+  }
   if(editingArcId !== (existingItem ? existingItem.id : null)) return;   // 그 사이 다른 글을 열었으면 그만
   editorEl.innerHTML = existingItem ? imgUrl(existingItem.content) : '';
   // 예전에 넣은 코드 상자에도 복사 버튼이 생기도록
@@ -6255,28 +6309,74 @@ function openArcLightbox(containerEl, clickedImg){
   if(imgs.length===0) return;
   arcLbImages = imgs.map(im=>im.src);
   arcLbIndex = Math.max(0, imgs.indexOf(clickedImg));
+  arcLbAnimating = false;   // 넘기는 중에 닫았다 다시 열어도 막히지 않게
   renderArcLightbox();
   document.getElementById('arcLightbox').classList.add('open');
 }
-function renderArcLightbox(){
+/* 사진만 갈아끼웁니다 — 넘길 때마다 썸네일 줄까지 다시 만들면
+   넘어가는 동안 줄이 통째로 깜빡입니다. */
+function paintArcLightbox(){
   document.getElementById('arcLbMain').src = arcLbImages[arcLbIndex];
+  document.getElementById('arcLbThumbs').querySelectorAll('.arc-lb-thumb')
+    .forEach((t,i)=> t.classList.toggle('active', i===arcLbIndex));
+}
+function renderArcLightbox(){
   const nav = arcLbImages.length>1;
   document.getElementById('arcLbPrev').style.display = nav?'flex':'none';
   document.getElementById('arcLbNext').style.display = nav?'flex':'none';
   const thumbs = document.getElementById('arcLbThumbs');
-  thumbs.style.display = arcLbImages.length>1 ? 'flex' : 'none';
+  thumbs.style.display = nav ? 'flex' : 'none';
   thumbs.innerHTML='';
   arcLbImages.forEach((src,i)=>{
     const t=document.createElement('div');
-    t.className='arc-lb-thumb'+(i===arcLbIndex?' active':'');
+    t.className='arc-lb-thumb';
     t.style.backgroundImage=`url('${src}')`;
     applyThumbBg(t, src, 64);   // .arc-lb-thumb 는 64x64 고정
-    t.addEventListener('click', ()=>{ arcLbIndex=i; renderArcLightbox(); });
+    t.addEventListener('click', ()=> jumpArcLightbox(i));
     thumbs.appendChild(t);
   });
+  paintArcLightbox();
 }
-document.getElementById('arcLbPrev').addEventListener('click', ()=>{ arcLbIndex=(arcLbIndex-1+arcLbImages.length)%arcLbImages.length; renderArcLightbox(); });
-document.getElementById('arcLbNext').addEventListener('click', ()=>{ arcLbIndex=(arcLbIndex+1)%arcLbImages.length; renderArcLightbox(); });
+/* 넘어갈 때 옆으로 밀립니다 — 갤러리 크게보기와 똑같은 움직임이라
+   거리·시간·곡선(LB_SLIDE_PX / LB_OUT_MS / LB_IN_MS / LB_EASE)을 함께 씁니다.
+   따로 두면 한쪽만 손댔을 때 두 곳의 느낌이 어긋납니다.
+   사진 교체를 애니메이션의 finish 이벤트가 아니라 시간에 맡기는 이유는
+   slideGalleryLightbox 의 주석과 같습니다(다른 탭에서는 그 이벤트가 오지 않아
+   사진이 반쯤 사라진 채 멈춥니다). */
+let arcLbAnimating = false;
+function slideArcLightbox(dir, commit){
+  const el = document.getElementById('arcLbMain');
+  if(arcLbAnimating) return;
+  if(!el || !el.animate){ commit(); paintArcLightbox(); return; }
+  arcLbAnimating = true;
+  const out = el.animate(
+    [{transform:'translateX(0)', opacity:1},
+     {transform:`translateX(${-dir*LB_SLIDE_PX}px)`, opacity:0}],
+    {duration:LB_OUT_MS, easing:LB_EASE, fill:'forwards'});
+  setTimeout(()=>{
+    commit();
+    paintArcLightbox();
+    out.cancel();          // fill:forwards 로 붙잡아 둔 자리를 놓아줍니다
+    const back = el.animate(
+      [{transform:`translateX(${dir*LB_SLIDE_PX}px)`, opacity:0},
+       {transform:'translateX(0)', opacity:1}],
+      {duration:LB_IN_MS, easing:LB_EASE});
+    setTimeout(()=>{ back.cancel(); arcLbAnimating = false; }, LB_IN_MS);
+  }, LB_OUT_MS);
+}
+/* 끝에서 반대쪽으로 돌아갑니다(예전 동작 그대로). 미는 방향은 누른 화살표를
+   따르므로, 마지막에서 ▸ 를 누르면 첫 장이 오른쪽에서 들어옵니다. */
+function stepArcLightbox(dir){
+  const n = arcLbImages.length;
+  if(n < 2) return;
+  slideArcLightbox(dir, ()=>{ arcLbIndex = (arcLbIndex + dir + n) % n; });
+}
+function jumpArcLightbox(i){
+  if(i===arcLbIndex || i<0 || i>=arcLbImages.length) return;
+  slideArcLightbox(i>arcLbIndex ? 1 : -1, ()=>{ arcLbIndex = i; });
+}
+document.getElementById('arcLbPrev').addEventListener('click', ()=> stepArcLightbox(-1));
+document.getElementById('arcLbNext').addEventListener('click', ()=> stepArcLightbox(1));
 document.getElementById('arcLbClose').addEventListener('click', ()=> document.getElementById('arcLightbox').classList.remove('open'));
 document.getElementById('arcLightbox').addEventListener('click', (e)=>{
   if(e.target.id==='arcLightbox') document.getElementById('arcLightbox').classList.remove('open');
@@ -6666,6 +6766,16 @@ function renderArchive(){
     wrap.querySelectorAll('.arc-nai-thumb[data-abs]').forEach(el=>{
       const item = items[Number(el.dataset.abs)];
 
+      /* 사진은 나중에 옵니다. 이 격자는 문자열로 한 번에 찍어내느라 대기표를
+         못 달고 있었는데, 예전에는 어차피 사이트의 사진을 전부 미리 받았기
+         때문에 티가 안 났습니다. 지금은 부른 것만 받으므로 여기서 부르지
+         않으면 이 칸은 영영 빈 채로 남습니다. */
+      const anImg = el.querySelector('.an-img');
+      const anSrc = extractFirstImage(item.content);
+      if(anSrc && anImg) whenImgArrives(anSrc, anImg, ()=>{
+        anImg.style.backgroundImage = `url('${imgUrl(anSrc)}')`;
+      });
+
       /* 👁 — 이 글만 잠깐 선명하게. 페이지나 폴더를 옮기면 다시 흐려집니다. */
       const eye = el.querySelector('.an-eye');
       if(eye) eye.addEventListener('click', (e)=>{
@@ -7010,11 +7120,11 @@ function initLightboxSwipe(){
   bind('lightbox', (d)=> stepGalleryLightbox(d));
   bind('arcLightbox', (d)=> stepArcLightbox(d));
 }
-function stepArcLightbox(d){
-  if(arcLbImages.length < 2) return;
-  arcLbIndex = (arcLbIndex + d + arcLbImages.length) % arcLbImages.length;
-  renderArcLightbox();
-}
+/* stepArcLightbox 는 첨부 크게보기 쪽(openArcLightbox 근처)에 있습니다.
+   여기에도 같은 이름의 함수가 하나 더 있었는데, 함수 선언은 뒤에 있는 것이
+   이겨서 화살표·스와이프·키보드가 전부 이쪽 — 애니메이션 없이 곧바로
+   갈아끼우는 쪽 — 을 쓰고 있었습니다. 갤러리와 같은 밀림 효과를 넣으면서
+   지웠습니다. 같은 이름을 다시 만들지 마세요. */
 /* ---- 라이트박스 키보드 좌우 ---- */
 function initLightboxKeys(){
   document.addEventListener('keydown', (e)=>{
@@ -7159,21 +7269,23 @@ function initPhotoIndicator(){
   let doneTimer = null;
   const tick = ()=>{
     const { done, total } = window.SiteStore.blobStats();
-    if(!total) return;                       // 아직 사진 목록도 안 왔을 때
+    if(!total) return;                       // 아직 아무것도 부르지 않았을 때
     if(done >= total){
       if(doneTimer) return;
-      doneTimer = setTimeout(()=>{ el.style.opacity='0'; }, 600);
+      doneTimer = setTimeout(()=>{ el.style.opacity='0'; doneTimer = null; }, 600);
       return;
     }
+    /* 다 받은 줄 알고 걸어둔 숨김 예약을 취소합니다. 사진을 미리 다 받지 않게
+       된 뒤로는 다른 화면으로 넘어갈 때마다 새로 받을 것이 생기므로, 이 표시는
+       한 번 사라졌다가 다시 떠야 합니다. 예약을 안 지우면 두 번째부터
+       '다 받았다'는 판단이 위에서 막혀 표시가 켜진 채로 남았습니다. */
+    if(doneTimer){ clearTimeout(doneTimer); doneTimer = null; }
     el.innerText = `사진 불러오는 중… ${done}/${total}`;
     el.style.opacity = '1';
   };
   window.SiteStore.onBlobs(tick);
-  // 첫 장이 오기 전에도 뜨도록 잠깐 살펴봅니다
-  const warmup = setInterval(()=>{
-    tick();
-    if(window.SiteStore.blobStats().total) clearInterval(warmup);
-  }, 300);
+  // 부르기 시작한 것이 화면에 뜨기 전에도 보이도록 잠깐 살펴봅니다
+  const warmup = setInterval(tick, 300);
   setTimeout(()=> clearInterval(warmup), 15000);
 }
 

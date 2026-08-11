@@ -19,10 +19,10 @@ import {
   onAuthStateChanged, setPersistence, browserLocalPersistence
 } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
 import {
-  getFirestore, doc, getDoc, setDoc, deleteDoc,
+  getFirestore, doc, getDoc, setDoc, deleteDoc, deleteField,
   collection, getDocs, writeBatch
 } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
-import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=81';
+import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=82';
 
 const app  = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -207,6 +207,127 @@ export function inflate(value) {
   return value;
 }
 
+/* ------------------------------------------------------------
+   받은 사진을 브라우저에 보관하기
+   ------------------------------------------------------------
+   Firestore 문서는 브라우저가 캐시해 주지 않습니다. 그래서 새로고침
+   한 번마다 사진을 전부 서버에서 다시 받았고, 그것만으로 하루 읽기
+   한도(5만 건)를 스무 번쯤 여는 것으로 다 써버렸습니다.
+
+   사진 id 는 그 내용의 SHA-256 입니다. 내용이 달라지면 id 도 달라지므로
+   여기 보관된 것이 낡을 수가 없습니다 — 유효기간을 두거나 서버에
+   물어볼 필요 없이, id 가 같으면 무조건 같은 사진입니다.
+
+   실패는 전부 조용히 넘깁니다. 보관이 막혀 있어도(사생활 보호 모드,
+   저장 공간 부족) 예전처럼 서버에서 받으면 그만이고, 화면 동작은
+   달라지지 않아야 합니다. 그래서 아래 함수들은 절대 던지지 않고
+   null 을 돌려줍니다.
+   ------------------------------------------------------------ */
+const IDB_NAME = 'siteBlobs', IDB_VER = 1;
+const S_BLOBS = 'blobs', S_STAT = 'stat';
+const IDB_BUDGET = 350 * 1024 * 1024;   // 넘으면 오래 전에 받은 것부터 버립니다
+let idbPromise = null;
+let idbUsed = null;          // 보관 중인 총 글자 수 (null = 아직 모름)
+let idbTrimming = false;
+
+function idbOpen() {
+  if (idbPromise) return idbPromise;
+  idbPromise = new Promise((res) => {
+    let req;
+    try { req = indexedDB.open(IDB_NAME, IDB_VER); }
+    catch (e) { return res(null); }
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(S_BLOBS)) {
+        /* 't' 는 받은 시각입니다. 자리가 모자랄 때 오래된 것부터 훑기 위한 것입니다. */
+        db.createObjectStore(S_BLOBS, { keyPath: 'id' }).createIndex('t', 't');
+      }
+      if (!db.objectStoreNames.contains(S_STAT)) db.createObjectStore(S_STAT, { keyPath: 'k' });
+    };
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => res(null);
+    req.onblocked = () => res(null);
+  });
+  return idbPromise;
+}
+
+/* 거래(transaction)가 끝날 때 resolve 합니다. 어떤 이유로든 실패하면 null 입니다. */
+function idbRun(stores, mode, fn) {
+  return idbOpen().then(db => {
+    if (!db) return null;
+    return new Promise((res) => {
+      let tx;
+      try { tx = db.transaction(stores, mode); }
+      catch (e) { return res(null); }
+      let out = null;
+      tx.oncomplete = () => res(out);
+      tx.onerror = () => res(null);
+      tx.onabort = () => res(null);
+      try { fn(tx, (v) => { out = v; }); }
+      catch (e) { try { tx.abort(); } catch (e2) {} }
+    });
+  }).catch(() => null);
+}
+
+/* 보관량 기록을 늘리거나(양수) 줄입니다(음수). 같은 거래 안에서 처리합니다. */
+function bumpUsed(tx, delta) {
+  if (!delta) return;
+  const st = tx.objectStore(S_STAT);
+  const r = st.get('used');
+  r.onsuccess = () => {
+    const v = Math.max(0, ((r.result && r.result.v) || 0) + delta);
+    idbUsed = v;
+    st.put({ k: 'used', v });
+  };
+}
+
+function cacheGetBlob(id) {
+  return idbRun([S_BLOBS], 'readonly', (tx, done) => {
+    const r = tx.objectStore(S_BLOBS).get(id);
+    r.onsuccess = () => done(r.result ? r.result.d : null);
+  });
+}
+
+function cachePutBlob(id, dataUrl) {
+  return idbRun([S_BLOBS, S_STAT], 'readwrite', (tx) => {
+    tx.objectStore(S_BLOBS).put({ id, d: dataUrl, n: dataUrl.length, t: Date.now() });
+    bumpUsed(tx, dataUrl.length);
+  }).then(() => { if (idbUsed !== null && idbUsed > IDB_BUDGET) idbTrim(); });
+}
+
+function cacheDropBlobs(ids) {
+  if (!ids.length) return Promise.resolve(null);
+  return idbRun([S_BLOBS, S_STAT], 'readwrite', (tx) => {
+    const st = tx.objectStore(S_BLOBS);
+    let freed = 0, left = ids.length;
+    const step = () => { if (--left === 0) bumpUsed(tx, -freed); };
+    ids.forEach(id => {
+      const g = st.get(id);
+      g.onsuccess = () => { if (g.result) { freed += g.result.n || 0; st.delete(id); } step(); };
+      g.onerror = step;
+    });
+  });
+}
+
+/* 예산을 넘으면 오래 전에 받은 것부터 80% 선까지 버립니다.
+   지워도 손해는 없습니다 — 다음에 필요하면 서버에서 다시 받습니다. */
+function idbTrim() {
+  if (idbTrimming) return Promise.resolve(null);
+  idbTrimming = true;
+  let over = idbUsed - IDB_BUDGET * 0.8;
+  let freed = 0;
+  return idbRun([S_BLOBS, S_STAT], 'readwrite', (tx) => {
+    const cur = tx.objectStore(S_BLOBS).index('t').openCursor();
+    cur.onsuccess = () => {
+      const c = cur.result;
+      if (!c || freed >= over) { bumpUsed(tx, -freed); return; }
+      freed += (c.value.n || 0);
+      c.delete();
+      c.continue();
+    };
+  }).finally(() => { idbTrimming = false; });
+}
+
 /* 큰 데이터는 여러 조각으로 나눠 저장 */
 async function writeBlob(id, dataUrl) {
   const total = Math.ceil(dataUrl.length / CHUNK_CHARS);
@@ -216,21 +337,42 @@ async function writeBlob(id, dataUrl) {
       { d: dataUrl.slice(i * CHUNK_CHARS, (i + 1) * CHUNK_CHARS) });
   }
   knownBlobIds.add(id);
+  blobChunks.set(id, total);
+  cachePutBlob(id, dataUrl);    // 방금 올린 사진을 서버에서 도로 받을 이유는 없습니다
+  return total;                 // 부르는 쪽이 사진 목록에 적어 둡니다
 }
 
 /* 조각들은 한꺼번에 받습니다 — 하나씩 기다리면 조각 수만큼 왕복이 늘어납니다 */
-async function readBlob(id, chunks) {
+async function readBlob(id) {
+  const kept = await cacheGetBlob(id);
+  if (kept) return kept;
+
+  let chunks = blobChunks.get(id);
+  if (!chunks) {
+    /* 사진 목록에 없는 사진입니다. 목록이 아직 안 만들어졌거나 다른 기기에서
+       올린 사진일 수 있습니다. 그 사진 문서만 직접 열어 조각 수를 알아냅니다.
+       목록은 읽기를 아끼기 위한 빠른 길일 뿐 정답이 아니어야 합니다 —
+       목록이 틀렸다고 사진이 안 뜨면 안 됩니다. */
+    const head = await getDoc(doc(blobsRef(), id));
+    if (!head.exists()) throw new Error('사진 문서가 없습니다: ' + id);
+    chunks = head.data().chunks || 1;
+    blobChunks.set(id, chunks);
+    knownBlobIds.add(id);
+  }
+
   const snaps = await Promise.all(
     Array.from({ length: chunks }, (_, i) =>
       getDoc(doc(collection(doc(blobsRef(), id), 'parts'), String(i))))
   );
-  return snaps.map(s => (s.exists() ? (s.data().d || '') : '')).join('');
+  const data = snaps.map(s => (s.exists() ? (s.data().d || '') : '')).join('');
+  if (data) cachePutBlob(id, data);   // 기다리지 않습니다
+  return data;
 }
 
 /* ------------------------------------------------------------
    사진 늦게 받기
    ------------------------------------------------------------
-   사진은 이 사이트 데이터의 99.9% 를 차지합니다(297장 122MB).
+   사진은 이 사이트 데이터의 99.9% 를 차지합니다(984장, 수백 MB).
    예전에는 화면을 그리기 전에 이걸 전부, 그것도 한 장씩 순서대로
    받느라 첫 화면이 20초 넘게 걸렸습니다.
 
@@ -238,6 +380,14 @@ async function readBlob(id, chunks) {
    여러 장씩 동시에 받아 도착하는 대로 채웁니다. 화면 코드가 받는 값에는
    blob://<id> 참조가 그대로 들어 있고, 그릴 때 SiteStore.resolve() 로
    실제 사진을 꺼내 씁니다.
+
+   그리고 '뒤에서'가 '전부'는 아닙니다. 한동안은 첫 화면을 그린 뒤 사이트의
+   사진을 통째로 내려받았는데, Firestore 는 문서 하나가 읽기 한 건이라
+   HOME 만 열어도 방문 한 번에 읽기 2천여 건(사진 목록 984 + 조각 1천여)과
+   수백 MB 가 나갔습니다. 하루 한도가 5만 건이라 스무 번만 열면 사이트가
+   멈췄습니다. 지금은 그리는 쪽이 prefetch 로 부른 것만 받고, 한 번 받은
+   사진은 브라우저에 보관해(위 IndexedDB) 두 번째 방문부터는 서버를
+   부르지 않습니다.
 
    참조를 그대로 두는 것이 중요합니다. 아직 안 받은 자리를 빈 문자열로
    바꿔버리면 그 상태에서 저장이 나갈 때 사진이 영영 지워집니다.
@@ -281,14 +431,22 @@ function announceBlob(id) {
   }, 120);
 }
 
+/* 몇 번을 다시 시도해도 안 오는 사진은 그만 부릅니다 — 없는 사진을 4초마다
+   영원히 다시 부르면 그것만으로 읽기 할당량이 나갑니다. */
+const BLOB_TRIES = 3;
+const blobFails = new Map();
+
 function pumpBlobs() {
   while (blobActive.size < BLOB_CONCURRENCY && blobQueue.length) {
     const id = blobQueue.shift();
     if (blobCache.has(id) || blobActive.has(id)) continue;
     blobActive.add(id);
-    readBlob(id, blobChunks.get(id) || 1)
-      .then(data => { blobCache.set(id, data); announceBlob(id); })
+    readBlob(id)
+      .then(data => { blobFails.delete(id); blobCache.set(id, data); announceBlob(id); })
       .catch(e => {
+        const n = (blobFails.get(id) || 0) + 1;
+        blobFails.set(id, n);
+        if (n >= BLOB_TRIES) { console.warn('사진을 받지 못했습니다 — 그만 시도합니다.', id, e); return; }
         console.warn('사진을 받지 못했습니다 — 잠시 후 다시 시도합니다.', id, e);
         setTimeout(() => { if (!blobCache.has(id)) { blobQueue.push(id); pumpBlobs(); } }, 4000);
       })
@@ -301,28 +459,65 @@ function wantBlobs(ids) {
   const need = ids.filter(id => !blobCache.has(id));
   if (!need.length) return;
   if (!blobIndexed) { need.forEach(id => blobWanted.add(id)); return; }
-  const jump = new Set(need.filter(id => blobChunks.has(id)));
+  /* 사진 목록에 없어도 대기열에 넣습니다 — readBlob 이 그 사진 문서를 직접 보고
+     조각 수를 알아냅니다. 예전에는 여기서 걸러 버려서, 목록이 조금이라도 낡으면
+     그 사진은 영영 뜨지 않았습니다. */
+  const jump = new Set(need.filter(id => !blobActive.has(id)));
   if (!jump.size) return;
+  /* 다시 부른 사진은 실패 기록을 지웁니다 — 위 횟수 제한은 아무도 안 보는데
+     혼자 4초마다 재시도하며 할당량을 갉아먹는 것을 막기 위한 것이지,
+     화면이 실제로 필요로 하는 사진을 포기하기 위한 것이 아닙니다. */
+  jump.forEach(id => blobFails.delete(id));
   blobQueue = [...jump, ...blobQueue.filter(id => !jump.has(id))];
   pumpBlobs();
 }
 
-/* 사진 목록(조각 수만 든 작은 문서들)을 받고 내려받기를 시작합니다 */
-async function loadBlobIndex() {
-  const snap = await getDocs(blobsRef());
+/* ------------------------------------------------------------
+   사진 목록
+   ------------------------------------------------------------
+   사진 id -> 조각 수 표입니다. 이 표는 site/main 문서 안의 blobIndex 필드에
+   들어 있어서, 이미 받아 온 meta 문서에 딸려 옵니다 — 읽기가 0건입니다.
+
+   예전에는 blobs 컬렉션을 통째로 훑어서 만들었는데, Firestore 는 문서 하나가
+   읽기 한 건이라 사진 수만큼(984장이면 984건) 그냥 나갔습니다.
+   ------------------------------------------------------------ */
+let blobIndexComplete = false;   // 표가 이미 있어 컬렉션을 훑을 필요가 없음
+
+function applyBlobIndex(idx) {
   knownBlobIds.clear(); blobChunks.clear();
-  snap.docs.forEach(d => {
-    knownBlobIds.add(d.id);
-    blobChunks.set(d.id, d.data().chunks || 1);
-  });
+  const ids = (idx && typeof idx === 'object') ? Object.keys(idx) : [];
+  ids.forEach(id => { knownBlobIds.add(id); blobChunks.set(id, idx[id] || 1); });
+  blobIndexComplete = ids.length > 0;
   blobIndexed = true;
-  const first = [...blobWanted].filter(id => blobChunks.has(id) && !blobCache.has(id));
+}
+
+/* 화면이 달라고 한 사진만 받기 시작합니다.
+   예전에는 여기서 사이트의 사진을 전부 대기열에 넣었습니다 — HOME 만 보고
+   있어도 갤러리 984장을 통째로 받느라 방문 한 번에 읽기 2천여 건과
+   수백 MB 가 나갔습니다. 지금은 그리는 쪽에서 prefetch 로 부르는 것만 받습니다. */
+function startBlobQueue() {
+  blobQueue = [...blobWanted].filter(id => !blobCache.has(id));
   blobWanted.clear();
-  const front = new Set(first);
-  const rest = [...knownBlobIds].filter(id => !front.has(id) && !blobCache.has(id));
-  blobQueue = [...first, ...rest];
   pumpBlobs();
-  if (isAdmin) collectGarbage();
+}
+
+/* 표가 아직 없을 때(이 기능을 처음 켠 직후) 딱 한 번 만들어 둡니다.
+   관리자만 합니다 — 쓰기 권한이 있어야 하고, 보는 사람에게 984건을
+   물릴 이유가 없습니다. 표가 없는 동안에도 사진은 readBlob 이 문서를
+   직접 찾아 띄우므로 화면은 멀쩡합니다. */
+async function ensureBlobIndex() {
+  if (!isAdmin || blobIndexComplete) return;
+  blobIndexComplete = true;                 // 여러 번 부르더라도 한 번만
+  try {
+    const snap = await getDocs(blobsRef());
+    const idx = {};
+    snap.docs.forEach(d => { idx[d.id] = d.data().chunks || 1; });
+    snap.docs.forEach(d => { knownBlobIds.add(d.id); blobChunks.set(d.id, idx[d.id]); });
+    if (Object.keys(idx).length) await setDoc(metaRef(), { blobIndex: idx }, { merge: true });
+  } catch (e) {
+    blobIndexComplete = false;
+    console.warn('사진 목록을 만들지 못했습니다 — 사진은 개별로 받습니다.', e);
+  }
 }
 
 /* ------------------------------------------------------------
@@ -365,8 +560,10 @@ async function loadAll() {
   cache = raw;
   loaded = true;
 
-  /* 사진은 화면을 그린 뒤에 뒤에서 받습니다 (기다리지 않습니다) */
-  loadBlobIndex().catch(e => console.error('사진 목록을 받지 못했습니다.', e));
+  /* 사진 목록은 방금 받은 meta 문서 안에 들어 있습니다 (추가 읽기 없음) */
+  applyBlobIndex(meta.blobIndex);
+  startBlobQueue();
+  if (isAdmin) ensureBlobIndex().then(collectGarbage);
 }
 
 function stripMeta(o) {
@@ -484,7 +681,11 @@ async function flush() {
   }
 
   try {
-    for (const [id, dataUrl] of pending) await writeBlob(id, dataUrl);
+    /* 새로 올린 사진은 사진 목록(meta 의 blobIndex)에도 적어 둡니다.
+       merge 는 표 안쪽까지 합쳐주므로 다른 사진의 항목은 건드리지 않습니다. */
+    const indexAdds = {};
+    for (const [id, dataUrl] of pending) indexAdds[id] = await writeBlob(id, dataUrl);
+    if (Object.keys(indexAdds).length) metaPatch.blobIndex = indexAdds;
 
     if (Object.keys(metaPatch).length) await setDoc(metaRef(), metaPatch, { merge: true });
 
@@ -527,8 +728,10 @@ window.addEventListener('pagehide', flushNow);
    ------------------------------------------------------------ */
 async function collectGarbage() {
   if (!loaded || !isAdmin) return;
-  /* 사진 목록이 오기 전에는 knownBlobIds 가 비어 있어 판단할 근거가 없습니다.
-     목록이 도착하면 loadBlobIndex 가 다시 부릅니다. */
+  /* 사진 목록이 서기 전에는 knownBlobIds 가 비어 있어 판단할 근거가 없습니다.
+     목록이 서면 loadAll / ensureBlobIndex 가 다시 부릅니다.
+     목록이 불완전해도 안전합니다 — 여기서 지우는 것은 '목록에 있으면서
+     어느 글에서도 안 쓰는' 사진이라, 목록이 모자라면 덜 지울 뿐입니다. */
   if (!blobIndexed) return;
   // 아직 저장되지 않은 변경분이 있으면 건너뜁니다.
   // (방금 추가한 이미지를 "사용 안 함"으로 오판할 수 있음)
@@ -542,18 +745,34 @@ async function collectGarbage() {
   };
   Object.values(savedJson).forEach(scan);
 
+  const removed = [];
   for (const id of [...knownBlobIds]) {
     if (used.has(id)) continue;
     try {
-      const snap = await getDoc(doc(blobsRef(), id));
-      const chunks = snap.exists() ? (snap.data().chunks || 1) : 0;
+      /* 조각 수는 사진 목록에 이미 있습니다 — 없을 때만 문서를 봅니다 */
+      let chunks = blobChunks.get(id);
+      if (!chunks) {
+        const snap = await getDoc(doc(blobsRef(), id));
+        chunks = snap.exists() ? (snap.data().chunks || 1) : 0;
+      }
       for (let i = 0; i < chunks; i++) {
         await deleteDoc(doc(collection(doc(blobsRef(), id), 'parts'), String(i)));
       }
       await deleteDoc(doc(blobsRef(), id));
-      knownBlobIds.delete(id); blobCache.delete(id);
+      knownBlobIds.delete(id); blobChunks.delete(id); blobCache.delete(id);
+      removed.push(id);
     } catch (e) { console.warn('미사용 이미지 정리 실패', id, e); }
   }
+
+  if (!removed.length) return;
+  /* 사진 목록에서도 뺍니다. 지운 항목만 콕 집어 지웁니다 — 표를 통째로 다시 쓰면
+     다른 기기에서 방금 올린 사진의 항목까지 같이 날아갑니다. */
+  try {
+    const patch = {};
+    removed.forEach(id => { patch[id] = deleteField(); });
+    await setDoc(metaRef(), { blobIndex: patch }, { merge: true });
+  } catch (e) { console.warn('사진 목록 정리 실패', e); }
+  cacheDropBlobs(removed);
 }
 
 /* ------------------------------------------------------------
@@ -592,7 +811,8 @@ onAuthStateChanged(auth, (user) => {
   }
   isAdmin = admin;
   notify();
-  if (isAdmin) collectGarbage();
+  /* 로그인은 불러오기보다 늦게 확정될 수 있어, 여기서도 한 번 챙깁니다 */
+  if (isAdmin && loaded) ensureBlobIndex().then(collectGarbage);
 });
 
 /* ------------------------------------------------------------
@@ -663,23 +883,33 @@ const SiteStore = {
 
   /* 이 값 안의 사진이 다 올 때까지 기다립니다.
      편집기처럼 값을 읽어서 도로 저장하는 곳에서만 씁니다 —
-     안 받은 채로 저장하면 그 사진이 지워지기 때문입니다. */
+     안 받은 채로 저장하면 그 사진이 지워지기 때문입니다.
+
+     다 왔으면 true, 시간 안에 못 받았으면 false 입니다. 부르는 쪽은 false 면
+     편집기를 열지 말아야 합니다 — 빈 자리로 그려놓고 저장하는 순간
+     그 사진은 영영 사라집니다. */
   ensure(value, timeoutMs = 20000) {
-    if (missingBlobIds(value).length === 0) return Promise.resolve();
+    if (missingBlobIds(value).length === 0) return Promise.resolve(true);
     wantBlobs(missingBlobIds(value));
     return new Promise(res => {
       let off = null;
-      const timer = setTimeout(finish, timeoutMs);
-      function finish() { clearTimeout(timer); if (off) off(); res(); }
-      off = SiteStore.onBlobs(() => { if (missingBlobIds(value).length === 0) finish(); });
+      const timer = setTimeout(() => finish(false), timeoutMs);
+      function finish(ok) { clearTimeout(timer); if (off) off(); res(ok); }
+      off = SiteStore.onBlobs(() => { if (missingBlobIds(value).length === 0) finish(true); });
     });
   },
 
   /* 사진이 도착할 때마다(묶어서) 알립니다: fn(방금 온 id 들의 Set) */
   onBlobs(fn) { blobListeners.add(fn); return () => blobListeners.delete(fn); },
 
-  /* 진행 표시용 — {받은 장수, 전체 장수} */
-  blobStats() { return { done: blobCache.size, total: blobIndexed ? knownBlobIds.size : 0 }; },
+  /* 진행 표시용 — {받은 장수, 받아야 할 장수}.
+     사이트 전체가 아니라 '지금 화면이 달라고 한 것' 기준입니다.
+     사진을 미리 다 받지 않게 된 뒤로 전체 장수는 표시할 의미가 없습니다 —
+     HOME 만 보고 있으면 갤러리 984장은 애초에 부르지도 않습니다. */
+  blobStats() {
+    const pending = blobQueue.length + blobActive.size;
+    return { done: blobCache.size, total: blobCache.size + pending };
+  },
 
   get(key, fallback) {
     const v = cache[key];
