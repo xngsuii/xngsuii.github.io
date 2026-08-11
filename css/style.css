@@ -224,6 +224,16 @@
   #ytHost{position:fixed;left:0;bottom:0;width:200px;height:150px;
     opacity:0;pointer-events:none;border:0;z-index:0;}
   /* 노래 관리 창 */
+  .mm-or{display:flex;align-items:center;gap:8px;margin:2px 0 10px;color:var(--text-muted);
+    font-family:var(--mono);font-size:10px;}
+  .mm-or::before,.mm-or::after{content:'';flex:1;height:1px;background:var(--surface-2);}
+  .mm-sub{font-weight:400;font-size:10px;color:var(--text-muted);}
+  .mm-file-row{display:flex;align-items:center;gap:10px;min-width:0;}
+  .mm-file-name{flex:1;min-width:0;font-family:var(--mono);font-size:10.5px;color:var(--text-muted);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  /* 목록에서 유튜브 곡과 파일 곡을 구분하는 표식 */
+  .mm-kind{flex:none;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.04em;
+    padding:2px 5px;border:1px solid var(--border);color:var(--text-muted);}
   .mm-hint{font-family:var(--mono);font-size:10px;color:var(--text-muted);margin:10px 0 6px;}
   .mm-list{display:flex;flex-direction:column;gap:4px;max-height:220px;overflow-y:auto;}
   .mm-row{display:flex;align-items:center;gap:8px;padding:7px 8px;border:1px solid var(--border);
@@ -357,22 +367,13 @@
   .home-intro:empty:before{content:'소개글을 입력하세요...';color:var(--text-muted);}
   .to-cards-btn{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);width:36px;height:36px;border-radius:0;border:1px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;}
 
-  /* 아이콘 칸을 정사각형으로 만들고 구분선을 바 높이만큼 세우기 위해
-     왼쪽 패딩을 없애고 align-items:stretch 로 자식들이 바 높이를 물려받게 합니다. */
-  /* 높이를 고정합니다 — 아이콘 칸을 정사각형으로 잡으려면 바 높이가 확정돼야 하고,
-     .topbar(PAIR/ARCHIVE)와 같은 60px 를 써서 화면을 옮겨도 머리줄이 이어져 보입니다. */
-  .cards-topbar{position:sticky;top:0;background:rgba(247,245,240,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:0 28px 0 0;display:flex;align-items:stretch;gap:0;z-index:5;height:60px;}
+  /* PAIR·OC·ARCHIVE 의 .topbar 와 같은 모양입니다 — 좌우 여백 28px, 높이 60px,
+     제목 14px. 예전에는 왼쪽에 ❣ 정사각형 칸과 세로 구분선이 붙어 있어서
+     패딩과 정렬이 달랐는데, 그 칸을 없애고 나머지 머리줄과 줄을 맞췄습니다. */
+  .cards-topbar{position:sticky;top:0;background:rgba(247,245,240,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:0 28px;display:flex;align-items:center;gap:0;z-index:5;height:60px;}
   .to-intro-btn{width:28px;height:28px;border-radius:0;border:1px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:13px;}
-  .cards-topbar h3{font-family:var(--font-gm);font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin:0;flex:1;}
-  .li-title{display:flex;align-items:stretch;gap:0;}
-  /* 아이콘 칸: 바 높이와 같은 변을 가진 정사각형.
-     폭을 직접 지정합니다 — 사파리는 늘어난(stretch) 높이로부터 aspect-ratio 의
-     폭을 계산하지 못해서, 비율만 걸어두면 기호 글자 너비(약 16px)로 쪼그라듭니다.
-     59px = 바 높이 60px - 아래 보더 1px (box-sizing:border-box) */
-  .li-icon{flex:none;width:59px;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text);}
-  /* 구분선: 위/아래 보더에 맞닿도록 세로로 꽉 채움 */
-  .li-divider{width:1px;background:var(--border);flex:none;}
-  .li-label{display:flex;align-items:center;padding-left:14px;}
+  .cards-topbar h3{font-family:var(--font-gm);font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin:0;flex:1;}
+  .li-title{display:flex;align-items:center;gap:0;}
   /* 카드 여섯 장이 남은 높이를 꽉 채웁니다 (2열 x 3행).
      여섯 장이 넘으면 아래 .card-page 로 나뉘어 위아래로 넘어갑니다. */
   .cards-section{padding:0;flex:1;min-height:0;display:flex;}
@@ -1418,7 +1419,9 @@
      테두리도 없앱니다(카드 테두리가 이미 사진을 감싸고 있습니다). */
   .lc-thumb{line-height:0;margin-left:-13px;margin-right:-13px;width:auto;}
   .lc-thumb img{width:100%;height:auto;display:block;border:none;}
-  .lc-foot{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-top:2px;}
+  /* 제목-본문, 본문-날짜줄 사이는 카드 안의 기본 간격(gap:6px)보다 넓게 둡니다 */
+  .lc-text, .lc-thumb{margin-top:6px;}
+  .lc-foot{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-top:10px;}
   .lc-date{font-family:var(--mono);font-size:9px;color:var(--text-muted);}
   .lc-more{font-family:var(--font-gm);font-size:9px;font-weight:700;letter-spacing:.04em;color:var(--text-muted);}
   .log-card:hover .lc-more{color:var(--accent);}

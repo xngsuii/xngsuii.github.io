@@ -190,7 +190,7 @@ let state = {
   cards:[], pairPosts:[], archive:[], archiveSeqCounter:0,
   archiveFolders:[], archiveFoldersOoc:[], archiveFoldersEtc:[], ocPosts:[],
   pairCats:[], ocCats:[],
-  /* 사이드바 뮤직 위젯의 재생 목록 — [{id, videoId, title, artist}] */
+  /* 사이드바 뮤직 위젯의 재생 목록 — [{id, title, artist, videoId 또는 src}] */
   musicList:[]
 };
 
@@ -1384,19 +1384,33 @@ guardUnsavedClose('modalLogWrite', ()=> JSON.stringify([
 /* ============================================================
    사이드바 뮤직 위젯
    ------------------------------------------------------------
-   소리는 화면 밖(#ytHost)에 숨겨 둔 유튜브 플레이어가 냅니다. 저장하는 것은
-   영상 번호와 제목·아티스트뿐이고, 음량은 기기마다 다른 취향이라 이 브라우저에만
-   남깁니다(Firestore 에 넣으면 다른 기기에서 소리가 갑자기 바뀝니다).
+   곡은 두 가지입니다.
+     · 유튜브 곡  {videoId} — 화면 구석에 투명하게 둔 유튜브 플레이어가 냅니다.
+     · 음원 파일  {src}     — 사진과 똑같이 blob:// 로 조각내어 저장되고,
+                              <audio> 가 냅니다. 광고가 없는 대신 용량을 씁니다.
+   아래 재생 함수들은 지금 곡이 어느 쪽인지 보고 알아서 갈라 줍니다.
+
+   음량은 기기마다 다른 취향이라 이 브라우저에만 남깁니다(Firestore 에 넣으면
+   다른 기기에서 소리가 갑자기 바뀝니다).
 
    자동재생은 넣을 수 없습니다 — 브라우저가 소리 나는 자동재생을 막습니다.
-   그래서 열면 첫 곡을 '물려만 두고'(cue) 멈춘 채 기다립니다.
+   그래서 열면 첫 곡을 '물려만 두고' 멈춘 채 기다립니다.
    ============================================================ */
 function normalizeMusicList(list){
   if(!Array.isArray(list)) return [];
-  return list.filter(s=> s && typeof s==='object' && s.videoId)
-    .map(s=>({ id: s.id || Date.now()+Math.random(), videoId: String(s.videoId),
-               title: s.title || '', artist: s.artist || '' }));
+  return list.filter(s=> s && typeof s==='object' && (s.videoId || s.src))
+    .map(s=>{
+      const o = { id: s.id || Date.now()+Math.random(),
+                  title: s.title || '', artist: s.artist || '' };
+      /* 파일이 우선입니다 — 둘 다 들어 있을 일은 없지만, 있다면 광고 없는 쪽을 씁니다 */
+      if(s.src) o.src = String(s.src);
+      else o.videoId = String(s.videoId);
+      return o;
+    });
 }
+/* 음원 파일로 넣은 곡인지 */
+function isFileSong(s){ return !!(s && s.src); }
+function currentSong(){ const l = state.musicList||[]; return l[musicIndex] || null; }
 /* 유튜브 주소에서 영상 번호만 뽑습니다. 짧은 주소·watch·embed·shorts 를 봅니다. */
 function parseYouTubeId(url){
   const s = String(url||'').trim();
@@ -1441,21 +1455,27 @@ function loadYouTubeApi(){
   document.head.appendChild(s);
 }
 window.onYouTubeIframeAPIReady = function(){
-  const list = state.musicList || [];
-  if(!list.length || ytPlayer) return;
+  if(ytPlayer) return;
+  /* 유튜브 곡이 하나도 없으면 플레이어를 만들지 않습니다 */
+  const first = (state.musicList||[]).find(s=> !isFileSong(s));
+  if(!first) return;
   ytPlayer = new YT.Player('ytHost', {
     height:'150', width:'200',
-    videoId: list[Math.min(musicIndex, list.length-1)].videoId,
+    videoId: first.videoId,
     playerVars:{ playsinline:1, controls:0, disablekb:1, rel:0 },
     events:{
       onReady: ()=>{
         ytReady = true;
         ytPlayer.setVolume(musicVolume());
-        /* cue 는 '물려만 두기'라 소리가 나지 않습니다. load 를 쓰면 바로
-           재생하려다 브라우저에 막혀 멈춘 것처럼 보입니다. */
-        renderMusicWidget();
+        /* 지금 곡이 유튜브 곡이면 물려만 둡니다(소리 없음).
+           바로 재생하려 들면 브라우저에 막혀 멈춘 것처럼 보입니다. */
+        const s = currentSong();
+        if(s && !isFileSong(s)) ytPlayer.cueVideoById(s.videoId);
+        paintMusicState();
       },
       onStateChange: (e)=>{
+        // 파일 곡을 듣는 중이면 유튜브 쪽 상태는 무시합니다
+        if(isFileSong(currentSong())) return;
         if(e.data === YT.PlayerState.PLAYING){ musicPlaying = true; startMusicTimer(); }
         else if(e.data === YT.PlayerState.ENDED){ musicPlaying = false; stopMusicTimer(); stepMusic(1, true); }
         else { musicPlaying = false; stopMusicTimer(); }
@@ -1470,6 +1490,25 @@ window.onYouTubeIframeAPIReady = function(){
   });
 };
 
+/* ---- 음원 파일용 <audio> ----
+   유튜브와 달리 우리가 직접 만들고 상태 알림도 직접 받습니다. */
+let audioEl = null;
+function getAudioEl(){
+  if(audioEl) return audioEl;
+  audioEl = new Audio();
+  audioEl.preload = 'metadata';
+  audioEl.addEventListener('play',  ()=>{ musicPlaying = true;  startMusicTimer(); paintMusicState(); });
+  audioEl.addEventListener('pause', ()=>{ musicPlaying = false; stopMusicTimer();  paintMusicState(); });
+  audioEl.addEventListener('ended', ()=>{ musicPlaying = false; stopMusicTimer(); stepMusic(1, true); });
+  audioEl.addEventListener('loadedmetadata', paintMusicTime);
+  audioEl.addEventListener('error', ()=>{
+    if(!audioEl.getAttribute('src')) return;   // 비워둔 상태는 오류가 아닙니다
+    console.warn('이 음원을 재생할 수 없어 다음 곡으로 넘어갑니다.');
+    stepMusic(1, musicPlaying);
+  });
+  return audioEl;
+}
+
 function startMusicTimer(){
   if(musicTimer) return;
   musicTimer = setInterval(paintMusicTime, 500);
@@ -1481,8 +1520,13 @@ function stopMusicTimer(){
 function paintMusicTime(){
   const el = document.getElementById('mbTime');
   if(!el) return;
-  if(!ytReady || !ytPlayer || !ytPlayer.getDuration){ el.innerText = '0:00 / 0:00'; return; }
-  el.innerText = fmtTime(ytPlayer.getCurrentTime()) + ' / ' + fmtTime(ytPlayer.getDuration());
+  let cur = 0, dur = 0;
+  if(isFileSong(currentSong())){
+    if(audioEl){ cur = audioEl.currentTime || 0; dur = audioEl.duration || 0; }
+  }else if(ytReady && ytPlayer && ytPlayer.getDuration){
+    cur = ytPlayer.getCurrentTime(); dur = ytPlayer.getDuration();
+  }
+  el.innerText = fmtTime(cur) + ' / ' + fmtTime(dur);
 }
 /* 재생/멈춤에 따라 달라지는 것만 칠합니다 (LP 회전, ▶/❚❚) */
 function paintMusicState(){
@@ -1492,6 +1536,10 @@ function paintMusicState(){
   if(play){ play.innerText = musicPlaying ? '❚❚' : '▶'; play.title = musicPlaying ? '멈춤' : '재생'; }
   paintMusicTime();
 }
+/* 지금 플레이어에 물려 있는 곡. 화면을 다시 그릴 때마다 곡을 다시 읽어
+   처음부터 재생되는 일이 없도록 견줍니다. */
+let musicLoadedId = null;
+
 function renderMusicWidget(){
   const list = state.musicList || [];
   const titleEl = document.getElementById('mbTitle');
@@ -1509,21 +1557,66 @@ function renderMusicWidget(){
   const vol = document.getElementById('mbVol');
   if(vol) vol.value = musicVolume();
   paintMusicState();
-  if(has) loadYouTubeApi();
+  if(!has){ musicLoadedId = null; return; }
+  if(cur && cur.id !== musicLoadedId) loadCurrentSong(false);
 }
+
+/* 지금 곡을 알맞은 플레이어에 물립니다. play 가 참이면 이어서 재생합니다.
+   두 플레이어가 동시에 소리를 내지 않도록 반대쪽은 반드시 멈춥니다. */
+async function loadCurrentSong(play){
+  const s = currentSong();
+  if(!s) return;
+  const already = (musicLoadedId === s.id);
+  musicLoadedId = s.id;
+  if(already && !play) return;    // 이미 물려 있고 재생하라는 것도 아니면 할 일이 없습니다
+
+  if(isFileSong(s)){
+    if(ytReady && ytPlayer){ try{ ytPlayer.pauseVideo(); }catch(e){} }
+    const a = getAudioEl();
+    /* 음원도 사진과 같은 방식으로 조각내어 저장돼 있어, 아직 안 왔으면 기다립니다.
+       빈 주소를 넣으면 곧바로 오류가 나서 다음 곡으로 넘어가 버립니다. */
+    let url = imgUrl(s.src);
+    if(!url){
+      prefetchImgs(s.src);
+      await window.SiteStore.ensure(s.src, 30000);
+      if(musicLoadedId !== s.id) return;      // 그 사이 다른 곡으로 옮겼으면 그만
+      url = imgUrl(s.src);
+      if(!url){ console.warn('음원을 받지 못했습니다.'); return; }
+    }
+    a.src = url;
+    a.volume = musicVolume()/100;
+    if(play) a.play().catch(()=>{});
+    else paintMusicState();
+    return;
+  }
+
+  // 유튜브 곡
+  if(audioEl){ audioEl.pause(); }
+  if(!ytReady || !ytPlayer){ loadYouTubeApi(); return; }
+  if(play) ytPlayer.loadVideoById(s.videoId);
+  else ytPlayer.cueVideoById(s.videoId);
+}
+
 /* dir 만큼 옮깁니다. play 가 참이면 옮긴 뒤 이어서 재생합니다. */
 function stepMusic(dir, play){
   const list = state.musicList || [];
   if(!list.length) return;
   musicIndex = (musicIndex + dir + list.length) % list.length;
+  /* 먼저 물리고 나서 그립니다. 반대로 하면 renderMusicWidget 이 '새 곡이네' 하고
+     한 번 물려만 두고(cue), 뒤이은 재생 요청을 그 cue 가 덮어써 멈춘 채로 남습니다. */
+  loadCurrentSong(play);
   renderMusicWidget();
-  if(!ytReady || !ytPlayer) return;
-  if(play) ytPlayer.loadVideoById(list[musicIndex].videoId);
-  else ytPlayer.cueVideoById(list[musicIndex].videoId);
 }
 function toggleMusic(){
-  const list = state.musicList || [];
-  if(!list.length) return;
+  const s = currentSong();
+  if(!s) return;
+  if(isFileSong(s)){
+    const a = getAudioEl();
+    if(musicPlaying) a.pause();
+    else if(a.getAttribute('src')) a.play().catch(()=>{});
+    else loadCurrentSong(true);
+    return;
+  }
   if(!ytReady || !ytPlayer){ loadYouTubeApi(); return; }
   if(musicPlaying) ytPlayer.pauseVideo();
   else ytPlayer.playVideo();
@@ -1534,7 +1627,8 @@ bindOnce(document.getElementById('mbNext'), ()=> stepMusic(1, musicPlaying));
 document.getElementById('mbVol').addEventListener('input', (e)=>{
   const v = Number(e.target.value);
   try{ localStorage.setItem(MUSIC_VOL_KEY, String(v)); }catch(err){}
-  if(ytReady && ytPlayer) ytPlayer.setVolume(v);
+  if(ytReady && ytPlayer) ytPlayer.setVolume(v);      // 유튜브는 0~100
+  if(audioEl) audioEl.volume = v/100;                 // <audio> 는 0~1
 });
 
 /* ---- 노래 관리 창 (편집 모드) ---- */
@@ -1547,6 +1641,9 @@ function renderMusicManageList(){
   list.forEach((s, i)=>{
     const row = document.createElement('div');
     row.className = 'mm-row'; row.draggable = true; row.dataset.i = i;
+    const k = document.createElement('span'); k.className='mm-kind';
+    k.innerText = isFileSong(s) ? 'FILE' : 'YT';
+    k.title = isFileSong(s) ? '음원 파일 (광고 없음)' : '유튜브';
     const t = document.createElement('span'); t.className='mm-t'; t.innerText = s.title || '(제목 없음)';
     const a = document.createElement('span'); a.className='mm-a'; a.innerText = s.artist || '';
     const del = document.createElement('button'); del.type='button'; del.className='mm-del'; del.innerText='✕';
@@ -1557,7 +1654,7 @@ function renderMusicManageList(){
       await storageSet('musicList', state.musicList);
       renderMusicManageList(); renderMusicWidget();
     });
-    row.append(t, a, del);
+    row.append(k, t, a, del);
     row.addEventListener('dragstart', ()=>{ draggedMusicIdx = i; row.classList.add('dragging'); });
     row.addEventListener('dragend', ()=>{ row.classList.remove('dragging'); draggedMusicIdx = null; });
     row.addEventListener('dragover', (e)=> e.preventDefault());
@@ -1574,27 +1671,82 @@ function renderMusicManageList(){
   });
 }
 let draggedMusicIdx = null;
-bindOnce(document.getElementById('mbManage'), ()=>{
-  if(!isLoggedIn) return;
+/* 고른 음원 파일 (아직 목록에 넣기 전) */
+let pickedAudio = null;   // { dataUrl, name, bytes }
+
+function clearMusicForm(){
   document.getElementById('mmUrl').value = '';
   document.getElementById('mmTitle').value = '';
   document.getElementById('mmArtist').value = '';
+  pickedAudio = null;
+  const n = document.getElementById('mmFileName');
+  if(n) n.innerText = '선택된 파일 없음';
+}
+bindOnce(document.getElementById('mbManage'), ()=>{
+  if(!isLoggedIn) return;
+  clearMusicForm();
   renderMusicManageList();
   openModal('modalMusic');
+});
+/* 음원은 사진과 달리 줄이지 않고 그대로 넣습니다 —
+   compressImage 는 그림용이라 소리 파일에 쓰면 안 됩니다. */
+document.getElementById('mmFileBtn').addEventListener('click', ()=>{
+  if(!isLoggedIn) return;
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = 'audio/*';
+  input.addEventListener('change', async ()=>{
+    const f = input.files[0];
+    if(!f) return;
+    const nameEl = document.getElementById('mmFileName');
+    const mb = f.size/1048576;
+    /* 글자로 바꿔 담느라 실제로는 3분의 1 쯤 더 커집니다. 저장 한도가 1GB 라
+       큰 파일 몇 개면 사진 넣을 자리가 없어지므로 미리 알려줍니다. */
+    const stored = mb*1.34;
+    if(mb > 12 && !confirm(`이 파일은 ${mb.toFixed(1)}MB 입니다.\n저장하면 약 ${stored.toFixed(1)}MB 를 씁니다.\n계속할까요?`)){
+      return;
+    }
+    nameEl.innerText = '읽는 중…';
+    try{
+      const dataUrl = await new Promise((res, rej)=>{
+        const r = new FileReader();
+        r.onload = ()=> res(r.result); r.onerror = rej;
+        r.readAsDataURL(f);
+      });
+      pickedAudio = { dataUrl, name: f.name, bytes: f.size };
+      nameEl.innerText = `${f.name} (${mb.toFixed(1)}MB → 약 ${stored.toFixed(1)}MB)`;
+      // 제목이 비어 있으면 파일 이름을 넣어 둡니다 (확장자는 뗍니다)
+      const titleEl = document.getElementById('mmTitle');
+      if(!titleEl.value.trim()) titleEl.value = f.name.replace(/\.[^.]+$/, '');
+    }catch(e){
+      pickedAudio = null;
+      nameEl.innerText = '파일을 읽지 못했습니다';
+      console.error(e);
+    }
+  });
+  input.click();
 });
 bindOnce(document.getElementById('mmAddBtn'), async ()=>{
   if(!isLoggedIn) return;
   const url = document.getElementById('mmUrl').value.trim();
-  const videoId = parseYouTubeId(url);
-  if(!videoId){ alert('유튜브 주소를 확인해주세요.\n예) https://youtu.be/dQw4w9WgXcQ'); return; }
   const title = document.getElementById('mmTitle').value.trim();
   const artist = document.getElementById('mmArtist').value.trim();
   if(!title){ alert('제목을 입력해주세요.'); return; }
-  state.musicList.push({ id: Date.now(), videoId, title, artist });
+
+  let song;
+  if(pickedAudio){
+    /* 파일이 우선입니다. dataUrl 은 저장할 때 blob:// 로 조각나 들어갑니다. */
+    song = { id: Date.now(), src: pickedAudio.dataUrl, title, artist };
+  }else{
+    const videoId = parseYouTubeId(url);
+    if(!videoId){
+      alert('유튜브 주소를 넣거나 음원 파일을 골라주세요.\n예) https://youtu.be/dQw4w9WgXcQ');
+      return;
+    }
+    song = { id: Date.now(), videoId, title, artist };
+  }
+  state.musicList.push(song);
   await storageSet('musicList', state.musicList);
-  document.getElementById('mmUrl').value = '';
-  document.getElementById('mmTitle').value = '';
-  document.getElementById('mmArtist').value = '';
+  clearMusicForm();
   renderMusicManageList(); renderMusicWidget();
 });
 document.getElementById('siteName').addEventListener('change', e=>{ if(!isLoggedIn)return; state.siteName=e.target.value; storageSet('siteName',state.siteName); });

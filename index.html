@@ -11,7 +11,7 @@
      css/js를 고칠 때마다 이 숫자를 함께 올려주세요.
      올리지 않으면 브라우저가 옛 파일을 계속 써서
      새 HTML과 짝이 맞지 않아 화면이 깨질 수 있습니다. -->
-<link rel="stylesheet" href="css/style.css?v=85" />
+<link rel="stylesheet" href="css/style.css?v=86" />
 </head>
 <body>
 <div class="app-window">
@@ -113,7 +113,7 @@
 
         <div class="home-page" id="home-cards-page">
           <div class="cards-topbar">
-            <h3 class="li-title"><span class="li-icon">❣</span><span class="li-divider"></span><span class="li-label">Love Interest</span></h3>
+            <h3 class="li-title">Love Interest</h3>
             <button class="add-card-mini" id="addCardBtn" data-editonly title="카드 추가">＋</button>
             <button class="to-intro-btn" id="toIntroBtn" aria-label="위로">︽</button>
           </div>
@@ -734,8 +734,16 @@
   <div class="modal">
     <button class="modal-close" data-close>✕</button>
     <h3>노래 관리</h3>
+    <!-- 유튜브 링크 아니면 음원 파일, 둘 중 하나만 채우면 됩니다 -->
     <div class="form-row"><label>유튜브 링크</label>
       <input type="text" id="mmUrl" placeholder="https://youtu.be/... 또는 https://www.youtube.com/watch?v=..." /></div>
+    <div class="mm-or"><span>또는</span></div>
+    <div class="form-row"><label>음원 파일 <span class="mm-sub">(광고 없음 · 저장 용량을 씁니다)</span></label>
+      <div class="mm-file-row">
+        <button type="button" class="btn-ghost" id="mmFileBtn">파일 고르기</button>
+        <span class="mm-file-name" id="mmFileName">선택된 파일 없음</span>
+      </div>
+    </div>
     <div class="form-row"><label>제목</label><input type="text" id="mmTitle" placeholder="TITLE" /></div>
     <div class="form-row"><label>아티스트</label><input type="text" id="mmArtist" placeholder="ARTIST" /></div>
     <div class="form-actions" style="margin-bottom:4px;"><button class="btn-primary" id="mmAddBtn">추가</button></div>
@@ -882,7 +890,7 @@
      맨 끝에 두어 화면 그리기를 막지 않게 합니다. -->
 <img class="paper-grain" src="img/paper-grain.jpg" alt="" aria-hidden="true" draggable="false" />
 
-<script src="js/main.js?v=85"></script>
-<script type="module" src="js/firebase-store.js?v=85"></script>
+<script src="js/main.js?v=86"></script>
+<script type="module" src="js/firebase-store.js?v=86"></script>
 </body>
 </html>
