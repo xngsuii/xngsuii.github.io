@@ -11,7 +11,7 @@
      css/js를 고칠 때마다 이 숫자를 함께 올려주세요.
      올리지 않으면 브라우저가 옛 파일을 계속 써서
      새 HTML과 짝이 맞지 않아 화면이 깨질 수 있습니다. -->
-<link rel="stylesheet" href="css/style.css?v=83" />
+<link rel="stylesheet" href="css/style.css?v=84" />
 </head>
 <body>
 <div class="app-window">
@@ -33,7 +33,7 @@
             <span class="mb-label">&gt; Now Playing..</span>
             <span class="mb-time" id="mbTime">0:00 / 0:00</span>
           </div>
-          <div class="mb-title" id="mbTitle">노래가 없어요</div>
+          <div class="mb-title" id="mbTitle">♪ TITLE - ARTIST</div>
           <div class="mb-controls">
             <button type="button" class="mb-btn" id="mbPrev" title="이전 곡">≪</button>
             <button type="button" class="mb-btn mb-play" id="mbPlay" title="재생">▶</button>
@@ -736,8 +736,8 @@
     <h3>노래 관리</h3>
     <div class="form-row"><label>유튜브 링크</label>
       <input type="text" id="mmUrl" placeholder="https://youtu.be/... 또는 https://www.youtube.com/watch?v=..." /></div>
-    <div class="form-row"><label>제목</label><input type="text" id="mmTitle" placeholder="Sabbath" /></div>
-    <div class="form-row"><label>아티스트</label><input type="text" id="mmArtist" placeholder="아티스트" /></div>
+    <div class="form-row"><label>제목</label><input type="text" id="mmTitle" placeholder="TITLE" /></div>
+    <div class="form-row"><label>아티스트</label><input type="text" id="mmArtist" placeholder="ARTIST" /></div>
     <div class="form-actions" style="margin-bottom:4px;"><button class="btn-primary" id="mmAddBtn">추가</button></div>
     <div class="mm-hint">끌어서 순서를 바꿉니다 · ✕ 를 누르면 목록에서 빠집니다</div>
     <div class="mm-list" id="mmList"></div>
@@ -861,7 +861,7 @@
         <button class="se-close" id="seClose" type="button" title="닫기">✕</button>
       </div>
       <div class="stack-edit-grid" id="seGrid"></div>
-      <div class="se-hint">끌어서 순서를 바꿉니다 · 사진을 누르면 스택에서 빠집니다(지워지지 않습니다)</div>
+      <div class="se-hint">드래그로 순서 변경 · 사진을 누르면 스택에서 제외</div>
     </div>
   </div>
 </div>
@@ -882,7 +882,7 @@
      맨 끝에 두어 화면 그리기를 막지 않게 합니다. -->
 <img class="paper-grain" src="img/paper-grain.jpg" alt="" aria-hidden="true" draggable="false" />
 
-<script src="js/main.js?v=83"></script>
-<script type="module" src="js/firebase-store.js?v=83"></script>
+<script src="js/main.js?v=84"></script>
+<script type="module" src="js/firebase-store.js?v=84"></script>
 </body>
 </html>

@@ -10,12 +10,10 @@
     src:url('https://cdn.jsdelivr.net/gh/fonts-archive/KoPubDotum/KoPubDotum-Bold.woff2') format('woff2');
     font-weight:700;font-style:normal;font-display:swap;
   }
-  /* 제목 서체 — 영문은 G마켓 산스, 한글은 프리젠테이션(Freesentation).
-     ------------------------------------------------------------------
-     G마켓 산스에도 한글이 들어 있어서 그냥 앞에 적기만 하면 한글까지 그쪽으로
-     나옵니다. 그래서 G마켓 쪽에 unicode-range 로 '영문·숫자·기호 자리에서만
-     써라'고 못박습니다. 그 밖의 글자(한글)는 이 서체에 없는 것으로 쳐서
-     다음 차례인 Freesentation 으로 넘어갑니다.
+  /* 제목 서체 — 자리마다 어느 서체를 쓸지 직접 정합니다(아래 :root 의 변수).
+     한때 '영문은 G마켓, 한글은 프리젠테이션'으로 자동으로 갈라 쓰게 했었는데
+     (unicode-range), 지금은 자리별로 지정하는 방식이라 그 장치를 걷어냈습니다.
+     G마켓 산스에는 한글도 들어 있어 한 서체로 둘 다 나옵니다.
      굵기는 실제로 있는 벌만 받습니다 — 없는 굵기를 부르면 브라우저가 획을
      불려 흉내내는데(가짜 볼드) 한글에서 특히 지저분해집니다.
      500 만 있고 400 을 부르면 브라우저가 알아서 500 을 씁니다. */
@@ -23,16 +21,20 @@
     font-family:'GmarketSans';
     src:url('https://cdn.jsdelivr.net/gh/fonts-archive/GmarketSans/GmarketSansMedium.woff2') format('woff2');
     font-weight:500;font-style:normal;font-display:swap;
-    unicode-range:U+0000-024F,U+2000-206F,U+2070-209F,U+20A0-20BF,U+2190-21FF,U+2200-22FF,U+25A0-25FF,U+2600-26FF;
   }
   @font-face{
     font-family:'GmarketSans';
     src:url('https://cdn.jsdelivr.net/gh/fonts-archive/GmarketSans/GmarketSansBold.woff2') format('woff2');
     font-weight:700;font-style:normal;font-display:swap;
-    unicode-range:U+0000-024F,U+2000-206F,U+2070-209F,U+20A0-20BF,U+2190-21FF,U+2200-22FF,U+25A0-25FF,U+2600-26FF;
   }
-  /* 프리젠테이션 — 제목의 한글을 맡고, 800 은 예전부터 OC·PAIR 프로필 이름
-     전용이었습니다(KoPub 돋움에는 그만큼 두꺼운 벌이 없어 따로 받습니다). */
+  /* HOME 첫 화면 전용 — 조선일보명조 */
+  @font-face{
+    font-family:'ChosunilboMyungjo';
+    src:url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_one@1.0/Chosunilbo_myungjo.woff') format('woff');
+    font-weight:normal;font-style:normal;font-display:swap;
+  }
+  /* 프리젠테이션 — 800 은 예전부터 OC·PAIR 프로필 이름 전용이었습니다
+     (KoPub 돋움에는 그만큼 두꺼운 벌이 없어 따로 받습니다). */
   @font-face{
     font-family:'Freesentation';
     src:url('https://cdn.jsdelivr.net/gh/fonts-archive/Freesentation/Freesentation-4Regular.woff2') format('woff2');
@@ -61,14 +63,17 @@
     --text:#1a1a1a;--text-muted:#6b675e;--accent:#c1440e;--accent-soft:#f4dcce;
     --page-bg:#EF3921;
     --radius:0px;--radius-sm:0px;--mono:'KoPubDotum',sans-serif;font-family:'KoPubDotum',sans-serif;
-    /* 상단바 제목·사이드바 카테고리·HOME 카드 글자에만 쓰는 제목 서체.
-       본문은 --mono(KoPub 돋움) 그대로입니다.
-       (변수 이름 --pixel 은 예전에 픽셀 서체를, 그 뒤로는 조선일보명조를 쓰던
-        흔적이라 그대로 둡니다 — 쓰는 곳이 많아 이름만 바꾸면 놓치는 자리가
-        생깁니다.) */
-    --pixel:'GmarketSans','Freesentation',sans-serif;
+    /* ---- 서체 ----
+       본문은 --mono(KoPub 돋움)이고, 나머지는 자리마다 아래 셋 중에서 고릅니다.
+       어느 자리에 무엇을 쓰는지는 CLAUDE.md 의 '서체' 항목에 표로 있습니다. */
+    --font-gm:'GmarketSans',sans-serif;         /* 상단바·사이드바·카드 이름/장르 */
+    --font-free:'Freesentation',sans-serif;     /* PAIR·OC 제목, LOG 카드 제목 */
+    --font-chosun:'ChosunilboMyungjo',serif;    /* HOME 첫 화면 */
+    /* 예전 이름. 아직 몇 군데가 쓰고 있어 G마켓을 가리키게 두었습니다 —
+       새로 쓸 때는 위 세 개 중에서 골라 주세요. */
+    --pixel:var(--font-gm);
     /* OC·PAIR 프로필 이름에만 쓰는 서체 (위 @font-face 설명 참고) */
-    --name-font:'Freesentation',sans-serif;
+    --name-font:var(--font-free);
     /* 종이 질감의 세기. 0 이면 안 보이고 1 이 가장 진합니다. */
     --grain:1;
     /* 크게보기에서 확대/축소가 움직이는 시간. 사진·썸네일 줄·줄 간격이
@@ -114,8 +119,9 @@
      ::selection 은 배경/글자색만 받습니다(그림자·테두리는 무시됩니다).
      ::-moz-selection 을 따로 적지 않아도 요즘 파이어폭스는 ::selection 을 씁니다. */
   ::selection{background:var(--accent);color:#fff;}
+  /* 가로대는 모서리를 굴리지 않은 직사각형입니다 (사이트가 전부 각진 모양이라) */
   ::-webkit-scrollbar{width:6px;height:6px;}
-  ::-webkit-scrollbar-thumb{background:var(--accent);border-radius:10px;}
+  ::-webkit-scrollbar-thumb{background:var(--accent);border-radius:0;}
   ::-webkit-scrollbar-thumb:hover{background:#a63a0c;}
   ::-webkit-scrollbar-track{background:transparent;}
   /* 파이어폭스는 가로대 두께·색을 이 두 줄로만 받습니다 */
@@ -170,14 +176,15 @@
      예전 이름/소개글 자리입니다. 상자로 가두지 않고 구분선 위에만 놓습니다
      (아래 border-bottom 이 예전 .profile-block 이 갖고 있던 그 선입니다).
      사이드바 안쪽 폭이 198px 라 왼쪽 글·단추와 오른쪽 LP 가 나눠 씁니다. */
-  .music-block{padding:6px 2px 14px;border-bottom:1px solid var(--border);}
+  /* 구분선 없이, 위아래로 넉넉히 띄웁니다 (아래 여백이 메뉴와의 간격입니다) */
+  .music-block{padding:16px 2px 26px;}
   .mb-body{display:flex;align-items:center;gap:8px;}
   .mb-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px;}
   .mb-top{display:flex;align-items:baseline;justify-content:space-between;gap:4px;}
-  .mb-label{font-family:var(--pixel);font-size:8.5px;font-weight:500;letter-spacing:.02em;color:var(--text-muted);white-space:nowrap;}
+  .mb-label{font-family:var(--font-gm);font-size:8.5px;font-weight:500;letter-spacing:.02em;color:var(--text-muted);white-space:nowrap;}
   .mb-time{font-family:var(--mono);font-size:8px;color:var(--text-muted);white-space:nowrap;}
   /* 제목은 한 줄로 자릅니다 — 두 줄이 되면 아래 메뉴가 통째로 밀립니다 */
-  .mb-title{font-family:var(--pixel);font-size:11px;font-weight:700;color:var(--text);
+  .mb-title{font-family:var(--font-gm);font-size:11px;font-weight:700;color:var(--text);
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;}
   .mb-controls{display:flex;align-items:center;gap:2px;margin-top:1px;}
   .mb-btn{flex:none;width:22px;height:20px;display:flex;align-items:center;justify-content:center;
@@ -227,7 +234,10 @@
   /* 메뉴는 배경 상자 없이 글자만 바뀝니다 — 올리거나 고르면 오렌지 + 굵게.
      그래서 쉬는 상태를 500 으로 두었습니다. 700 에서 시작하면 굵어질 자리가
      없어 색만 바뀐 것처럼 보입니다. */
-  .nav-item{display:flex;align-items:center;justify-content:space-between;padding:9px 10px;border-radius:var(--radius-sm);font-family:var(--pixel);font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;color:var(--text);background:transparent;border:none;text-align:left;width:100%;
+  /* 굵어질 때 줄이 위아래로 흔들리지 않도록 높이와 줄간격을 못박습니다 —
+     굵은 글자는 글자 높이가 미세하게 커져서, 안 잡아두면 마우스를 올릴 때마다
+     아래 항목들이 한두 픽셀씩 밀립니다. */
+  .nav-item{display:flex;align-items:center;justify-content:space-between;padding:0 10px;height:34px;line-height:34px;border-radius:var(--radius-sm);font-family:var(--font-gm);font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;color:var(--text);background:transparent;border:none;text-align:left;width:100%;
     transition:color .12s ease;}
   .nav-item:hover,
   .nav-item.active{color:var(--accent);font-weight:700;}
@@ -252,10 +262,15 @@
     .nav-sub:hover{max-height:560px;}
   }
   .nav-sub.open{max-height:560px;}
-  .nav-sub-item{padding:7px 10px;font-family:var(--pixel);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);border-radius:var(--radius-sm);border:none;background:transparent;text-align:left;font-weight:500;}
+  .nav-sub-item{padding:0 10px;height:28px;line-height:28px;font-family:var(--font-gm);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);border-radius:var(--radius-sm);border:none;background:transparent;text-align:left;font-weight:500;}
   .nav-sub-item{transition:color .12s ease;}
-  .nav-sub-item:hover,
-  .nav-sub-item.active{color:var(--accent);font-weight:700;}
+  .nav-sub-item:hover{color:var(--accent);font-weight:700;}
+  /* '지금 여기'는 지금 보고 있는 큰 메뉴 안에서만 칠합니다.
+     .active 는 메뉴마다 따로 남아 있어서, 그것만으로 칠하면 PAIR 에서 OC 로
+     옮긴 뒤에도 PAIR 에서 마지막에 고른 카테고리가 계속 굵게 보입니다. */
+  body[data-view="pair"] #pairSub .nav-sub-item.active,
+  body[data-view="oc"] #ocSub .nav-sub-item.active,
+  body[data-view="archive"] #archiveSub .nav-sub-item.active{color:var(--accent);font-weight:700;}
   /* PAIR·OC 세부 카테고리 — 편집 모드에서 이름 변경(✎)·순서 변경(끌기) */
   .nav-sub-item{display:flex;align-items:center;justify-content:space-between;gap:6px;}
   .nav-sub-item .ns-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -295,7 +310,9 @@
      화면을 옮기거나 로그인할 때마다 제목 줄이 위아래로 튀었습니다.
      .cards-topbar 도 같은 값으로 맞춰 세 화면의 머리줄이 한 높이로 이어집니다. */
   .topbar{position:sticky;top:0;background:rgba(247,245,240,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;z-index:20;}
-  .topbar h2{font-family:var(--pixel);font-size:14px;margin:0;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
+  /* 상단바 제목은 G마켓 산스, 다만 PAIR·OC 만 프리젠테이션입니다 */
+  .topbar h2{font-family:var(--font-gm);font-size:14px;margin:0;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
+  #pairTitle, #ocTitle{font-family:var(--font-free);}
   .btn-primary{background:var(--text);color:#fff;border:none;border-radius:var(--radius-sm);padding:8px 14px;font-size:12.5px;font-weight:600;}
   .btn-primary:hover{opacity:.85;}
   .btn-ghost{background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:8px 14px;font-size:12.5px;font-weight:600;}
@@ -325,7 +342,8 @@
   /* 바깥 테두리 없이 사진·이름·소개글만 놓습니다. 배너 사진에는 자기 테두리가
      따로 있어서, 상자를 두르면 선이 겹쳐 보였습니다.
      좌우 여백(24px)은 남깁니다 — 없애면 소개글이 배너보다 넓어져 폭이 어긋납니다. */
-  .intro-card{width:100%;max-width:420px;border:none;border-radius:0;padding:0 24px;text-align:center;background:var(--bg);font-family:var(--pixel);}
+  /* HOME 첫 화면만 조선일보명조입니다 (사이트 이름·인사말) */
+  .intro-card{width:100%;max-width:420px;border:none;border-radius:0;padding:0 24px;text-align:center;background:var(--bg);font-family:var(--font-chosun);}
   .intro-banner{width:100%;aspect-ratio:3/1;border-radius:0;border:1px solid var(--border);margin-bottom:16px;}
   .intro-sitename{font-family:inherit;font-size:17px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;border:none;background:transparent;text-align:center;width:100%;outline:none;color:var(--text);}
   .intro-divider{color:var(--text-muted);font-size:12px;margin:10px 0;}
@@ -339,7 +357,7 @@
      .topbar(PAIR/ARCHIVE)와 같은 60px 를 써서 화면을 옮겨도 머리줄이 이어져 보입니다. */
   .cards-topbar{position:sticky;top:0;background:rgba(247,245,240,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:0 28px 0 0;display:flex;align-items:stretch;gap:0;z-index:5;height:60px;}
   .to-intro-btn{width:28px;height:28px;border-radius:0;border:1px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:13px;}
-  .cards-topbar h3{font-family:var(--pixel);font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin:0;flex:1;}
+  .cards-topbar h3{font-family:var(--font-gm);font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin:0;flex:1;}
   .li-title{display:flex;align-items:stretch;gap:0;}
   /* 아이콘 칸: 바 높이와 같은 변을 가진 정사각형.
      폭을 직접 지정합니다 — 사파리는 늘어난(stretch) 높이로부터 aspect-ratio 의
@@ -369,10 +387,10 @@
      각 정지점을 50/74 비율로 줄임 (34% → 23%, 74% → 50%) */
   .dream-card .dc-grad{position:absolute;inset:0;background:linear-gradient(90deg, rgba(0,0,0,.85) 0%, rgba(0,0,0,.55) 23%, rgba(0,0,0,0) 50%);z-index:2;pointer-events:none;}
   .dream-card .dc-content{position:absolute;left:0;bottom:0;z-index:3;padding:12px 16px;max-width:78%;}
-  /* 장르·이름·캐치프레이즈만 픽셀 서체 — 설명(.dc-desc)은 본문 서체 그대로입니다 */
-  .dream-card .dc-genre{font-family:var(--pixel);font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;opacity:.9;outline:none;}
-  .dream-card .dc-name{font-family:var(--pixel);font-size:16px;font-weight:700;margin:3px 0;outline:none;}
-  .dream-card .dc-catch{font-family:var(--pixel);font-size:11.5px;opacity:.9;font-style:italic;margin-bottom:5px;outline:none;}
+  /* 이름·장르는 G마켓 산스, 캐치프레이즈와 설명(.dc-desc)은 본문 서체(KoPub 돋움) */
+  .dream-card .dc-genre{font-family:var(--font-gm);font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;opacity:.9;outline:none;}
+  .dream-card .dc-name{font-family:var(--font-gm);font-size:16px;font-weight:700;margin:3px 0;outline:none;}
+  .dream-card .dc-catch{font-family:var(--mono);font-size:11.5px;opacity:.9;font-style:italic;margin-bottom:5px;outline:none;}
   .dream-card .dc-desc{font-size:10.5px;opacity:.85;line-height:1.5;outline:none;}
   @media (hover:hover){
     .dream-card [contenteditable="true"]:hover{outline:1px solid rgba(255,255,255,.4);border-radius:3px;}
@@ -433,7 +451,7 @@
      있으므로, 그것들보다 뒤에 와야 이깁니다(같은 우선순위끼리는 뒤가 이깁니다). */
   .topbar .btn-primary,.topbar .btn-ghost,
   .folder-dd-btn,.folder-dd-item,.folder-dd-add,
-  .pair-select-bar,.pair-select-bar .btn-ghost{font-family:var(--pixel);}
+  .pair-select-bar,.pair-select-bar .btn-ghost{font-family:var(--mono);}
   .folder-dd-sep{height:1px;background:var(--border);margin:4px 2px 0;opacity:.35;}
   .post-card{position:relative;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--bg);cursor:pointer;display:flex;flex-direction:column;min-height:0;}
   .post-card.selectable{cursor:default;}
@@ -460,7 +478,7 @@
   .thumb-panning{cursor:move;}
   .thumb-panning .gt-img,.thumb-panning .an-img{cursor:move;}
   .post-info{padding:10px 12px;flex:none;}
-  .post-title{font-family:var(--pixel);font-size:13px;font-weight:700;margin-top:2px;}
+  .post-title{font-family:var(--font-free);font-size:13px;font-weight:700;margin-top:2px;}
   /* 제목 아래 타이틀(부제) 한 줄 — PAIR·OC 목록이 함께 씁니다.
      한 줄을 넘기면 자르고 … 로 줄입니다(칸 높이가 달라지면 격자가 어긋납니다). */
   .post-catch{font-size:10.5px;color:var(--text-muted);margin-top:2px;
@@ -864,7 +882,7 @@
   .login-error{font-size:11.5px;color:#e0483f;margin-top:-4px;margin-bottom:10px;display:none;}
 
   /* ---- Pair detail (layout-first, inline editable) ---- */
-  .pd-title-input{font-family:var(--pixel);font-size:20.7px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;border:none;outline:none;width:100%;margin:20px 0 0;color:var(--text);background:transparent;}
+  .pd-title-input{font-family:var(--font-free);font-size:20.7px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;border:none;outline:none;width:100%;margin:20px 0 0;color:var(--text);background:transparent;}
   .pd-subtitle-input{font-family:var(--mono);font-size:11px;border:none;outline:none;width:100%;margin:0 0 6px;color:var(--text-muted);background:transparent;}
   .pd-modal-wrap{position:relative;display:flex;align-items:flex-start;}
   .pd-index-tabs{position:absolute;right:100%;top:70px;display:flex;flex-direction:column;}
@@ -1383,18 +1401,20 @@
   .log-card.dragging{opacity:.4;}
   .log-card .lc-check{position:absolute;right:8px;top:8px;}
   .lc-no{font-family:var(--mono);font-size:9px;font-weight:700;color:var(--text-muted);letter-spacing:.06em;}
-  .lc-title{font-family:var(--pixel);font-size:12.5px;font-weight:700;margin:0;color:var(--text);
+  .lc-title{font-family:var(--font-free);font-size:12.5px;font-weight:700;margin:0;color:var(--text);
     line-height:1.35;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
   /* 미리보기 글은 여덟 줄에서 자릅니다. 여덟 줄에 못 미치면 그만큼만 차지하므로
      카드가 저절로 짧아집니다(줄 수 제한은 글자 수가 아니라 line-clamp 가 맡습니다). */
   .lc-text{font-family:var(--mono);font-size:10.5px;line-height:1.65;color:var(--text-muted);
     white-space:pre-wrap;overflow:hidden;display:-webkit-box;-webkit-line-clamp:8;-webkit-box-orient:vertical;}
-  /* 사진이 있는 글은 글 대신 첫 사진이 뜨고, 카드가 사진 높이만큼 자랍니다 */
-  .lc-thumb{width:100%;line-height:0;}
-  .lc-thumb img{width:100%;height:auto;display:block;border:1px solid var(--border);}
+  /* 사진이 있는 글은 글 대신 첫 사진이 뜨고, 카드가 사진 높이만큼 자랍니다.
+     카드의 좌우 여백(13px)을 음수 여백으로 되돌려 사진이 칸 끝까지 닿게 합니다 —
+     테두리도 없앱니다(카드 테두리가 이미 사진을 감싸고 있습니다). */
+  .lc-thumb{line-height:0;margin-left:-13px;margin-right:-13px;width:auto;}
+  .lc-thumb img{width:100%;height:auto;display:block;border:none;}
   .lc-foot{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-top:2px;}
   .lc-date{font-family:var(--mono);font-size:9px;color:var(--text-muted);}
-  .lc-more{font-family:var(--pixel);font-size:9px;font-weight:700;letter-spacing:.04em;color:var(--text-muted);}
+  .lc-more{font-family:var(--font-gm);font-size:9px;font-weight:700;letter-spacing:.04em;color:var(--text-muted);}
   .log-card:hover .lc-more{color:var(--accent);}
 
   .log-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px;table-layout:fixed;}
@@ -1603,7 +1623,7 @@
   .stack-edit-box{background:var(--bg);border:1px solid var(--border);width:min(520px,92vw);
     max-height:min(620px,86vh);display:flex;flex-direction:column;padding:16px 18px 14px;}
   .stack-edit-head{display:flex;align-items:center;gap:10px;flex:none;margin-bottom:12px;}
-  .se-title{font-family:var(--pixel);font-size:14px;font-weight:700;flex:1;}
+  .se-title{font-family:var(--font-gm);font-size:14px;font-weight:700;flex:1;}
   .se-unstack{border:1px solid var(--border);background:var(--bg);color:var(--text);
     font-family:var(--mono);font-size:11px;padding:5px 12px;flex:none;}
   .se-unstack:hover{background:var(--surface-2);}

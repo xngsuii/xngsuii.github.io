@@ -896,6 +896,7 @@ navItems.forEach(btn=>{
     navItems.forEach(b=>b.classList.remove('active')); btn.classList.add('active');
     document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
     document.getElementById('view-'+btn.dataset.view).classList.add('active');
+    markCurrentView(btn.dataset.view);
     pairSub.classList.toggle('open', btn.dataset.view==='pair');
     ocSub.classList.toggle('open', btn.dataset.view==='oc');
     archiveSub.classList.toggle('open', btn.dataset.view==='archive');
@@ -1005,6 +1006,12 @@ function catTitle(nav, id){
 
 let draggedCatId = null;
 
+/* 지금 어느 큰 메뉴에 있는지 body 에 적어 둡니다.
+   세부 카테고리의 '지금 여기' 표시(오렌지+굵게)는 이 값으로 걸립니다 —
+   .active 클래스는 메뉴마다 따로 남아 있어서, 그것만으로 칠하면 다른 메뉴로
+   옮긴 뒤에도 그 메뉴에서 마지막에 고른 카테고리가 계속 굵게 보입니다. */
+function markCurrentView(view){ document.body.dataset.view = view; }
+
 /* 화면만 그 메뉴로 전환합니다(고른 카테고리는 건드리지 않음) —
    '+' 로 새 카테고리를 추가하는 중에 다른 메뉴가 보이면 안 되므로 씁니다. */
 function openNavSection(nav){
@@ -1012,6 +1019,7 @@ function openNavSection(nav){
   document.querySelector(`.nav-item[data-view="${nav.view}"]`).classList.add('active');
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+nav.view).classList.add('active');
+  markCurrentView(nav.view);
   [pairSub, ocSub, archiveSub].forEach(el=> el.classList.toggle('open', el===nav.subEl()));
 }
 
@@ -1247,6 +1255,7 @@ document.querySelectorAll('#archiveSub .nav-sub-item').forEach(btn=>{
     document.querySelector('.nav-item[data-view="archive"]').classList.add('active');
     document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
     document.getElementById('view-archive').classList.add('active');
+    markCurrentView('archive');
     // 고른 쪽만 열어둡니다 — 큰 메뉴를 눌러 들어왔을 때와 같은 모습이 되도록
     archiveSub.classList.add('open');
     pairSub.classList.remove('open');
@@ -1489,7 +1498,8 @@ function renderMusicWidget(){
   if(!titleEl) return;
   if(musicIndex >= list.length) musicIndex = 0;
   const cur = list[musicIndex];
-  titleEl.innerText = list.length ? '♪ ' + musicLabel(cur) : '노래가 없어요';
+  /* 곡이 없을 때는 자리를 비워두지 않고 들어갈 모양을 그대로 보여줍니다 */
+  titleEl.innerText = list.length ? '♪ ' + musicLabel(cur) : '♪ TITLE - ARTIST';
   titleEl.title = list.length ? musicLabel(cur) : '';
   const has = list.length > 0;
   ['mbPrev','mbPlay','mbNext'].forEach(id=>{
@@ -3026,7 +3036,11 @@ function layoutLogCards(wrap){
     card.style.top  = colH[c] + 'px';
     colH[c] += card.offsetHeight + LOG_CARD_GAP;
   });
-  grid.style.height = (Math.max(...colH) - LOG_CARD_GAP) + 'px';
+  /* 마지막 줄 아래에도 줄 간격만큼 남깁니다. 예전에는 그 간격을 빼서 가장 아래
+     카드의 끝이 스크롤 칸의 끝과 정확히 붙었는데, 카드 높이는 소수점이 나오는데
+     offsetHeight 는 정수라 그 차이만큼 마지막 카드가 잘려 보였습니다.
+     올림까지 해서 모자라는 쪽으로는 절대 계산되지 않게 합니다. */
+  grid.style.height = Math.ceil(Math.max(...colH)) + 'px';
 }
 
 function renderLogList(p){
@@ -5093,7 +5107,7 @@ async function removeFromStack(s){
 async function unstackCurrent(){
   const t = stackEditTarget();
   if(!t) return;
-  if(!await siteConfirm(`${t.entry.images.length}장을 낱장으로 풀까요?`)) return;
+  if(!await siteConfirm('스택을 해제할까요?', '해제')) return;
   const cur = stackEditTarget();
   if(!cur) return;
   const keep = galleryLbIndex;
