@@ -11,7 +11,7 @@
      css/js를 고칠 때마다 이 숫자를 함께 올려주세요.
      올리지 않으면 브라우저가 옛 파일을 계속 써서
      새 HTML과 짝이 맞지 않아 화면이 깨질 수 있습니다. -->
-<link rel="stylesheet" href="css/style.css?v=82" />
+<link rel="stylesheet" href="css/style.css?v=83" />
 </head>
 <body>
 <div class="app-window">
@@ -24,10 +24,42 @@
 
   <!-- ================= SIDEBAR ================= -->
   <aside class="sidebar" id="sidebar">
-    <div class="profile-block">
-      <input class="profile-name" id="profileName" value="이름" readonly />
-      <textarea class="profile-bio" id="profileBio" placeholder="간단한 소개글" readonly>여기에 소개글을 적어주세요.</textarea>
+    <!-- 뮤직 위젯 — 예전 이름/소개글 자리입니다. 상자 없이 구분선 위에 놓입니다.
+         소리는 화면 밖에 숨긴 유튜브 플레이어(#ytHost)가 냅니다. -->
+    <div class="music-block">
+      <div class="mb-body">
+        <div class="mb-info">
+          <div class="mb-top">
+            <span class="mb-label">&gt; Now Playing..</span>
+            <span class="mb-time" id="mbTime">0:00 / 0:00</span>
+          </div>
+          <div class="mb-title" id="mbTitle">노래가 없어요</div>
+          <div class="mb-controls">
+            <button type="button" class="mb-btn" id="mbPrev" title="이전 곡">≪</button>
+            <button type="button" class="mb-btn mb-play" id="mbPlay" title="재생">▶</button>
+            <button type="button" class="mb-btn" id="mbNext" title="다음 곡">≫</button>
+            <button type="button" class="mb-btn mb-manage" id="mbManage" data-editonly title="노래 관리">＋</button>
+          </div>
+          <input type="range" class="mb-vol" id="mbVol" min="0" max="100" value="70" title="음량" />
+        </div>
+        <!-- 선으로만 그린 LP. 재생 중에만 제자리에서 돕니다. -->
+        <!-- 홈이 하나도 없는 완전한 원은 돌아도 도는 것이 보이지 않습니다.
+             그래서 한쪽에만 짧은 빛줄기(.mb-lp-glint)를 그어 둡니다. -->
+        <div class="mb-lp" id="mbLp" aria-hidden="true">
+          <svg viewBox="0 0 60 60">
+            <circle cx="30" cy="30" r="28.5" class="mb-lp-edge" />
+            <circle cx="30" cy="30" r="24" />
+            <circle cx="30" cy="30" r="20.5" />
+            <circle cx="30" cy="30" r="17" />
+            <circle cx="30" cy="30" r="13.5" />
+            <circle cx="30" cy="30" r="8.5" class="mb-lp-edge" />
+            <path class="mb-lp-glint" d="M 30 3.5 A 26.5 26.5 0 0 1 51.5 14.5" />
+            <circle cx="30" cy="30" r="1.6" class="mb-lp-hole" />
+          </svg>
+        </div>
+      </div>
     </div>
+    <div id="ytHost"></div>
 
     <nav class="nav">
       <button class="nav-item active" data-view="home">Home</button>
@@ -697,6 +729,22 @@
   </div>
 </div>
 
+<!-- 노래 관리 (편집 모드에서 사이드바 위젯의 ＋) -->
+<div class="modal-overlay" id="modalMusic">
+  <div class="modal">
+    <button class="modal-close" data-close>✕</button>
+    <h3>노래 관리</h3>
+    <div class="form-row"><label>유튜브 링크</label>
+      <input type="text" id="mmUrl" placeholder="https://youtu.be/... 또는 https://www.youtube.com/watch?v=..." /></div>
+    <div class="form-row"><label>제목</label><input type="text" id="mmTitle" placeholder="Sabbath" /></div>
+    <div class="form-row"><label>아티스트</label><input type="text" id="mmArtist" placeholder="아티스트" /></div>
+    <div class="form-actions" style="margin-bottom:4px;"><button class="btn-primary" id="mmAddBtn">추가</button></div>
+    <div class="mm-hint">끌어서 순서를 바꿉니다 · ✕ 를 누르면 목록에서 빠집니다</div>
+    <div class="mm-list" id="mmList"></div>
+    <div class="form-actions"><button class="btn-ghost" data-close>닫기</button></div>
+  </div>
+</div>
+
 <!-- 갤러리 폴더 추가/수정 (브라우저 기본 prompt 대체) -->
 <div class="modal-overlay" id="modalGalleryFolder">
   <div class="modal gf-modal">
@@ -834,7 +882,7 @@
      맨 끝에 두어 화면 그리기를 막지 않게 합니다. -->
 <img class="paper-grain" src="img/paper-grain.jpg" alt="" aria-hidden="true" draggable="false" />
 
-<script src="js/main.js?v=82"></script>
-<script type="module" src="js/firebase-store.js?v=82"></script>
+<script src="js/main.js?v=83"></script>
+<script type="module" src="js/firebase-store.js?v=83"></script>
 </body>
 </html>

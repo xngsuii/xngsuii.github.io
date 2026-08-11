@@ -16,8 +16,6 @@ function applyEditMode(){
   document.getElementById('loginBadge').innerText = isLoggedIn ? 'UNLOCKED' : 'LOCKED';
   document.getElementById('loginBtn').innerText = isLoggedIn ? '로그아웃' : '로그인';
 
-  document.getElementById('profileName').readOnly = !isLoggedIn;
-  document.getElementById('profileBio').readOnly = !isLoggedIn;
   document.getElementById('siteName').readOnly = !isLoggedIn;
   document.getElementById('homeIntro').contentEditable = isLoggedIn ? 'true' : 'false';
 
@@ -191,7 +189,9 @@ let state = {
   siteName:'사이트 이름', homeIntro:'', homeBanner: blankImg(),
   cards:[], pairPosts:[], archive:[], archiveSeqCounter:0,
   archiveFolders:[], archiveFoldersOoc:[], archiveFoldersEtc:[], ocPosts:[],
-  pairCats:[], ocCats:[]
+  pairCats:[], ocCats:[],
+  /* 사이드바 뮤직 위젯의 재생 목록 — [{id, videoId, title, artist}] */
+  musicList:[]
 };
 
 /* ---- PROMPT 폴더 ----
@@ -506,6 +506,7 @@ function migrateArchiveItem(item){
 }
 
 async function loadState(){
+  state.musicList = normalizeMusicList(await storageGet('musicList', []));
   state.profile   = await storageGet('profile', state.profile);
   state.siteName  = await storageGet('siteName', state.siteName);
   state.homeIntro = await storageGet('homeIntro', '');
@@ -541,9 +542,10 @@ async function loadState(){
 }
 
 function renderAll(){
-  document.getElementById('profileName').value = state.profile.name;
-  document.getElementById('profileBio').value = state.profile.bio;
-  autoGrowBio();
+  /* 사이드바의 이름/소개글 칸은 뮤직 위젯에 자리를 내주고 없어졌습니다.
+     state.profile 은 그대로 두고 저장도 계속됩니다 — 화면에서만 뺀 것이라
+     나중에 다시 쓰고 싶어지면 적어둔 내용이 그대로 남아 있습니다. */
+  renderMusicWidget();
   document.getElementById('siteName').value = state.siteName;
   document.getElementById('homeIntro').innerText = state.homeIntro;
   renderNavSubs();
@@ -1371,24 +1373,220 @@ guardUnsavedClose('modalLogWrite', ()=> JSON.stringify([
 ]));
 
 /* ============================================================
-   PROFILE
+   사이드바 뮤직 위젯
+   ------------------------------------------------------------
+   소리는 화면 밖(#ytHost)에 숨겨 둔 유튜브 플레이어가 냅니다. 저장하는 것은
+   영상 번호와 제목·아티스트뿐이고, 음량은 기기마다 다른 취향이라 이 브라우저에만
+   남깁니다(Firestore 에 넣으면 다른 기기에서 소리가 갑자기 바뀝니다).
+
+   자동재생은 넣을 수 없습니다 — 브라우저가 소리 나는 자동재생을 막습니다.
+   그래서 열면 첫 곡을 '물려만 두고'(cue) 멈춘 채 기다립니다.
    ============================================================ */
-/* 사이드바 소개글은 줄이 늘어도 안에서 스크롤되지 않고 칸이 아래로 자랍니다.
-   textarea 는 스스로 커지지 않으므로 내용 높이(scrollHeight)를 직접 넣어 줍니다.
-   재기 전에 높이를 0 으로 눌러야 줄어드는 경우도 제대로 잽니다 — 넣어 둔
-   높이가 남아 있으면 scrollHeight 가 그 아래로 내려가지 않습니다.
-   'auto' 로 두면 안 됩니다. textarea 의 auto 는 '내용에 맞춤'이 아니라
-   rows 속성(기본 2줄) 높이라, 한 줄만 적어도 두 줄 높이가 나옵니다.
-   실제로 0 이 되지는 않습니다 — CSS 의 min-height 가 한 줄분 바닥입니다. */
-function autoGrowBio(){
-  const el = document.getElementById('profileBio');
-  if(!el) return;
-  el.style.height = '0px';
-  el.style.height = el.scrollHeight + 'px';
+function normalizeMusicList(list){
+  if(!Array.isArray(list)) return [];
+  return list.filter(s=> s && typeof s==='object' && s.videoId)
+    .map(s=>({ id: s.id || Date.now()+Math.random(), videoId: String(s.videoId),
+               title: s.title || '', artist: s.artist || '' }));
 }
-document.getElementById('profileName').addEventListener('change', e=>{ if(!isLoggedIn)return; state.profile.name=e.target.value; storageSet('profile',state.profile); });
-document.getElementById('profileBio').addEventListener('input', autoGrowBio);
-document.getElementById('profileBio').addEventListener('change', e=>{ if(!isLoggedIn)return; state.profile.bio=e.target.value; storageSet('profile',state.profile); });
+/* 유튜브 주소에서 영상 번호만 뽑습니다. 짧은 주소·watch·embed·shorts 를 봅니다. */
+function parseYouTubeId(url){
+  const s = String(url||'').trim();
+  if(/^[\w-]{11}$/.test(s)) return s;      // 번호만 붙여넣은 경우
+  const m = s.match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/|\/live\/)([\w-]{11})/);
+  return m ? m[1] : '';
+}
+function musicLabel(s){
+  if(!s) return '';
+  const t = s.title || '(제목 없음)';
+  return s.artist ? `${t} - ${s.artist}` : t;
+}
+function fmtTime(sec){
+  if(!isFinite(sec) || sec<0) sec = 0;
+  const m = Math.floor(sec/60), r = Math.floor(sec%60);
+  return m + ':' + String(r).padStart(2,'0');
+}
+
+let ytPlayer = null;         // 유튜브 플레이어 (API 가 준비된 뒤에 생깁니다)
+let ytReady = false;         // 플레이어가 명령을 받을 수 있는 상태인지
+let musicIndex = 0;          // 지금 곡 (state.musicList 의 자리)
+let musicPlaying = false;
+let musicTimer = null;
+const MUSIC_VOL_KEY = 'siteMusicVol';
+
+function musicVolume(){
+  /* 저장된 것이 없으면 70 입니다. Number(null) 은 NaN 이 아니라 0 이라,
+     '값이 있나'를 먼저 보지 않으면 처음 열 때 음량이 0 이 됩니다. */
+  let raw = null;
+  try{ raw = localStorage.getItem(MUSIC_VOL_KEY); }catch(e){}
+  if(raw==null || raw==='') return 70;
+  const v = Number(raw);
+  return (isFinite(v) && v>=0 && v<=100) ? v : 70;
+}
+
+/* 유튜브 API 는 한 번만 불러옵니다. 준비되면 아래 전역 함수를 불러 줍니다. */
+function loadYouTubeApi(){
+  if(window.YT && window.YT.Player) { onYouTubeIframeAPIReady(); return; }
+  if(document.getElementById('ytApiScript')) return;
+  const s = document.createElement('script');
+  s.id = 'ytApiScript'; s.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(s);
+}
+window.onYouTubeIframeAPIReady = function(){
+  const list = state.musicList || [];
+  if(!list.length || ytPlayer) return;
+  ytPlayer = new YT.Player('ytHost', {
+    height:'150', width:'200',
+    videoId: list[Math.min(musicIndex, list.length-1)].videoId,
+    playerVars:{ playsinline:1, controls:0, disablekb:1, rel:0 },
+    events:{
+      onReady: ()=>{
+        ytReady = true;
+        ytPlayer.setVolume(musicVolume());
+        /* cue 는 '물려만 두기'라 소리가 나지 않습니다. load 를 쓰면 바로
+           재생하려다 브라우저에 막혀 멈춘 것처럼 보입니다. */
+        renderMusicWidget();
+      },
+      onStateChange: (e)=>{
+        if(e.data === YT.PlayerState.PLAYING){ musicPlaying = true; startMusicTimer(); }
+        else if(e.data === YT.PlayerState.ENDED){ musicPlaying = false; stopMusicTimer(); stepMusic(1, true); }
+        else { musicPlaying = false; stopMusicTimer(); }
+        paintMusicState();
+      },
+      onError: ()=>{
+        /* 삭제됐거나 퍼가기가 막힌 영상 — 멈추지 말고 다음 곡으로 넘어갑니다 */
+        console.warn('이 곡을 재생할 수 없어 다음 곡으로 넘어갑니다.');
+        stepMusic(1, musicPlaying);
+      }
+    }
+  });
+};
+
+function startMusicTimer(){
+  if(musicTimer) return;
+  musicTimer = setInterval(paintMusicTime, 500);
+}
+function stopMusicTimer(){
+  if(!musicTimer) return;
+  clearInterval(musicTimer); musicTimer = null;
+}
+function paintMusicTime(){
+  const el = document.getElementById('mbTime');
+  if(!el) return;
+  if(!ytReady || !ytPlayer || !ytPlayer.getDuration){ el.innerText = '0:00 / 0:00'; return; }
+  el.innerText = fmtTime(ytPlayer.getCurrentTime()) + ' / ' + fmtTime(ytPlayer.getDuration());
+}
+/* 재생/멈춤에 따라 달라지는 것만 칠합니다 (LP 회전, ▶/❚❚) */
+function paintMusicState(){
+  const lp = document.getElementById('mbLp');
+  const play = document.getElementById('mbPlay');
+  if(lp) lp.classList.toggle('spinning', musicPlaying);
+  if(play){ play.innerText = musicPlaying ? '❚❚' : '▶'; play.title = musicPlaying ? '멈춤' : '재생'; }
+  paintMusicTime();
+}
+function renderMusicWidget(){
+  const list = state.musicList || [];
+  const titleEl = document.getElementById('mbTitle');
+  if(!titleEl) return;
+  if(musicIndex >= list.length) musicIndex = 0;
+  const cur = list[musicIndex];
+  titleEl.innerText = list.length ? '♪ ' + musicLabel(cur) : '노래가 없어요';
+  titleEl.title = list.length ? musicLabel(cur) : '';
+  const has = list.length > 0;
+  ['mbPrev','mbPlay','mbNext'].forEach(id=>{
+    const b = document.getElementById(id);
+    if(b) b.disabled = !has;
+  });
+  const vol = document.getElementById('mbVol');
+  if(vol) vol.value = musicVolume();
+  paintMusicState();
+  if(has) loadYouTubeApi();
+}
+/* dir 만큼 옮깁니다. play 가 참이면 옮긴 뒤 이어서 재생합니다. */
+function stepMusic(dir, play){
+  const list = state.musicList || [];
+  if(!list.length) return;
+  musicIndex = (musicIndex + dir + list.length) % list.length;
+  renderMusicWidget();
+  if(!ytReady || !ytPlayer) return;
+  if(play) ytPlayer.loadVideoById(list[musicIndex].videoId);
+  else ytPlayer.cueVideoById(list[musicIndex].videoId);
+}
+function toggleMusic(){
+  const list = state.musicList || [];
+  if(!list.length) return;
+  if(!ytReady || !ytPlayer){ loadYouTubeApi(); return; }
+  if(musicPlaying) ytPlayer.pauseVideo();
+  else ytPlayer.playVideo();
+}
+bindOnce(document.getElementById('mbPlay'), toggleMusic);
+bindOnce(document.getElementById('mbPrev'), ()=> stepMusic(-1, musicPlaying));
+bindOnce(document.getElementById('mbNext'), ()=> stepMusic(1, musicPlaying));
+document.getElementById('mbVol').addEventListener('input', (e)=>{
+  const v = Number(e.target.value);
+  try{ localStorage.setItem(MUSIC_VOL_KEY, String(v)); }catch(err){}
+  if(ytReady && ytPlayer) ytPlayer.setVolume(v);
+});
+
+/* ---- 노래 관리 창 (편집 모드) ---- */
+function renderMusicManageList(){
+  const wrap = document.getElementById('mmList');
+  if(!wrap) return;
+  const list = state.musicList || [];
+  if(!list.length){ wrap.innerHTML = '<div class="empty-note" style="padding:10px 0;">아직 추가한 노래가 없어요.</div>'; return; }
+  wrap.innerHTML = '';
+  list.forEach((s, i)=>{
+    const row = document.createElement('div');
+    row.className = 'mm-row'; row.draggable = true; row.dataset.i = i;
+    const t = document.createElement('span'); t.className='mm-t'; t.innerText = s.title || '(제목 없음)';
+    const a = document.createElement('span'); a.className='mm-a'; a.innerText = s.artist || '';
+    const del = document.createElement('button'); del.type='button'; del.className='mm-del'; del.innerText='✕';
+    del.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      state.musicList.splice(i, 1);
+      if(musicIndex >= state.musicList.length) musicIndex = 0;
+      await storageSet('musicList', state.musicList);
+      renderMusicManageList(); renderMusicWidget();
+    });
+    row.append(t, a, del);
+    row.addEventListener('dragstart', ()=>{ draggedMusicIdx = i; row.classList.add('dragging'); });
+    row.addEventListener('dragend', ()=>{ row.classList.remove('dragging'); draggedMusicIdx = null; });
+    row.addEventListener('dragover', (e)=> e.preventDefault());
+    row.addEventListener('drop', async (e)=>{
+      e.preventDefault();
+      if(draggedMusicIdx==null || draggedMusicIdx===i) return;
+      const moved = state.musicList.splice(draggedMusicIdx, 1)[0];
+      state.musicList.splice(i, 0, moved);
+      draggedMusicIdx = null;
+      await storageSet('musicList', state.musicList);
+      renderMusicManageList(); renderMusicWidget();
+    });
+    wrap.appendChild(row);
+  });
+}
+let draggedMusicIdx = null;
+bindOnce(document.getElementById('mbManage'), ()=>{
+  if(!isLoggedIn) return;
+  document.getElementById('mmUrl').value = '';
+  document.getElementById('mmTitle').value = '';
+  document.getElementById('mmArtist').value = '';
+  renderMusicManageList();
+  openModal('modalMusic');
+});
+bindOnce(document.getElementById('mmAddBtn'), async ()=>{
+  if(!isLoggedIn) return;
+  const url = document.getElementById('mmUrl').value.trim();
+  const videoId = parseYouTubeId(url);
+  if(!videoId){ alert('유튜브 주소를 확인해주세요.\n예) https://youtu.be/dQw4w9WgXcQ'); return; }
+  const title = document.getElementById('mmTitle').value.trim();
+  const artist = document.getElementById('mmArtist').value.trim();
+  if(!title){ alert('제목을 입력해주세요.'); return; }
+  state.musicList.push({ id: Date.now(), videoId, title, artist });
+  await storageSet('musicList', state.musicList);
+  document.getElementById('mmUrl').value = '';
+  document.getElementById('mmTitle').value = '';
+  document.getElementById('mmArtist').value = '';
+  renderMusicManageList(); renderMusicWidget();
+});
 document.getElementById('siteName').addEventListener('change', e=>{ if(!isLoggedIn)return; state.siteName=e.target.value; storageSet('siteName',state.siteName); });
 
 document.getElementById('homeIntro').addEventListener('blur', e=>{ if(!isLoggedIn)return; state.homeIntro=e.target.innerText; storageSet('homeIntro',state.homeIntro); });
@@ -1819,6 +2017,7 @@ document.querySelectorAll('.pd-index-tab').forEach(tab=>{
     document.querySelectorAll('.pd-index-tab').forEach(t=>t.classList.remove('active'));
     tab.classList.add('active');
     document.querySelectorAll('.pd-tab-pane').forEach(pn=>pn.classList.toggle('active', pn.dataset.pdpane===tab.dataset.pdtab));
+    relayoutLogCards();   // 숨어 있는 동안에는 폭이 0 이라 칸을 못 나눕니다
   });
 });
 
@@ -2768,6 +2967,68 @@ function filterLogItems(items){
   });
 }
 
+/* ---- LOG 카드 목록 ----
+   한 페이지에 열 장, 세 칸으로 벌여 놓습니다. 카드마다 길이가 달라서
+   벽돌 쌓듯(가장 짧은 칸 아래로) 넣습니다 — 그래야 최신 글이 늘 왼쪽 위에
+   오면서 가로로 읽힙니다. CSS 의 column-count 는 세로로 읽히는 배치라
+   쓰지 않았습니다(1열을 끝까지 채운 뒤 2열로 넘어갑니다).
+   사진이 든 카드는 사진이 도착해야 높이를 알 수 있으므로, 도착할 때마다
+   다시 잽니다(위 renderLogList 의 load 처리). */
+const LOG_PER_PAGE = 10;
+const LOG_CARD_COLS = 3;
+const LOG_CARD_GAP = 10;
+const LOG_PREVIEW_LINES = 8;
+
+/* 미리보기에 넣을 글 — 서식을 걷어내고 빈 줄을 정리합니다.
+   줄 수 제한은 CSS(-webkit-line-clamp)가 맡습니다. 글자 수로 자르면
+   글꼴·칸 너비에 따라 줄 수가 들쭉날쭉해집니다. */
+function logPreviewText(content){
+  return htmlToPlainText(content||'').replace(/\n{2,}/g,'\n').trim();
+}
+
+/* 지금 화면에 있는 LOG 목록을 전부 다시 잽니다.
+   탭·장을 옮겨 이제 막 보이게 된 목록을 위한 것입니다 — 그 전까지는 폭이
+   0 이라 칸을 나눌 수 없었습니다. 위 감시자(ResizeObserver)만으로는 모자랍니다:
+   다른 탭에 가 있는 동안에는 화면을 그리지 않아 감시자가 울리지 않습니다. */
+function relayoutLogCards(){
+  document.querySelectorAll('.log-list').forEach(w=>{
+    if(w.querySelector('.log-cards')) layoutLogCards(w);
+  });
+}
+
+function layoutLogCards(wrap){
+  const grid = wrap.querySelector('.log-cards');
+  if(!grid) return;
+  /* LOG 는 탭을 눌러야 보이는 자리라, 그릴 때는 대개 아직 숨어 있습니다.
+     숨은 동안에는 폭이 0 이라 칸을 나눌 수 없습니다. 예전에는 짧게 스무 번쯤
+     다시 재보고 포기했는데, 탭을 그보다 늦게 누르면 영영 포기한 채로 남아
+     카드가 한 칸 폭으로 늘어나 있었습니다. 폭이 잡히는 순간 알려주도록
+     감시자를 답니다(창 크기가 바뀔 때도 저절로 다시 잽니다).
+     감시 대상은 다시 그려도 살아남는 바깥 칸(.log-list)입니다 — 이 칸은
+     높이가 부모에 묶여 있어, 아래에서 격자 높이를 넣어도 되짚어 울리지 않습니다. */
+  if(!wrap._logRO && window.ResizeObserver){
+    wrap._logRO = new ResizeObserver(()=>{ layoutLogCards(wrap); });
+    wrap._logRO.observe(wrap);
+  }
+  const cards = [...grid.querySelectorAll('.log-card')];
+  if(!cards.length){ grid.style.height=''; return; }
+  const total = grid.clientWidth;
+  if(!total) return;                 // 아직 안 보임 — 위 감시자가 다시 부릅니다
+  const cols = LOG_CARD_COLS;
+  const w = Math.floor((total - LOG_CARD_GAP*(cols-1)) / cols);
+  const colH = new Array(cols).fill(0);
+  cards.forEach(card=>{
+    card.style.width = w + 'px';
+    /* 가장 낮은 칸을 찾습니다. 같으면 왼쪽이 먼저라 첫 줄이 1·2·3 순이 됩니다. */
+    let c = 0;
+    for(let i=1;i<cols;i++) if(colH[i] < colH[c] - 0.5) c = i;
+    card.style.left = (c * (w + LOG_CARD_GAP)) + 'px';
+    card.style.top  = colH[c] + 'px';
+    colH[c] += card.offsetHeight + LOG_CARD_GAP;
+  });
+  grid.style.height = (Math.max(...colH) - LOG_CARD_GAP) + 'px';
+}
+
 function renderLogList(p){
   const wrap=lq('.log-list');
   /* 폴더가 하나뿐이면 보기 모드에서는 탭 줄을 아예 내보내지 않습니다 —
@@ -2775,7 +3036,7 @@ function renderLogList(p){
      탭 줄이 뜨는 보기 모드에서는 그 높이만큼(한 줄) 페이지 크기를 줄입니다 —
      보기 모드는 아래에 검색 줄까지 있어 15줄이 딱 맞게 들어차 있었습니다. */
   const showFolderBar = isLoggedIn || (p.logFolders||[]).length>1;
-  const perPage = (!isLoggedIn && showFolderBar) ? 14 : 15;
+  const perPage = LOG_PER_PAGE;
   renderLogFolderBar(p, showFolderBar);
   /* 지금 고른 폴더의 글만 보여줍니다 (갤러리·PROMPT 와 같은 규칙) */
   const folder = (p.logFolders||[]).find(f=>f.id===currentLogFolderId) || (p.logFolders||[])[0];
@@ -2806,14 +3067,24 @@ function renderLogList(p){
   const start=(pdLogPage-1)*perPage;
   const pageItems = items.slice(start, start+perPage);
 
-  /* 선택 모드에서는 표 맨 앞에 체크 칸이 하나 더 붙습니다 (ARCHIVE 와 같은 모양) */
+  /* 선택 모드에서는 카드 위에 체크 표시가 하나 더 붙습니다 (갤러리와 같은 모양) */
   const sel = isLoggedIn && logSelectMode;
-  let rows='';
+  let cards='';
   pageItems.forEach((entry, i)=>{
     const checked = logSelectedIds.has(entry.id);
-    rows += `<tr data-abs="${start+i}"${checked?' class="selected"':''}>`
-      + (sel?`<td class="arc-td-check"><div class="gallery-check${checked?' checked':''}">${checked?'✓':''}</div></td>`:'')
-      + `<td>${displayNo.get(entry)||''}</td><td class="log-td-title">${entry.pinned?'<span class="arc-pin-tag">📌</span> ':''}${escapeHtml(entry.title)}</td><td>${entry.date||''}</td></tr>`;
+    const thumb = extractFirstImage(entry.content);
+    /* 사진이 있으면 글 대신 첫 사진을 미리 보여줍니다. 아직 안 받은 사진은
+       imgUrl 이 '' 을 돌려주므로 자리만 잡아두고 아래에서 대기표를 답니다. */
+    const body = thumb
+      ? `<div class="lc-thumb" data-src="1"><img alt="" /></div>`
+      : `<div class="lc-text">${escapeHtml(logPreviewText(entry.content))}</div>`;
+    cards += `<article class="log-card${checked?' selected':''}${thumb?' has-img':''}" data-abs="${start+i}">`
+      + (sel?`<div class="gallery-check lc-check${checked?' checked':''}">${checked?'✓':''}</div>`:'')
+      + `<div class="lc-no">${String(displayNo.get(entry)||'').padStart(2,'0')}</div>`
+      + `<h4 class="lc-title">${entry.pinned?'<span class="arc-pin-tag">📌</span> ':''}${escapeHtml(entry.title)}</h4>`
+      + body
+      + `<div class="lc-foot"><span class="lc-date">${entry.date||''}</span><span class="lc-more">MORE →</span></div>`
+      + `</article>`;
   });
   let pag='';
   if(totalPages>1){
@@ -2821,13 +3092,31 @@ function renderLogList(p){
     for(let i=1;i<=totalPages;i++){ pag += `<button class="log-pg-btn ${i===pdLogPage?'active':''}" data-pg="${i}">${i}</button>`; }
     pag += `<button class="log-pg-btn" data-pg="next" ${pdLogPage===totalPages?'disabled':''}>&gt;</button>`;
   }
-  wrap.innerHTML = `<div class="log-table-scroll"><table class="log-table" id="pdLogTable"><thead><tr>${sel?'<th class="arc-th-check"></th>':''}<th>No</th><th>LOG</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table></div>
+  wrap.innerHTML = `<div class="log-cards-scroll"><div class="log-cards" id="pdLogCards">${cards}</div></div>
     <div class="log-pagination-slot">${totalPages>1?`<div class="log-pagination">${pag}</div>`:''}</div>`;
   updateLogSelectBtns();
 
-  wrap.querySelectorAll('tr[data-abs]').forEach(tr=>{
-    const entry = items[Number(tr.dataset.abs)];
-    tr.addEventListener('click', ()=>{
+  wrap.querySelectorAll('.log-card[data-abs]').forEach(card=>{
+    const entry = items[Number(card.dataset.abs)];
+    /* 사진은 늦게 올 수 있습니다. 도착하면 그 칸만 다시 칠하고 배치를 다시 잽니다 */
+    const im = card.querySelector('.lc-thumb img');
+    if(im){
+      const src = extractFirstImage(entry.content);
+      /* 아직 안 온 사진에 빈 src 를 넣으면 곧바로 error 가 나서, 도착하기도 전에
+         자리를 접어 버립니다. 주소가 생겼을 때만 넣고 그때까지는 비워 둡니다
+         (src 가 없는 img 는 높이 0 이라 카드가 제목·날짜만큼만 차지합니다). */
+      const draw = ()=>{ const u = imgUrl(src); if(u) im.src = u; };
+      draw();
+      whenImgArrives(src, im, draw);
+      im.addEventListener('load', ()=> layoutLogCards(wrap));
+      im.addEventListener('error', ()=>{
+        // 정말 못 읽는 사진일 때만 자리를 접습니다
+        const box = im.closest('.lc-thumb');
+        if(box) box.remove();
+        layoutLogCards(wrap);
+      });
+    }
+    card.addEventListener('click', ()=>{
       if(sel){
         if(logSelectedIds.has(entry.id)) logSelectedIds.delete(entry.id);
         else logSelectedIds.add(entry.id);
@@ -2836,17 +3125,18 @@ function renderLogList(p){
       }
       openLogView(entry);
     });
-    /* 편집 모드에서는 줄을 끌어다 폴더 탭에 놓아 옮길 수 있습니다 */
+    /* 편집 모드에서는 카드를 끌어다 폴더 탭에 놓아 옮길 수 있습니다 */
     if(isLoggedIn){
-      tr.setAttribute('draggable','true');
-      tr.addEventListener('dragstart', (e)=>{
+      card.setAttribute('draggable','true');
+      card.addEventListener('dragstart', (e)=>{
         draggedLogId = entry.id;
-        tr.classList.add('dragging');
+        card.classList.add('dragging');
         if(e.dataTransfer){ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', String(entry.id)); }
       });
-      tr.addEventListener('dragend', ()=>{ tr.classList.remove('dragging'); draggedLogId=null; });
+      card.addEventListener('dragend', ()=>{ card.classList.remove('dragging'); draggedLogId=null; });
     }
   });
+  layoutLogCards(wrap);
   wrap.querySelectorAll('.log-pg-btn').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       if(btn.dataset.pg==='prev') pdLogPage=Math.max(1,pdLogPage-1);
@@ -5216,6 +5506,7 @@ function setOcPage(idx, animate){
       dots.appendChild(d);
     });
   }
+  relayoutLogCards();   // LOG 장이 이제 막 보이게 됐을 수 있습니다
 }
 
 function renderOcKeywords(o){
@@ -5906,12 +6197,15 @@ function initOcDetail(){
     return box.scrollHeight > box.clientHeight + 1;
   };
 
-  /* 안에서 따로 스크롤되는 칸(자유 텍스트 / LOG 표) 위에서는
-     그 칸이 끝까지 내려간 뒤에야 페이지를 넘깁니다. */
+  /* 안에서 따로 스크롤되는 칸(자유 텍스트 / LOG 카드 목록) 위에서는
+     그 칸이 끝까지 내려간 뒤에야 페이지를 넘깁니다.
+     .log-cards-scroll 은 LOG 가 표에서 카드로 바뀌며 생긴 칸입니다 — 카드는
+     길이가 제각각이라 스크롤이 생기므로 여기 없으면 목록을 내리는 도중
+     인물 페이지가 같이 넘어가 버립니다. */
   const consumedByInnerScroll = (target, down)=>{
     if(!target || !target.closest) return false;
     // 좁은 화면에서는 장 자체도 스크롤됩니다 (.oc-page)
-    const box = target.closest('.oc-free-box, .side-memo-box, .log-table-scroll, .oc-page');
+    const box = target.closest('.oc-free-box, .side-memo-box, .log-table-scroll, .log-cards-scroll, .oc-page');
     if(!box) return false;
     if(box.scrollHeight <= box.clientHeight + 1) return false;
     const atTop = box.scrollTop <= 0;
