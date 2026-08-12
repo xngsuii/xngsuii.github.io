@@ -11,7 +11,7 @@
      css/js를 고칠 때마다 이 숫자를 함께 올려주세요.
      올리지 않으면 브라우저가 옛 파일을 계속 써서
      새 HTML과 짝이 맞지 않아 화면이 깨질 수 있습니다. -->
-<link rel="stylesheet" href="css/style.css?v=86" />
+<link rel="stylesheet" href="css/style.css?v=90" />
 </head>
 <body>
 <div class="app-window">
@@ -33,7 +33,14 @@
             <span class="mb-label">&gt; Now Playing..</span>
             <span class="mb-time" id="mbTime">0:00 / 0:00</span>
           </div>
-          <div class="mb-title" id="mbTitle">♪ TITLE - ARTIST</div>
+          <!-- ♪ 는 옆에 두고, 제목과 아티스트는 그 오른쪽에서 왼쪽 끝을 맞춥니다 -->
+          <div class="mb-song">
+            <span class="mb-note" aria-hidden="true">♪</span>
+            <div class="mb-song-text">
+              <div class="mb-title" id="mbTitle">TITLE</div>
+              <div class="mb-artist" id="mbArtist">ARTIST</div>
+            </div>
+          </div>
           <div class="mb-controls">
             <button type="button" class="mb-btn" id="mbPrev" title="이전 곡">≪</button>
             <button type="button" class="mb-btn mb-play" id="mbPlay" title="재생">▶</button>
@@ -42,10 +49,12 @@
           </div>
           <input type="range" class="mb-vol" id="mbVol" min="0" max="100" value="70" title="음량" />
         </div>
-        <!-- 선으로만 그린 LP. 재생 중에만 제자리에서 돕니다. -->
-        <!-- 홈이 하나도 없는 완전한 원은 돌아도 도는 것이 보이지 않습니다.
-             그래서 한쪽에만 짧은 빛줄기(.mb-lp-glint)를 그어 둡니다. -->
-        <div class="mb-lp" id="mbLp" aria-hidden="true">
+        <!-- 선으로만 그린 LP. 재생 중에만 제자리에서 돕니다.
+             주황 원(.mb-lp-prog)은 재생 위치입니다. 맨 바깥 테두리가 아니라
+             한 줄 안쪽 홈(r=24) 위에 겹쳐 놓았습니다 — 0:00 에는 보이지 않고
+             곡이 끝나면 완전한 원이 됩니다(12시에서 시작하도록 -90° 돌려 둡니다).
+             누르면 재생 목록이 사이드바 옆으로 열립니다. -->
+        <button type="button" class="mb-lp" id="mbLp" title="재생 목록">
           <svg viewBox="0 0 60 60">
             <circle cx="30" cy="30" r="28.5" class="mb-lp-edge" />
             <circle cx="30" cy="30" r="24" />
@@ -53,10 +62,11 @@
             <circle cx="30" cy="30" r="17" />
             <circle cx="30" cy="30" r="13.5" />
             <circle cx="30" cy="30" r="8.5" class="mb-lp-edge" />
-            <path class="mb-lp-glint" d="M 30 3.5 A 26.5 26.5 0 0 1 51.5 14.5" />
+            <circle cx="30" cy="30" r="24" class="mb-lp-prog" id="mbLpProg"
+                    transform="rotate(-90 30 30)" />
             <circle cx="30" cy="30" r="1.6" class="mb-lp-hole" />
           </svg>
-        </div>
+        </button>
       </div>
     </div>
     <div id="ytHost"></div>
@@ -235,9 +245,11 @@
   </div>
 </div>
 
-<!-- Pair detail / edit popup (레이아웃 그대로, 인라인 편집) -->
+<!-- Pair detail / edit popup — OC 창처럼 INFO/GALLERY/LOG 세 장이 위아래로 넘어갑니다 -->
 <div class="modal-overlay" id="modalPairDetail">
   <div class="pd-modal-wrap">
+  <!-- 몇 번째 장인지 알려주는 점. 창 바깥 왼쪽에 세로로 놓입니다 -->
+  <div class="pd-page-dots" id="pdPageDots"></div>
   <div class="modal wide pd-modal">
     <button class="modal-close" data-close>✕</button>
 
@@ -398,8 +410,9 @@
 
         <div class="pd-tab-pane pd-tab-pane-gallery" data-pdpane="gallery">
           <div class="gallery-folder-bar" id="galleryFolderBar"></div>
-          <div class="gallery-grid-wrap" id="galleryGridWrap">
-            <div class="gallery-scroll-hint up" id="galleryScrollHintUp" style="display:none;">︽</div>
+          <!-- .horiz: 이미지 페이지를 가로로 넘깁니다 (세로 스크롤은 창 페이지 넘김에 씁니다) -->
+          <div class="gallery-grid-wrap horiz" id="galleryGridWrap">
+            <div class="gallery-scroll-hint up" id="galleryScrollHintUp" style="display:none;">《</div>
             <div class="gallery-grid" id="galleryGrid"></div>
             <div class="gallery-empty-msg" id="galleryEmptyMsg" style="display:none;">등록된 이미지가 없어요.</div>
             <div class="gallery-locked" id="galleryLocked" style="display:none;">
@@ -407,7 +420,7 @@
               <div class="gl-text">비밀 폴더입니다.</div>
               <button type="button" class="btn-ghost gallery-unlock-btn" id="galleryUnlockBtn">비밀번호 입력</button>
             </div>
-            <div class="gallery-scroll-hint" id="galleryScrollHint" style="display:none;">︾</div>
+            <div class="gallery-scroll-hint" id="galleryScrollHint" style="display:none;">》</div>
           </div>
           <!-- 왼쪽 아래, ＋ ✓ 순서. 휴지통은 선택 모드에서만 ✓ 오른쪽에 나옵니다 -->
           <div class="gallery-fab-row">
@@ -446,11 +459,6 @@
 
       </div>
     </div>
-  </div>
-  <div class="pd-index-tabs">
-    <button type="button" class="pd-index-tab active" data-pdtab="info">INFO</button>
-    <button type="button" class="pd-index-tab" data-pdtab="gallery">GALLERY</button>
-    <button type="button" class="pd-index-tab" data-pdtab="log">LOG</button>
   </div>
   </div>
 </div>
@@ -738,7 +746,7 @@
     <div class="form-row"><label>유튜브 링크</label>
       <input type="text" id="mmUrl" placeholder="https://youtu.be/... 또는 https://www.youtube.com/watch?v=..." /></div>
     <div class="mm-or"><span>또는</span></div>
-    <div class="form-row"><label>음원 파일 <span class="mm-sub">(광고 없음 · 저장 용량을 씁니다)</span></label>
+    <div class="form-row"><label>음원 파일</label>
       <div class="mm-file-row">
         <button type="button" class="btn-ghost" id="mmFileBtn">파일 고르기</button>
         <span class="mm-file-name" id="mmFileName">선택된 파일 없음</span>
@@ -747,7 +755,6 @@
     <div class="form-row"><label>제목</label><input type="text" id="mmTitle" placeholder="TITLE" /></div>
     <div class="form-row"><label>아티스트</label><input type="text" id="mmArtist" placeholder="ARTIST" /></div>
     <div class="form-actions" style="margin-bottom:4px;"><button class="btn-primary" id="mmAddBtn">추가</button></div>
-    <div class="mm-hint">끌어서 순서를 바꿉니다 · ✕ 를 누르면 목록에서 빠집니다</div>
     <div class="mm-list" id="mmList"></div>
     <div class="form-actions"><button class="btn-ghost" data-close>닫기</button></div>
   </div>
@@ -883,6 +890,13 @@
 </div>
 
 
+<!-- 재생 목록 — LP 를 누르면 사이드바 오른쪽에 붙어 열립니다.
+     사이드바는 스스로 스크롤되는 칸이라 그 안에 두면 잘려 보이지 않습니다.
+     그래서 body 끝에 두고 자리는 JS 가 잡습니다(크게보기의 스택 말풍선과 같은 방식). -->
+<div class="mb-playlist" id="mbPlaylist">
+  <div class="mbp-list" id="mbPlaylistList"></div>
+</div>
+
 <!-- 종이 질감. 화면 전체(빨간 여백까지)를 덮고, 창(모달)보다는 아래에 깝니다.
      background-image 가 아니라 <img> 로 둔 것은, 사진에 박힌 회전 정보(EXIF)를
      <img> 만 확실하게 따라 주기 때문입니다 — 배경으로 깔면 브라우저에 따라
@@ -890,7 +904,7 @@
      맨 끝에 두어 화면 그리기를 막지 않게 합니다. -->
 <img class="paper-grain" src="img/paper-grain.jpg" alt="" aria-hidden="true" draggable="false" />
 
-<script src="js/main.js?v=86"></script>
-<script type="module" src="js/firebase-store.js?v=86"></script>
+<script src="js/main.js?v=90"></script>
+<script type="module" src="js/firebase-store.js?v=90"></script>
 </body>
 </html>

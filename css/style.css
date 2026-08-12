@@ -52,14 +52,15 @@
   }
   :root{
     /* 창(엽서) 색. 세 가지가 한 계열이라 하나만 밝히면 단이 어긋나므로
-       늘 같은 비율로 함께 올립니다(지금은 원래 색에서 흰색 쪽으로 30%).
+       늘 같은 비율로 함께 올립니다(지금은 원래 색에서 흰색 쪽으로 50%.
+       원래 색은 #f4f1ea / #ece7d9 / #e2dbc8 이고, 30% 였던 적이 있습니다).
        --bg 는 본문 바탕, --surface 는 사이드바·머리줄, --surface-2 는 그보다
        한 단 진한 자리(썸네일 빈칸 등)입니다.
        머리줄·닫기 단추처럼 반투명이 필요한 자리는 var() 를 쓸 수 없어
        --bg 와 같은 값을 rgba 로 적어 둡니다 — 여기를 고치면 그 네 곳
        (.topbar / .cards-topbar / .modal-close / .arc-kebab-btn / .pd-header-fade)
        도 같이 고쳐야 합니다. */
-    --bg:#f7f5f0;--surface:#f2eee4;--surface-2:#ebe6d9;--border:#1a1a1a;
+    --bg:#faf8f5;--surface:#f6f3ec;--surface-2:#f1ede4;--border:#1a1a1a;
     --text:#1a1a1a;--text-muted:#6b675e;--accent:#c1440e;--accent-soft:#f4dcce;
     --page-bg:#EF3921;
     --radius:0px;--radius-sm:0px;--mono:'KoPubDotum',sans-serif;font-family:'KoPubDotum',sans-serif;
@@ -189,9 +190,29 @@
   .mb-top{display:flex;align-items:baseline;justify-content:space-between;gap:4px;}
   .mb-label{font-family:var(--font-gm);font-size:8.5px;font-weight:500;letter-spacing:.02em;color:var(--text-muted);white-space:nowrap;}
   .mb-time{font-family:var(--mono);font-size:8px;color:var(--text-muted);white-space:nowrap;}
-  /* 제목은 한 줄로 자릅니다 — 두 줄이 되면 아래 메뉴가 통째로 밀립니다 */
-  .mb-title{font-family:var(--font-gm);font-size:11px;font-weight:700;color:var(--text);
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;}
+  /* 제목 아래에 아티스트가 한 줄 더 붙습니다. ♪ 는 왼쪽에 따로 두어
+     제목과 아티스트의 왼쪽 끝이 서로 맞도록 합니다(♪ 에 맞추지 않습니다).
+     두 줄 다 한 줄로 자릅니다 — 접히면 아래 메뉴가 통째로 밀립니다. */
+  .mb-song{display:flex;align-items:flex-start;gap:4px;min-width:0;}
+  .mb-note{flex:none;font-family:var(--font-chosun);font-size:11px;line-height:1.35;color:var(--text);}
+  .mb-song-text{flex:1;min-width:0;}
+  .mb-title{font-family:var(--font-chosun);font-size:12px;font-weight:700;color:var(--text);
+    white-space:nowrap;overflow:hidden;line-height:1.35;}
+  /* 아티스트가 비어 있어도 줄 자리는 남깁니다 — 없어지면 아래 메뉴가 그만큼 올라옵니다 */
+  .mb-artist{font-family:var(--font-chosun);font-size:9.5px;color:var(--text-muted);
+    white-space:nowrap;overflow:hidden;line-height:1.35;min-height:1.35em;}
+  /* 이름이 칸보다 길면 ... 로 자르지 않고 천천히 흘러갑니다.
+     넘치는 만큼(--mq-dist)만 왼쪽으로 밀었다가 되돌아오고, 양 끝에서는 잠깐 멈춥니다.
+     걸리는 시간은 넘치는 길이에 맞춰 JS(applyMarquee)가 넣습니다. */
+  .mb-mq{display:inline-block;white-space:nowrap;}
+  .mb-title.scrolling .mb-mq,
+  .mb-artist.scrolling .mb-mq{animation-name:mb-marquee;animation-timing-function:linear;
+    animation-iteration-count:infinite;}
+  @keyframes mb-marquee{
+    0%,12%  {transform:translateX(0);}
+    50%,62% {transform:translateX(calc(-1 * var(--mq-dist, 0px)));}
+    100%    {transform:translateX(0);}
+  }
   .mb-controls{display:flex;align-items:center;gap:2px;margin-top:1px;}
   .mb-btn{flex:none;width:22px;height:20px;display:flex;align-items:center;justify-content:center;
     border:none;background:transparent;color:var(--text);font-family:var(--mono);font-size:12px;
@@ -208,15 +229,35 @@
   .mb-vol::-moz-range-thumb{width:9px;height:9px;border-radius:50%;background:var(--accent);
     cursor:pointer;border:none;}
   /* LP — 선으로만 그립니다. 재생 중일 때만 돕니다(.spinning). */
-  .mb-lp{flex:none;width:52px;height:52px;}
+  .mb-lp{flex:none;width:52px;height:52px;padding:0;border:none;background:transparent;}
   .mb-lp svg{width:100%;height:100%;display:block;}
   .mb-lp svg circle{fill:none;stroke:var(--text);stroke-width:.7;opacity:.3;}
   .mb-lp svg circle.mb-lp-edge{opacity:.65;stroke-width:1;}
   .mb-lp svg circle.mb-lp-hole{fill:var(--text);stroke:none;opacity:.65;}
-  /* 도는 것이 보이도록 한쪽에만 긋는 빛줄기 */
-  .mb-lp svg .mb-lp-glint{fill:none;stroke:var(--accent);stroke-width:1.4;stroke-linecap:round;opacity:.9;}
+  /* 재생 위치를 그리는 주황 원. 맨 바깥 테두리(28.5)가 아니라 한 줄 안쪽 홈(24)
+     위에 겹쳐 놓습니다. 둘레는 2π×24 = 150.8 이고, 그만큼 비워 두었다가
+     (stroke-dashoffset) JS 가 흐른 만큼 줄여 채웁니다. 값은 main.js 의
+     LP_PROG_LEN 과 반드시 같아야 합니다 — 반지름을 바꾸면 둘 다 바꾸세요. */
+  .mb-lp svg .mb-lp-prog{stroke:var(--accent);stroke-width:1.6;stroke-linecap:round;opacity:.95;
+    stroke-dasharray:150.8;stroke-dashoffset:150.8;transition:stroke-dashoffset .5s linear;}
   .mb-lp.spinning svg{animation:lp-spin 3.4s linear infinite;}
   @keyframes lp-spin{ to{transform:rotate(360deg);} }
+  /* ---- 재생 목록 ----
+     사이드바 오른쪽에 붙습니다. 자리는 JS 가 잡고(position:fixed), 보는 전용이라
+     순서 변경·삭제는 없습니다 — 그건 노래 관리 창(＋)이 합니다. */
+  .mb-playlist{position:fixed;display:none;z-index:40;width:190px;max-height:min(320px,60vh);
+    background:var(--bg);border:1px solid var(--border);
+    box-shadow:0 8px 24px rgba(0,0,0,.22);flex-direction:column;overflow:hidden;}
+  .mb-playlist.open{display:flex;}
+  .mbp-list{flex:1;min-height:0;overflow-y:auto;padding:5px 0;}
+  .mbp-item{display:block;width:100%;text-align:left;border:none;background:transparent;
+    font-family:var(--mono);font-size:11px;color:var(--text);
+    padding:3px 12px;line-height:1.4;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    transition:color .16s ease;}
+  .mbp-item:hover{color:var(--accent);}
+  .mbp-item.active{color:var(--accent);font-weight:700;}
+  .mbp-empty{font-family:var(--mono);font-size:10px;color:var(--text-muted);padding:10px 12px;}
   /* 유튜브 플레이어는 소리만 쓰므로 눈에 띄지 않게 둡니다.
      display:none 이나 화면 밖(left:-9999px)으로 치우면 브라우저가 '그릴 필요 없는
      것'으로 보고 재생을 시작하지 않거나 버퍼링에서 멈추는 일이 있습니다.
@@ -227,15 +268,16 @@
   .mm-or{display:flex;align-items:center;gap:8px;margin:2px 0 10px;color:var(--text-muted);
     font-family:var(--mono);font-size:10px;}
   .mm-or::before,.mm-or::after{content:'';flex:1;height:1px;background:var(--surface-2);}
-  .mm-sub{font-weight:400;font-size:10px;color:var(--text-muted);}
+  /* 창 제목의 글자 사이 간격만 없앱니다 — 아래 라벨(유튜브 링크·음원 파일)과
+     같은 서체(KoPub 돋움)인데도 .modal h3 의 letter-spacing 때문에 달라 보였습니다 */
+  #modalMusic h3{letter-spacing:0;}
   .mm-file-row{display:flex;align-items:center;gap:10px;min-width:0;}
   .mm-file-name{flex:1;min-width:0;font-family:var(--mono);font-size:10.5px;color:var(--text-muted);
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   /* 목록에서 유튜브 곡과 파일 곡을 구분하는 표식 */
   .mm-kind{flex:none;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.04em;
     padding:2px 5px;border:1px solid var(--border);color:var(--text-muted);}
-  .mm-hint{font-family:var(--mono);font-size:10px;color:var(--text-muted);margin:10px 0 6px;}
-  .mm-list{display:flex;flex-direction:column;gap:4px;max-height:220px;overflow-y:auto;}
+  .mm-list{display:flex;flex-direction:column;gap:4px;max-height:220px;overflow-y:auto;margin-top:10px;}
   .mm-row{display:flex;align-items:center;gap:8px;padding:7px 8px;border:1px solid var(--border);
     background:var(--surface);font-size:11px;cursor:grab;}
   .mm-row.dragging{opacity:.4;}
@@ -246,24 +288,32 @@
     font-size:12px;padding:0 2px;opacity:.6;}
   .mm-row .mm-del:hover{opacity:1;color:var(--accent);}
 
-  .nav{display:flex;flex-direction:column;gap:2px;}
+  .nav{display:flex;flex-direction:column;gap:1px;}
   /* 메뉴는 배경 상자 없이 글자만 바뀝니다 — 올리거나 고르면 오렌지 + 굵게.
      그래서 쉬는 상태를 500 으로 두었습니다. 700 에서 시작하면 굵어질 자리가
      없어 색만 바뀐 것처럼 보입니다. */
   /* 굵어질 때 줄이 위아래로 흔들리지 않도록 높이와 줄간격을 못박습니다 —
      굵은 글자는 글자 높이가 미세하게 커져서, 안 잡아두면 마우스를 올릴 때마다
      아래 항목들이 한두 픽셀씩 밀립니다. */
-  .nav-item{display:flex;align-items:center;justify-content:space-between;padding:0 10px;height:34px;line-height:34px;border-radius:var(--radius-sm);font-family:var(--font-gm);font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;color:var(--text);background:transparent;border:none;text-align:left;width:100%;
-    transition:color .12s ease;}
+  /* '부드럽게 굵어지는' 것은 font-weight 로는 만들 수 없습니다. G마켓 산스는
+     500 과 700 두 벌뿐이라 브라우저가 중간값을 그리지 못하고, 501 부터 곧바로
+     700 자체로 튑니다(가변 폰트가 아니라 그렇습니다). 그래서 굵기는 500 에 두고
+     글자 테두리(-webkit-text-stroke-width)를 0 에서 .55px 까지 천천히 키웁니다 —
+     이 값은 길이라서 실제로 조금씩 두꺼워집니다. 처음에는 500 과 700 의 획 굵기
+     차이에 맞춰 .45px 로 뒀는데 약해 보인다고 하여 .55px 로 올렸습니다.
+     글자 크기를 바꾸면 다시 보세요(한글 속공간이 메워지는지도 함께). */
+  .nav-item{display:flex;align-items:center;justify-content:space-between;padding:0 10px;height:32px;line-height:32px;border-radius:var(--radius-sm);font-family:var(--font-gm);font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;color:var(--text);background:transparent;border:none;text-align:left;width:100%;
+    -webkit-text-stroke-width:0;
+    transition:color .3s ease,-webkit-text-stroke-width .3s ease;}
   .nav-item:hover,
-  .nav-item.active{color:var(--accent);font-weight:700;}
+  .nav-item.active{color:var(--accent);-webkit-text-stroke-width:.55px;}
   /* PAIR·OC 는 라벨 옆에 카테고리 추가(＋) 아이콘이 붙어 nav-item 이 감싸져 있습니다.
      예전에는 hover·활성 표시가 배경이라 ＋ 앞에서 끊기지 않도록 줄(.nav-item-row)
      쪽에 칠했는데, 지금은 글자만 바뀌므로 줄에 칠할 것이 없습니다.
      대신 ＋ 에 커서를 올렸을 때 라벨도 같이 반응하도록 줄 기준으로 걸어 둡니다. */
   .nav-item-row{display:flex;align-items:center;gap:2px;border-radius:var(--radius-sm);}
   .nav-item-row .nav-item{flex:1;min-width:0;}
-  .nav-item-row:hover .nav-item{color:var(--accent);font-weight:700;}
+  .nav-item-row:hover .nav-item{color:var(--accent);-webkit-text-stroke-width:.55px;}
   /* ✎(.ns-edit) 와 같은 방식 — 자기 배경 박스 없이 옅게 있다가 진해지기만 합니다 */
   .nav-cat-add{flex:none;width:24px;height:24px;display:flex;align-items:center;justify-content:center;
     border:none;background:transparent;border-radius:var(--radius-sm);color:var(--text-muted);font-family:var(--mono);font-size:13px;opacity:.45;}
@@ -278,15 +328,15 @@
     .nav-sub:hover{max-height:560px;}
   }
   .nav-sub.open{max-height:560px;}
-  .nav-sub-item{padding:0 10px;height:28px;line-height:28px;font-family:var(--font-gm);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);border-radius:var(--radius-sm);border:none;background:transparent;text-align:left;font-weight:500;}
-  .nav-sub-item{transition:color .12s ease;}
-  .nav-sub-item:hover{color:var(--accent);font-weight:700;}
+  .nav-sub-item{padding:0 10px;height:25px;line-height:25px;font-family:var(--font-gm);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);border-radius:var(--radius-sm);border:none;background:transparent;text-align:left;font-weight:500;}
+  .nav-sub-item{-webkit-text-stroke-width:0;transition:color .3s ease,-webkit-text-stroke-width .3s ease;}
+  .nav-sub-item:hover{color:var(--accent);-webkit-text-stroke-width:.55px;}
   /* '지금 여기'는 지금 보고 있는 큰 메뉴 안에서만 칠합니다.
      .active 는 메뉴마다 따로 남아 있어서, 그것만으로 칠하면 PAIR 에서 OC 로
      옮긴 뒤에도 PAIR 에서 마지막에 고른 카테고리가 계속 굵게 보입니다. */
   body[data-view="pair"] #pairSub .nav-sub-item.active,
   body[data-view="oc"] #ocSub .nav-sub-item.active,
-  body[data-view="archive"] #archiveSub .nav-sub-item.active{color:var(--accent);font-weight:700;}
+  body[data-view="archive"] #archiveSub .nav-sub-item.active{color:var(--accent);-webkit-text-stroke-width:.55px;}
   /* PAIR·OC 세부 카테고리 — 편집 모드에서 이름 변경(✎)·순서 변경(끌기) */
   .nav-sub-item{display:flex;align-items:center;justify-content:space-between;gap:6px;}
   .nav-sub-item .ns-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -325,7 +375,7 @@
      보기 모드에서는 버튼이 사라져 44px 로 줄어들고 LOVE INTEREST 바는 50px 라,
      화면을 옮기거나 로그인할 때마다 제목 줄이 위아래로 튀었습니다.
      .cards-topbar 도 같은 값으로 맞춰 세 화면의 머리줄이 한 높이로 이어집니다. */
-  .topbar{position:sticky;top:0;background:rgba(247,245,240,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;z-index:20;}
+  .topbar{position:sticky;top:0;background:rgba(250,248,245,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;z-index:20;}
   /* 상단바 제목은 G마켓 산스, 다만 PAIR·OC 만 프리젠테이션입니다 */
   .topbar h2{font-family:var(--font-gm);font-size:14px;margin:0;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
   /* 게시글 제목(.post-title / .pd-title-input)만 프리젠테이션입니다 — 상단바 제목은 아닙니다 */
@@ -370,7 +420,10 @@
   /* PAIR·OC·ARCHIVE 의 .topbar 와 같은 모양입니다 — 좌우 여백 28px, 높이 60px,
      제목 14px. 예전에는 왼쪽에 ❣ 정사각형 칸과 세로 구분선이 붙어 있어서
      패딩과 정렬이 달랐는데, 그 칸을 없애고 나머지 머리줄과 줄을 맞췄습니다. */
-  .cards-topbar{position:sticky;top:0;background:rgba(247,245,240,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:0 28px;display:flex;align-items:center;gap:0;z-index:5;height:60px;}
+  /* flex:none 이 필요합니다 — 이 줄은 .home-page(세로 flex) 의 칸이라, 아래 카드
+     격자가 자리를 다 쓰면 60px 로 못 박아 두어도 눌립니다(좁은 화면에서 35px 까지
+     내려갔습니다). #view-oc .topbar 가 같은 이유로 flex:none 을 갖고 있습니다. */
+  .cards-topbar{position:sticky;top:0;background:rgba(250,248,245,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:0 28px;display:flex;align-items:center;gap:0;z-index:5;height:60px;flex:none;}
   .to-intro-btn{width:28px;height:28px;border-radius:0;border:1px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:13px;}
   .cards-topbar h3{font-family:var(--font-gm);font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin:0;flex:1;}
   .li-title{display:flex;align-items:center;gap:0;}
@@ -394,9 +447,9 @@
      각 정지점을 50/74 비율로 줄임 (34% → 23%, 74% → 50%) */
   .dream-card .dc-grad{position:absolute;inset:0;background:linear-gradient(90deg, rgba(0,0,0,.85) 0%, rgba(0,0,0,.55) 23%, rgba(0,0,0,0) 50%);z-index:2;pointer-events:none;}
   .dream-card .dc-content{position:absolute;left:0;bottom:0;z-index:3;padding:12px 16px;max-width:78%;}
-  /* 이름·장르는 G마켓 산스, 캐치프레이즈와 설명(.dc-desc)은 본문 서체(KoPub 돋움) */
-  .dream-card .dc-genre{font-family:var(--font-gm);font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;opacity:.9;outline:none;}
-  .dream-card .dc-name{font-family:var(--font-gm);font-size:16px;font-weight:700;margin:3px 0;outline:none;}
+  /* 카드 안 글자는 네 줄 모두 본문 서체(KoPub 돋움)로 통일합니다 */
+  .dream-card .dc-genre{font-family:var(--mono);font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;opacity:.9;outline:none;}
+  .dream-card .dc-name{font-family:var(--mono);font-size:16px;font-weight:700;margin:3px 0;outline:none;}
   .dream-card .dc-catch{font-family:var(--mono);font-size:11.5px;opacity:.9;font-style:italic;margin-bottom:5px;outline:none;}
   .dream-card .dc-desc{font-size:10.5px;opacity:.85;line-height:1.5;outline:none;}
   @media (hover:hover){
@@ -543,7 +596,8 @@
   /* 몇 번째 장인지 알려주는 점 — 창 바깥 왼쪽, 세로 가운데.
      넘기는 것은 스크롤/스와이프로만 하므로 누를 수 없습니다. */
   .oc-modal-wrap{position:relative;display:flex;align-items:flex-start;}
-  .oc-page-dots{position:absolute;right:100%;top:50%;transform:translateY(-50%);
+  /* PAIR 도 같은 점을 씁니다 (인덱스 탭 대신) */
+  .oc-page-dots,.pd-page-dots{position:absolute;right:100%;top:50%;transform:translateY(-50%);
     margin-right:14px;display:flex;flex-direction:column;gap:5px;pointer-events:none;z-index:12;}
   /* 지금 장은 주황, 나머지는 흰색. 테두리는 없습니다.
      바탕(빨강 위 검정 45%)이 어두워 --accent(#c1440e)로는 잘 보이지 않으므로
@@ -604,6 +658,8 @@
   .side-page[data-sidepage="timeline"] .timeline-list{flex:1;min-height:0;overflow-y:auto;
     overscroll-behavior:contain;padding-bottom:26px;scrollbar-width:none;}
   .side-page[data-sidepage="timeline"] .timeline-list::-webkit-scrollbar{width:0;}
+  /* 비었을 때의 안내는 옆 칸의 '아직 주고받은 말이 없어요'(.msg-empty)와 크기를 맞춥니다 */
+  .timeline-list .empty-note{font-size:10.5px;}
   /* 메모 장 — 제목·테두리·바탕 없이 글자만 놓습니다. 글이 길어지면 이 안에서만
      스크롤되고, 아래 26px 은 점이 앉을 자리라 비웁니다. */
   /* 좁은 칸(PAIR 244px)에 한 줄로 들어가야 해서 밑줄·취소선은 빼두었습니다.
@@ -818,9 +874,11 @@
      규칙은 이 규칙보다 선택자가 약해서 가로 갤러리에서는 밀립니다.
      그래서 회색 비활성 화살표가 계속 까딱거리고 있었습니다. */
   .gallery-grid-wrap.horiz .gallery-scroll-hint.disabled{pointer-events:none;animation:none;}
-  /* bottom 은 16px — PAIR 은 .pd-tab-content 의 안쪽 여백(8px) 위에서 다시 8px 이지만
-     여기서는 기준 상자가 .oc-page(여백 바깥)라 그 둘을 더한 값이어야 같은 자리입니다. */
-  .oc-page-gallery .gallery-fab-row{bottom:16px;}
+  /* bottom 은 16px — 기준 상자가 장(.oc-page / .pd-tab-pane)의 안쪽 여백 바깥이라
+     장의 여백 8px 에 다시 8px 을 더해야 예전과 같은 자리가 됩니다.
+     (PAIR 도 장 구조로 바뀌면서 OC 와 같은 조건이 되었습니다.) */
+  .oc-page-gallery .gallery-fab-row,
+  .pd-tab-pane-gallery .gallery-fab-row{bottom:16px;}
 
   /* ---- Archive ---- */
   .archive-toolbar{display:flex;gap:8px;padding:16px 28px 0;}
@@ -874,10 +932,10 @@
      바뀝니다. 보기 창은 예전처럼 .modal 기본값(창 전체 스크롤)을 그대로 씁니다. */
   #modalArcWrite .modal.wide.arc-modal{display:flex;flex-direction:column;}
   .modal h3{margin:0 0 16px;font-family:var(--mono);font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
-  .modal-close{position:absolute;top:14px;right:14px;background:rgba(247,245,240,.9);border:1px solid var(--border);width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text);z-index:10;}
+  .modal-close{position:absolute;top:14px;right:14px;background:rgba(250,248,245,.9);border:1px solid var(--border);width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text);z-index:10;}
   .modal.pd-modal{padding:0;}
   .pd-header-banner{width:100%;aspect-ratio:3.25/1;border-radius:0;margin:0;}
-  .pd-header-fade{height:56px;margin-top:-56px;position:relative;z-index:2;background:linear-gradient(to bottom, rgba(247,245,240,0), var(--bg));pointer-events:none;}
+  .pd-header-fade{height:56px;margin-top:-56px;position:relative;z-index:2;background:linear-gradient(to bottom, rgba(250,248,245,0), var(--bg));pointer-events:none;}
   .pd-modal-body{padding:0 28px 8px;}
   .form-row{margin-bottom:12px;}
   .form-row label{display:block;font-size:11.5px;font-weight:700;color:var(--text-muted);margin-bottom:5px;}
@@ -891,20 +949,20 @@
   /* ---- Pair detail (layout-first, inline editable) ---- */
   .pd-title-input{font-family:var(--font-free);font-size:20.7px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;border:none;outline:none;width:100%;margin:20px 0 0;color:var(--text);background:transparent;}
   .pd-subtitle-input{font-family:var(--mono);font-size:11px;border:none;outline:none;width:100%;margin:0 0 6px;color:var(--text-muted);background:transparent;}
+  /* 왼쪽 인덱스 탭은 없어졌습니다. OC 창처럼 INFO/GALLERY/LOG 세 장이
+     위아래로 넘어가고, 몇 번째 장인지는 창 바깥 왼쪽의 점이 알려줍니다.
+     (점 모양은 .oc-page-dot 과 함께 정의되어 있습니다.) */
   .pd-modal-wrap{position:relative;display:flex;align-items:flex-start;}
-  .pd-index-tabs{position:absolute;right:100%;top:70px;display:flex;flex-direction:column;}
-  .pd-index-tab{width:98px;box-sizing:border-box;background:var(--page-bg);color:#fff;border:1px solid #000;border-right:none;padding:14px 12px;font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.06em;margin-bottom:6px;text-align:right;opacity:.82;}
-  .pd-index-tab:hover{opacity:1;}
-  .pd-index-tab.active{opacity:1;}
   /* 제목을 헤더에서 20px 떨어뜨린 만큼 높이에서 되돌려 모달 전체 높이는 그대로 둡니다.
-     대신 위아래 안쪽 여백을 18px→8px 로 줄여(높이는 border-box 라 그대로) 20px 을
-     다시 확보하므로, GALLERY 격자 간격과 LOG 목록 높이는 이전과 같습니다. */
-  .pd-tab-content{flex:1;min-width:0;padding:8px 4px 8px 0;height:580px;overflow-y:auto;box-sizing:border-box;}
+     안쪽 여백(8px/4px)은 .pd-tab-content 가 아니라 각 장이 갖습니다 —
+     장은 inset:0 이라 100% 만큼 밀면 정확히 창 밖으로 나가야 하기 때문입니다.
+     (OC 의 .oc-pages / .oc-page 와 같은 구조입니다.) */
+  .pd-tab-content{flex:1;min-width:0;position:relative;height:580px;overflow:hidden;box-sizing:border-box;}
+  .pd-tab-pane{position:absolute;inset:0;display:flex;flex-direction:column;min-height:0;
+    padding:8px 4px 8px 0;box-sizing:border-box;
+    background:var(--bg);transition:transform .45s cubic-bezier(.4,0,.2,1);}
   .modal.pd-modal, .pd-tab-content, .log-table-scroll{scrollbar-width:none;-ms-overflow-style:none;}
   .modal.pd-modal::-webkit-scrollbar, .pd-tab-content::-webkit-scrollbar, .log-table-scroll::-webkit-scrollbar{display:none;width:0;height:0;}
-  .pd-tab-pane{display:none;}
-  .pd-tab-pane.active{display:block;}
-  .pd-tab-pane-log.active{display:flex;flex-direction:column;height:100%;}
   /* 왼쪽에 폴더 탭, 오른쪽에 ＋게시글 추가.
      탭을 새 줄에 깔면 그만큼 목록이 짧아지므로 이미 있던 이 줄에 함께 놓습니다.
      탭이 많아도 줄이 늘어나지 않게 한 줄로 두고 가로로 밀어 봅니다.
@@ -957,8 +1015,7 @@
   /* 보기 모드의 LOG 탭에서 제목 아래 표 머리글(NO/LOG/DATE)까지의 간격과 같게 맞춥니다.
      (LOG 는 ＋게시글 추가 줄이 보기 모드에서 사라지고 아래 여백 10px 만 남습니다) */
   /* INFO 는 스크롤 없이 한 화면에 들어갑니다 — 남는 높이는 라벨+본문 칸이 가져가고,
-     넘치는 글은 그 칸 안에서만 스크롤됩니다. */
-  .pd-tab-pane[data-pdpane="info"].active{display:flex;flex-direction:column;height:100%;}
+     넘치는 글은 그 칸 안에서만 스크롤됩니다. (세로 배치는 .pd-tab-pane 에 있습니다) */
   /* [캐릭터 프로필] [넘김 칸] [페르소나 프로필] 세 칸, 그 아래 가로 전체를 쓰는
      RELATIONSHIP. 가운데 칸만 폭을 정해 두고 양쪽 프로필이 남는 폭을 반씩 나눕니다. */
   .pd-info-grid{display:grid;grid-template-columns:1fr 244px 1fr;
@@ -1199,8 +1256,12 @@
   .arc-view-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:2px;padding-right:36px;}
   .arc-view-head h3{margin:0;}
   /* LOG 게시글 보기: 제목과 게시일 간격을 ARCHIVE 와 동일하게(2px) */
-  #modalLogView h3{margin:0 0 2px;padding-right:36px;}
-  .arc-kebab-btn{position:absolute;top:14px;right:48px;background:rgba(247,245,240,.9);border:1px solid var(--border);width:26px;height:26px;display:none;align-items:center;justify-content:center;font-size:15px;color:var(--text);z-index:10;}
+  /* 미리보기 카드 제목(.lc-title)과 같은 서체로 맞춥니다 — .modal h3 의 기본값은
+     KoPub 돋움 + 대문자 변환이라, 같은 제목이 카드에서는 소문자로 카드 밖에서는
+     대문자로 보였습니다. 대문자 변환과 글자 간격을 함께 꺼야 모양이 같아집니다. */
+  #modalLogView h3{margin:0 0 2px;padding-right:36px;
+    font-family:var(--font-free);text-transform:none;letter-spacing:0;}
+  .arc-kebab-btn{position:absolute;top:14px;right:48px;background:rgba(250,248,245,.9);border:1px solid var(--border);width:26px;height:26px;display:none;align-items:center;justify-content:center;font-size:15px;color:var(--text);z-index:10;}
   body.logged-in .arc-kebab-btn{display:flex;}
   /* 항목 앞 기호를 없앤 만큼 폭도 줄였습니다 (120 -> 60px).
      항목이 모두 두 글자라 60px 안에 넉넉히 들어갑니다. */
@@ -1336,7 +1397,6 @@
      차지하고 있어서, 선택 모드에 들어갈 때마다 격자가 아래로 밀렸습니다. */
   .gallery-select-info{font-family:var(--mono);font-size:10.5px;color:var(--text-muted);
     white-space:nowrap;align-self:center;}
-  .pd-tab-pane-gallery.active{display:flex;flex-direction:column;height:100%;position:relative;}
   /* 위/아래 힌트 화살표가 썸네일을 가리지 않도록 여백을 확보하고,
      남는 공간을 위아래로 똑같이 나눠 화살표-썸네일 간격을 대칭으로 맞춤.
      (한 페이지 15장 = 5열 3행이 이 안에 들어가도록 맞춤) */
@@ -1400,14 +1460,16 @@
   .log-card{position:absolute;left:0;top:0;box-sizing:border-box;
     border:1px solid var(--border);background:var(--bg);padding:12px 13px 10px;
     display:flex;flex-direction:column;gap:6px;cursor:pointer;
-    transition:background .12s ease,box-shadow .12s ease;}
+    transition:border-color .16s ease,box-shadow .16s ease;}
+  /* 마우스를 올려도 바탕은 그대로 두고, 테두리만 진한 오렌지(#c1440e)로 바뀌면서
+     아래쪽으로 그림자가 집니다 */
   @media (hover:hover){
-    .log-card:hover{background:var(--surface);box-shadow:0 2px 0 var(--border);}
+    .log-card:hover{border-color:var(--accent);box-shadow:0 5px 12px rgba(0,0,0,.16);}
   }
   .log-card.selected{background:var(--accent-soft);}
   .log-card.dragging{opacity:.4;}
   .log-card .lc-check{position:absolute;right:8px;top:8px;}
-  .lc-no{font-family:var(--mono);font-size:9px;font-weight:700;color:var(--text-muted);letter-spacing:.06em;}
+  .lc-no{font-family:var(--mono);font-size:8px;font-weight:700;color:var(--text-muted);letter-spacing:.06em;}
   .lc-title{font-family:var(--font-free);font-size:12.5px;font-weight:700;margin:0;color:var(--text);
     line-height:1.35;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
   /* 미리보기 글은 여덟 줄에서 자릅니다. 여덟 줄에 못 미치면 그만큼만 차지하므로
@@ -1728,12 +1790,6 @@
   @media (min-width:769px) and (max-width:1100px){
     .app-window{width:100%;max-width:100%;aspect-ratio:auto;height:100vh;height:100dvh;max-height:none;}
     .punch-margin{width:26px;}
-    /* 인덱스 탭(72px)은 모달 왼쪽 바깥에 그려지고 모달은 가운데 정렬이라,
-       모달 폭이 화면폭 - 탭폭*2 보다 크면 탭이 화면 밖으로 밀려납니다.
-       870px 아래에서만 줄어들고 그 위로는 PC 와 같은 720px 를 유지합니다. */
-    .modal.wide.pd-modal{width:min(720px, calc(100vw - 168px));}
-    .pd-index-tabs{top:40px;}
-    .pd-index-tab{width:72px;padding:12px 10px;font-size:11px;}
   }
 
   /* ================= 모바일 (768px 이하) ================= */
@@ -1778,12 +1834,15 @@
        커진 버튼(min-height:40px)이 들어가도록 위아래 여백을 9px 로 줄입니다
        (60 - 보더 1 - 여백 18 = 41px). */
     .topbar{padding:9px 14px 9px 56px;}
-    /* 카드 페이지 머리줄은 왼쪽 여백을 주지 않습니다 — ❣ 칸이 데스크톱과 똑같이
-       바 높이만 한 정사각형으로 왼쪽 끝에 붙고 기호가 그 안에 가운데 옵니다.
-       ☰ 가 그 위를 덮지만, 칸 모양을 맞추는 쪽을 택했습니다. */
-    .cards-topbar{padding-right:14px;}
-    .nav-item{padding:13px 10px;font-size:13px;}
-    .nav-sub-item{padding:13px 10px;font-size:12px;}
+    /* 다른 화면의 머리줄과 똑같이 둡니다 — 왼쪽 56px 은 ☰ 자리입니다.
+       예전에는 왼쪽 끝에 ❣ 정사각형 칸이 있어서 왼쪽 여백을 비워 두었는데,
+       그 칸을 없앤 뒤로는 ☰ 가 제목 위를 덮고 있었습니다. */
+    .cards-topbar{padding:9px 14px 9px 56px;}
+    /* 위아래 여백은 주지 않습니다 — 줄 높이가 못 박혀 있어서(.nav-item 32 /
+       .nav-sub-item 25), 여백을 주면 그보다 커지려 들어 두 줄의 간격이 서로
+       어긋납니다. 좁은 화면에서는 글자만 키웁니다. */
+    .nav-item{padding:0 10px;font-size:13px;}
+    .nav-sub-item{padding:0 10px;font-size:12px;}
     .nav-sub{max-height:0;}
     .nav-sub.open{max-height:70vh;}
     /* 터치 타겟 40px 이상 */
@@ -1856,8 +1915,12 @@
        들여놓은 만큼이면 화살표가 첫/마지막 줄 썸네일을 덮습니다. 가장자리로 되돌립니다. */
     .gallery-grid-wrap.horiz .gallery-scroll-hint{bottom:4px;}
     .gallery-grid-wrap.horiz .gallery-scroll-hint.up{top:4px;}
-    /* 창이 화면을 꽉 채워 바깥에 둘 자리가 없으므로 왼쪽 안쪽으로 들입니다 */
+    /* 창이 화면을 꽉 채워 바깥에 둘 자리가 없으므로 왼쪽 안쪽으로 들입니다.
+       그러면 점이 어두운 바탕이 아니라 창의 미색 위로 올라오므로, 흰 점은
+       보이지 않습니다 — 지금 장은 주황 그대로 두고 나머지만 옅은 회색으로 바꿉니다. */
     .oc-page-dots{right:auto;left:3px;margin-right:0;}
+    .oc-page-dot{background:var(--text-muted);opacity:.35;}
+    .oc-page-dot.active{background:var(--accent);opacity:1;}
     /* 한 칸으로 세우면 사진 높이에 맞출 이유가 없습니다 */
     .oc-info-main .pd-profile{height:auto;min-height:0;}
     /* 라벨만 담는 칸이라 잘라내지 않습니다 (스크롤 없이 7줄까지) */
@@ -1933,31 +1996,22 @@
     .gf-actions{flex-wrap:wrap;row-gap:8px;}
 
     /* ---------- Pair 상세 모달 ----------
-       인덱스 탭이 모달 왼쪽 바깥(right:100%)에 있어 화면 밖으로 나갑니다.
-       가로 3등분 세그먼트로 바꿔 모달 아래에 붙입니다 — 엄지로 닿기 쉽고,
-       서류철에서 탭이 본체 밖으로 튀어나온 느낌도 그대로입니다.
-       위쪽 보더를 지워 모달과 한 덩어리로 이어지게 합니다. */
-    .pd-modal-wrap{flex-direction:column;width:100%;align-items:stretch;}
-    .pd-index-tabs{position:static;flex-direction:row;width:100%;}
-    .pd-index-tab{flex:1;width:auto;text-align:center;margin-bottom:0;padding:13px 6px;
-      font-size:11px;border-top:none;border-right:none;}
-    .pd-index-tab:last-child{border-right:1px solid #000;}
-    /* 탭 줄(약 40px)이 모달 위로 올라왔으므로 그만큼 빼줍니다.
-       계산이 어긋나도 잘리지는 않게 .modal 의 overflow-y:auto 는 살려둡니다. */
-    .modal.wide.pd-modal{width:100%;max-width:100%;max-height:calc(100dvh - 70px);}
+       OC 와 같은 구조라 좁은 화면에서도 같은 규칙을 씁니다 —
+       창은 화면 폭을 꽉 채우고, 장 표시 점은 창 안쪽 왼쪽으로 들입니다. */
+    .pd-modal-wrap{width:100%;align-items:stretch;}
+    .modal.wide.pd-modal{width:100%;max-width:100%;max-height:calc(100dvh - 30px);}
+    .pd-page-dots{right:auto;left:3px;margin-right:0;}
     .pd-modal-body{padding:0 14px 8px;}
     /* 제목/부제목은 <input> 이라 브라우저마다 기본 좌우 여백이 다릅니다
        (크롬 2px, 사파리 0px). 둘의 시작점이 어긋나 보이는 것을 막고
        아래 본문(여백 14px)과도 왼쪽 끝이 맞도록 0 으로 통일합니다. */
     .pd-title-input,.pd-subtitle-input{padding-left:0;padding-right:0;text-indent:0;}
     .pd-title-input{font-size:18px;margin:14px 0 0;}
-    /* GALLERY/LOG 탭이 height:100% 기반 flex 라 높이를 auto 로 풀면 무너집니다.
-       모달의 나머지 요소(탭 40 + 배너 113 + 제목 62 + 여백 32)를 뺀 값으로 고정. */
-    .pd-tab-content{height:calc(100dvh - 268px);min-height:280px;padding:8px 2px 8px 0;
-      overscroll-behavior:contain;}
-    /* 좁은 화면에서는 INFO 를 한 화면에 우겨넣지 않고 그냥 스크롤합니다 —
-       데스크톱에서 쓰는 '높이 고정 + 칸 안에서만 스크롤'을 여기서 되돌립니다. */
-    .pd-tab-pane[data-pdpane="info"].active{display:block;height:auto;}
+    /* 세 장의 높이를 화면에 맞춥니다 (배너 + 제목 + 여백을 뺀 나머지).
+       탭 줄이 없어진 만큼 OC(208)와 같은 값으로 맞췄습니다. */
+    .pd-tab-content{height:calc(100dvh - 228px);min-height:280px;}
+    /* 좁은 화면에서는 INFO 를 한 화면에 우겨넣지 않고 장 안에서 스크롤합니다 */
+    .pd-tab-pane{padding:8px 2px 8px 0;overflow-y:auto;overscroll-behavior:contain;}
     /* 세 칸을 옆으로 늘어놓기엔 좁으므로 두 프로필만 나란히 두고, 그 아래로
        RELATIONSHIP, 맨 아래에 넘김 칸을 놓습니다. 넘김 칸이 화면 폭만큼
        높아서(아래 참고) 맨 아래가 아니면 RELATIONSHIP 이 한참 밀려납니다. */
@@ -2094,14 +2148,13 @@
   /* 세로가 짧은 기기(iPhone SE 667px) — 한 페이지는 JS 에서 6장으로 줄입니다 */
   @media (max-width:768px) and (max-height:720px){
     .gallery-grid{gap:6px;}
-    .pd-tab-content{height:calc(100dvh - 250px);}
+    .pd-tab-content{height:calc(100dvh - 210px);}
   }
 
   /* 가로 모드 — 세로 공간이 거의 없으므로 배너를 낮추고 탭 높이를 최소로 */
   @media (max-width:900px) and (orientation:landscape) and (max-height:520px){
     .pd-header-banner{aspect-ratio:6/1;}
-    .pd-index-tab{padding:8px 6px;}
-    .pd-tab-content{height:calc(100dvh - 200px);min-height:200px;}
+    .pd-tab-content{height:calc(100dvh - 170px);min-height:200px;}
     .pd-title-input{font-size:16px;margin-top:8px;}
   }
 
@@ -2110,7 +2163,7 @@
      아래는 글자를 선택할 일이 없는 순수 UI 라서 기기를 가리지 않고 꺼둡니다.
      (썸네일, 화살표, 각종 탭/버튼, 정보행의 :: 손잡이) */
   .gallery-thumb,.gallery-thumb *,.gallery-scroll-hint,
-  .gallery-folder-tab,.gallery-folder-add,.pd-index-tab,
+  .gallery-folder-tab,.gallery-folder-add,
   .nav-item,.nav-sub-item,.meta-drag,.gallery-check,.post-check{
     -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
   /* 카드는 편집 모드에서만 드래그 대상이 되므로 그때만 끕니다.

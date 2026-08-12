@@ -1418,11 +1418,6 @@ function parseYouTubeId(url){
   const m = s.match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/|\/live\/)([\w-]{11})/);
   return m ? m[1] : '';
 }
-function musicLabel(s){
-  if(!s) return '';
-  const t = s.title || '(제목 없음)';
-  return s.artist ? `${t} - ${s.artist}` : t;
-}
 function fmtTime(sec){
   if(!isFinite(sec) || sec<0) sec = 0;
   const m = Math.floor(sec/60), r = Math.floor(sec%60);
@@ -1517,6 +1512,8 @@ function stopMusicTimer(){
   if(!musicTimer) return;
   clearInterval(musicTimer); musicTimer = null;
 }
+/* LP 재생 위치 원의 둘레 (2π × 24). style.css 의 .mb-lp-prog 와 같아야 합니다. */
+const LP_PROG_LEN = 150.8;
 function paintMusicTime(){
   const el = document.getElementById('mbTime');
   if(!el) return;
@@ -1527,6 +1524,21 @@ function paintMusicTime(){
     cur = ytPlayer.getCurrentTime(); dur = ytPlayer.getDuration();
   }
   el.innerText = fmtTime(cur) + ' / ' + fmtTime(dur);
+  /* 흐른 만큼 LP 바깥의 주황 원을 채웁니다 */
+  const prog = document.getElementById('mbLpProg');
+  if(prog){
+    const r = (dur > 0) ? Math.min(1, Math.max(0, cur/dur)) : 0;
+    prog.style.strokeDashoffset = (LP_PROG_LEN * (1 - r)).toFixed(1);
+  }
+}
+/* 곡을 바꿀 때는 원이 거꾸로 줄어드는 것이 보이지 않도록 애니메이션 없이 비웁니다 */
+function resetLpProgress(){
+  const prog = document.getElementById('mbLpProg');
+  if(!prog) return;
+  prog.style.transition = 'none';
+  prog.style.strokeDashoffset = String(LP_PROG_LEN);
+  void prog.getBoundingClientRect();
+  prog.style.transition = '';
 }
 /* 재생/멈춤에 따라 달라지는 것만 칠합니다 (LP 회전, ▶/❚❚) */
 function paintMusicState(){
@@ -1540,15 +1552,58 @@ function paintMusicState(){
    처음부터 재생되는 일이 없도록 견줍니다. */
 let musicLoadedId = null;
 
+/* ---- 사이드바 위젯의 흐르는 이름 ----
+   칸보다 긴 이름을 ... 로 자르지 않고 천천히 흘려보냅니다. 글자는 안쪽 <span>
+   하나에 담고, 넘치는 만큼만 밀었다가 되돌아옵니다. */
+function setMarqueeText(box, text){
+  if(!box) return;
+  let inner = box.querySelector('.mb-mq');
+  if(!inner){
+    box.textContent = '';
+    inner = document.createElement('span');
+    inner.className = 'mb-mq';
+    box.appendChild(inner);
+  }
+  inner.textContent = text;
+  box.title = text;
+  applyMarquee(box);
+  /* 서체가 늦게 도착하면 글자 폭이 달라지므로 한 번 더 재봅니다.
+     (requestAnimationFrame 은 뒤에 있는 탭에서 아예 오지 않아 쓰지 않습니다) */
+  setTimeout(()=> applyMarquee(box), 700);
+}
+function applyMarquee(box){
+  const inner = box && box.querySelector('.mb-mq');
+  if(!inner) return;
+  const dist = inner.scrollWidth - box.clientWidth;
+  if(dist > 1){
+    inner.style.setProperty('--mq-dist', dist + 'px');
+    /* 움직이는 구간은 전체의 76% 이고 속도는 초당 18px 남짓으로 잡습니다 */
+    inner.style.animationDuration = Math.max(7, dist/6.8 + 2).toFixed(1) + 's';
+    box.classList.add('scrolling');
+  }else{
+    box.classList.remove('scrolling');
+    inner.style.removeProperty('--mq-dist');
+    inner.style.animationDuration = '';
+  }
+}
+/* 사이드바 폭은 고정이지만 창을 줄이면 바뀔 수 있습니다 */
+window.addEventListener('resize', ()=>{
+  applyMarquee(document.getElementById('mbTitle'));
+  applyMarquee(document.getElementById('mbArtist'));
+});
+
 function renderMusicWidget(){
   const list = state.musicList || [];
   const titleEl = document.getElementById('mbTitle');
+  const artistEl = document.getElementById('mbArtist');
   if(!titleEl) return;
   if(musicIndex >= list.length) musicIndex = 0;
   const cur = list[musicIndex];
-  /* 곡이 없을 때는 자리를 비워두지 않고 들어갈 모양을 그대로 보여줍니다 */
-  titleEl.innerText = list.length ? '♪ ' + musicLabel(cur) : '♪ TITLE - ARTIST';
-  titleEl.title = list.length ? musicLabel(cur) : '';
+  /* 곡이 없을 때는 자리를 비워두지 않고 들어갈 모양을 그대로 보여줍니다.
+     제목과 아티스트는 두 줄로 나뉘어 있습니다. */
+  setMarqueeText(titleEl, list.length ? (cur.title || '(제목 없음)') : 'TITLE');
+  if(artistEl) setMarqueeText(artistEl, list.length ? (cur.artist || '') : 'ARTIST');
+  renderPlaylistPanel();
   const has = list.length > 0;
   ['mbPrev','mbPlay','mbNext'].forEach(id=>{
     const b = document.getElementById(id);
@@ -1569,6 +1624,7 @@ async function loadCurrentSong(play){
   const already = (musicLoadedId === s.id);
   musicLoadedId = s.id;
   if(already && !play) return;    // 이미 물려 있고 재생하라는 것도 아니면 할 일이 없습니다
+  if(!already) resetLpProgress();
 
   if(isFileSong(s)){
     if(ytReady && ytPlayer){ try{ ytPlayer.pauseVideo(); }catch(e){} }
@@ -1631,6 +1687,78 @@ document.getElementById('mbVol').addEventListener('input', (e)=>{
   if(audioEl) audioEl.volume = v/100;                 // <audio> 는 0~1
 });
 
+/* ---- 재생 목록 (LP 를 누르면 열립니다) ----
+   보는 전용입니다 — 순서 변경과 삭제는 노래 관리 창(＋)에서만 합니다.
+   순서는 관리 창과 같고, 제목만 늘어놓습니다. */
+function renderPlaylistPanel(){
+  const wrap = document.getElementById('mbPlaylistList');
+  if(!wrap) return;
+  const list = state.musicList || [];
+  wrap.innerHTML = '';
+  if(!list.length){
+    const e = document.createElement('div');
+    e.className = 'mbp-empty'; e.innerText = '아직 추가한 노래가 없어요.';
+    wrap.appendChild(e);
+    return;
+  }
+  list.forEach((s, i)=>{
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'mbp-item' + (i===musicIndex ? ' active' : '');
+    b.innerText = s.title || '(제목 없음)';
+    b.title = s.title || '';
+    b.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      if(i === musicIndex) return;
+      musicIndex = i;
+      /* 듣고 있던 중이면 고른 곡도 이어서 재생합니다.
+         stepMusic 과 같은 순서 — 먼저 물리고 나서 그립니다. */
+      loadCurrentSong(musicPlaying);
+      renderMusicWidget();
+    });
+    wrap.appendChild(b);
+  });
+}
+/* 사이드바 오른쪽에 붙이되 화면 위아래로는 넘어가지 않게 합니다.
+   높이를 재야 해서 자리는 반드시 창을 띄운 뒤에 잡습니다. */
+function placePlaylistPanel(){
+  const panel = document.getElementById('mbPlaylist');
+  const side = document.getElementById('sidebar');
+  const lp = document.getElementById('mbLp');
+  if(!panel || !side || !lp) return;
+  const sr = side.getBoundingClientRect(), lr = lp.getBoundingClientRect();
+  panel.style.left = Math.round(sr.right + 10) + 'px';
+  const h = panel.offsetHeight;
+  let top = lr.top + lr.height/2 - h/2;
+  top = Math.max(8, Math.min(top, window.innerHeight - h - 8));
+  panel.style.top = Math.round(top) + 'px';
+}
+function closeMusicPlaylist(){
+  const panel = document.getElementById('mbPlaylist');
+  if(panel) panel.classList.remove('open');
+}
+function toggleMusicPlaylist(){
+  const panel = document.getElementById('mbPlaylist');
+  if(!panel) return;
+  if(panel.classList.contains('open')){ closeMusicPlaylist(); return; }
+  renderPlaylistPanel();
+  panel.classList.add('open');
+  placePlaylistPanel();
+}
+bindOnce(document.getElementById('mbLp'), toggleMusicPlaylist);
+/* 바깥을 누르면 닫습니다 (LP 자신과 목록 안은 제외) */
+document.addEventListener('click', (e)=>{
+  const panel = document.getElementById('mbPlaylist');
+  if(!panel || !panel.classList.contains('open')) return;
+  if(e.target.closest && (e.target.closest('#mbPlaylist') || e.target.closest('#mbLp'))) return;
+  closeMusicPlaylist();
+});
+document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeMusicPlaylist(); });
+window.addEventListener('resize', ()=>{
+  const panel = document.getElementById('mbPlaylist');
+  if(panel && panel.classList.contains('open')) placePlaylistPanel();
+});
+
 /* ---- 노래 관리 창 (편집 모드) ---- */
 function renderMusicManageList(){
   const wrap = document.getElementById('mmList');
@@ -1638,39 +1766,62 @@ function renderMusicManageList(){
   const list = state.musicList || [];
   if(!list.length){ wrap.innerHTML = '<div class="empty-note" style="padding:10px 0;">아직 추가한 노래가 없어요.</div>'; return; }
   wrap.innerHTML = '';
-  list.forEach((s, i)=>{
+  list.forEach((s)=>{
     const row = document.createElement('div');
-    row.className = 'mm-row'; row.draggable = true; row.dataset.i = i;
+    row.className = 'mm-row'; row.draggable = true; row.dataset.id = String(s.id);
     const k = document.createElement('span'); k.className='mm-kind';
     k.innerText = isFileSong(s) ? 'FILE' : 'YT';
-    k.title = isFileSong(s) ? '음원 파일 (광고 없음)' : '유튜브';
+    k.title = isFileSong(s) ? '음원 파일' : '유튜브';
     const t = document.createElement('span'); t.className='mm-t'; t.innerText = s.title || '(제목 없음)';
     const a = document.createElement('span'); a.className='mm-a'; a.innerText = s.artist || '';
     const del = document.createElement('button'); del.type='button'; del.className='mm-del'; del.innerText='✕';
+    /* 자리(i)가 아니라 곡의 id 로 찾습니다 — 끌어서 순서를 바꾸는 동안에는
+       다시 그리지 않으므로 여기 갇혀 있는 자리 번호가 낡아버립니다. */
     del.addEventListener('click', async (e)=>{
       e.stopPropagation();
-      state.musicList.splice(i, 1);
+      const idx = state.musicList.findIndex(x=> x.id === s.id);
+      if(idx < 0) return;
+      state.musicList.splice(idx, 1);
       if(musicIndex >= state.musicList.length) musicIndex = 0;
       await storageSet('musicList', state.musicList);
       renderMusicManageList(); renderMusicWidget();
     });
     row.append(k, t, a, del);
-    row.addEventListener('dragstart', ()=>{ draggedMusicIdx = i; row.classList.add('dragging'); });
-    row.addEventListener('dragend', ()=>{ row.classList.remove('dragging'); draggedMusicIdx = null; });
-    row.addEventListener('dragover', (e)=> e.preventDefault());
-    row.addEventListener('drop', async (e)=>{
+    /* 끄는 동안 줄이 실제로 밀려나 보이게 합니다(FLIP).
+       사이드바 카테고리 순서 변경과 같은 방식으로, 다시 그리지 않고
+       줄 하나만 옮깁니다 — 다시 그리면 끌고 있던 요소가 사라져
+       dragend 가 오지 않고 순서가 저장되지 않습니다. */
+    row.addEventListener('dragstart', ()=>{ draggedMusicId = String(s.id); row.classList.add('dragging'); });
+    row.addEventListener('dragover', (e)=>{
       e.preventDefault();
-      if(draggedMusicIdx==null || draggedMusicIdx===i) return;
-      const moved = state.musicList.splice(draggedMusicIdx, 1)[0];
-      state.musicList.splice(i, 0, moved);
-      draggedMusicIdx = null;
+      if(draggedMusicId == null || draggedMusicId === String(s.id)) return;
+      const moving = wrap.querySelector('.mm-row.dragging');
+      if(!moving || moving === row) return;
+      const play = flipByKey(wrap, '.mm-row', 'id');
+      const r = row.getBoundingClientRect();
+      wrap.insertBefore(moving, (e.clientY - r.top > r.height/2) ? row.nextSibling : row);
+      play();
+    });
+    row.addEventListener('dragend', async ()=>{
+      row.classList.remove('dragging');
+      draggedMusicId = null;
+      const cur = currentSong();
+      const order = Array.from(wrap.querySelectorAll('.mm-row')).map(r=> r.dataset.id);
+      const next = order.map(id=> state.musicList.find(x=> String(x.id) === id)).filter(Boolean);
+      if(next.length !== state.musicList.length){ renderMusicManageList(); return; }
+      state.musicList = next;
+      // 듣고 있던 곡은 자리가 바뀌어도 그대로 듣습니다
+      if(cur){
+        const at = state.musicList.findIndex(x=> x.id === cur.id);
+        if(at >= 0) musicIndex = at;
+      }
       await storageSet('musicList', state.musicList);
-      renderMusicManageList(); renderMusicWidget();
+      renderMusicWidget();
     });
     wrap.appendChild(row);
   });
 }
-let draggedMusicIdx = null;
+let draggedMusicId = null;
 /* 고른 음원 파일 (아직 목록에 넣기 전) */
 let pickedAudio = null;   // { dataUrl, name, bytes }
 
@@ -2169,19 +2320,42 @@ function fillPairDetail(p){
   if(gq('.gallery-select-stack')) gq('.gallery-select-stack').style.display='none';
   gq('.gallery-select-toggle').innerText='✓';
   gq('.gallery-select-toggle').classList.remove('active');
-  document.querySelectorAll('.pd-index-tab').forEach(t=>t.classList.toggle('active', t.dataset.pdtab==='info'));
-  document.querySelectorAll('.pd-tab-pane').forEach(pn=>pn.classList.toggle('active', pn.dataset.pdpane==='info'));
+  setPdPage(0, false);
   renderLogList(p); renderGallery(p); renderTimeline(p);
 }
 
-document.querySelectorAll('.pd-index-tab').forEach(tab=>{
-  tab.addEventListener('click', ()=>{
-    document.querySelectorAll('.pd-index-tab').forEach(t=>t.classList.remove('active'));
-    tab.classList.add('active');
-    document.querySelectorAll('.pd-tab-pane').forEach(pn=>pn.classList.toggle('active', pn.dataset.pdpane===tab.dataset.pdtab));
-    relayoutLogCards();   // 숨어 있는 동안에는 폭이 0 이라 칸을 못 나눕니다
+/* ---- PAIR 상세 창의 장 넘김 ----
+   예전에는 창 왼쪽 바깥의 인덱스 탭을 눌러 INFO/GALLERY/LOG 를 오갔습니다.
+   지금은 OC 창과 같이 스크롤·스와이프로 넘기고, 몇 번째 장인지는
+   창 바깥 왼쪽의 점(#pdPageDots)이 알려줍니다 — 점은 표시용이라 눌리지 않습니다.
+   그래서 갤러리도 OC 처럼 좌우로 넘깁니다(PAIR_GALLERY_HOST.horizontal):
+   세로 방향은 이제 창의 장 넘김이 씁니다. */
+let pdPageIdx = 0;
+function setPdPage(idx, animate){
+  const panes = Array.from(document.querySelectorAll('.pd-tab-content .pd-tab-pane'));
+  if(!panes.length) return;
+  pdPageIdx = clamp(idx, 0, panes.length-1);
+  panes.forEach((el,i)=>{
+    el.style.transition = (animate===false) ? 'none' : '';
+    el.style.transform = `translateY(${(i-pdPageIdx)*100}%)`;
+    el.classList.toggle('active', i===pdPageIdx);
   });
-});
+  if(animate===false){
+    // 다음 프레임부터 다시 애니메이션이 걸리도록 되돌립니다
+    void panes[0].offsetWidth;
+    panes.forEach(el=>{ el.style.transition=''; });
+  }
+  const dots = document.getElementById('pdPageDots');
+  if(dots){
+    dots.innerHTML = '';
+    panes.forEach((_,i)=>{
+      const d = document.createElement('span');
+      d.className = 'oc-page-dot' + (i===pdPageIdx ? ' active' : '');
+      dots.appendChild(d);
+    });
+  }
+  relayoutLogCards();   // LOG 장이 이제 막 보이게 됐을 수 있습니다
+}
 
 /* persist 를 넘기지 않으면 PAIR 글로 저장합니다 (OC 창은 자기 저장 함수를 넘깁니다) */
 function bindMeta(elId, field, obj, persist){
@@ -3627,8 +3801,9 @@ function lq(sel){ return logHost ? logHost.root.querySelector(sel) : null; }
 function logPost(){ return logHost ? logHost.getPost() : null; }
 
 const savePair = ()=> storageSet('pairPosts', state.pairPosts);
+/* PAIR 도 갤러리를 좌우로 넘깁니다 — 세로 방향은 창의 장 넘김(INFO/GALLERY/LOG)이 씁니다 */
 const PAIR_GALLERY_HOST = { root: document.querySelector('.pd-tab-pane-gallery'),
-  getPost: ()=> getCurrentPost(), save: savePair, horizontal:false };
+  getPost: ()=> getCurrentPost(), save: savePair, horizontal:true };
 const PAIR_LOG_HOST     = { root: document.querySelector('.pd-tab-pane-log'),
   getPost: ()=> getCurrentPost(), save: savePair };
 /* OC 갤러리만 가로로 넘깁니다 — 세로 스크롤은 창 페이지 넘김이 씁니다 */
@@ -6350,8 +6525,16 @@ function initOcDetail(){
     ()=>{ const o=getCurrentOc(); return o ? o.sideImage : blankImg(); },
     (v)=>{ const o=getCurrentOc(); if(!o) return; o.sideImage=v; saveOc(); });
 
-  const pages = document.getElementById('ocPages');
-  if(!pages) return;
+  bindPageGestures(document.getElementById('ocPages'),
+    (d)=> setOcPage(ocPageIdx + d), '.oc-page');
+}
+
+/* ---- 상세 창의 장 넘김 제스처 (OC · PAIR 공용) ----
+   세로 휠 / 휠(가운데) 버튼 끌기 / 세로 스와이프로 한 장씩 넘깁니다.
+   step(+1|-1) 하나만 넘기면 되고, paneSel 은 좁은 화면에서 장 자체가
+   스크롤될 때 그 스크롤을 먼저 쓰도록 하기 위한 선택자입니다. */
+function bindPageGestures(el, step, paneSel){
+  if(!el) return;
 
   /* 테마곡 목록은 다릅니다 — 스크롤이 생겨 있으면 위아래 끝에 닿아도
      장을 넘기지 않고 그 칸에서만 스크롤합니다. 곡을 훑어보다가 창이
@@ -6363,23 +6546,25 @@ function initOcDetail(){
     return box.scrollHeight > box.clientHeight + 1;
   };
 
-  /* 안에서 따로 스크롤되는 칸(자유 텍스트 / LOG 카드 목록) 위에서는
-     그 칸이 끝까지 내려간 뒤에야 페이지를 넘깁니다.
+  /* 안에서 따로 스크롤되는 칸(자유 텍스트 / LOG 카드 목록 / 소개글 / TIMELINE /
+     메시지) 위에서는 그 칸이 끝까지 내려간 뒤에야 장을 넘깁니다.
      .log-cards-scroll 은 LOG 가 표에서 카드로 바뀌며 생긴 칸입니다 — 카드는
      길이가 제각각이라 스크롤이 생기므로 여기 없으면 목록을 내리는 도중
-     인물 페이지가 같이 넘어가 버립니다. */
+     장이 같이 넘어가 버립니다. 목록에 없는 칸은 스크롤이 없어 그냥 지나갑니다. */
+  const INNER = '.oc-free-box, .side-memo-box, .log-table-scroll, .log-cards-scroll, '
+              + '.pd-desc-box, .timeline-list, .msg-list, ' + paneSel;
   const consumedByInnerScroll = (target, down)=>{
     if(!target || !target.closest) return false;
-    // 좁은 화면에서는 장 자체도 스크롤됩니다 (.oc-page)
-    const box = target.closest('.oc-free-box, .side-memo-box, .log-table-scroll, .log-cards-scroll, .oc-page');
+    const box = target.closest(INNER);
     if(!box) return false;
     if(box.scrollHeight <= box.clientHeight + 1) return false;
     const atTop = box.scrollTop <= 0;
     const atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 1;
     return down ? !atBottom : !atTop;
   };
+
   let wheelLock = 0;
-  pages.addEventListener('wheel', (e)=>{
+  el.addEventListener('wheel', (e)=>{
     // 안쪽에서 가로로 이미 처리한 휠(오른쪽 칸 / 갤러리)은 장 넘김에 쓰지 않습니다
     if(e.__ocHandled || wheelDeltaX(e)) return;
     if(Math.abs(e.deltaY) < 4) return;
@@ -6388,47 +6573,47 @@ function initOcDetail(){
     const now = Date.now();
     if(now < wheelLock) return;
     wheelLock = now + 600;      // 한 번 굴릴 때 한 장만 넘어가게
-    setOcPage(ocPageIdx + (e.deltaY>0 ? 1 : -1));
+    step(e.deltaY>0 ? 1 : -1);
   }, {passive:true});
 
   /* 휠(가운데) 버튼을 누른 채 위아래로 끌면 장이 넘어갑니다.
      높이가 고정이라 크롬의 오토스크롤이 뜨지 않으므로 대신 붙였습니다.
      좌우로 끄는 것은 오른쪽 칸(makeSidePager)이 따로 받습니다. */
   let my=null, midMoved=false;
-  pages.addEventListener('pointerdown', (e)=>{
+  el.addEventListener('pointerdown', (e)=>{
     if(e.button!==1) return;
     e.preventDefault();
     my=e.clientY; midMoved=false;
-    try{ pages.setPointerCapture(e.pointerId); }catch(_){}
+    try{ el.setPointerCapture(e.pointerId); }catch(_){}
   });
-  pages.addEventListener('pointermove', (e)=>{
+  el.addEventListener('pointermove', (e)=>{
     if(my===null) return;
     const dy=e.clientY-my;
     if(Math.abs(dy) < 60 || midMoved) return;
     midMoved=true;
-    setOcPage(ocPageIdx + (dy<0 ? 1 : -1));
+    step(dy<0 ? 1 : -1);
   });
   const endMid=()=>{ my=null; };
-  pages.addEventListener('pointerup', endMid);
-  pages.addEventListener('pointercancel', endMid);
-  pages.addEventListener('auxclick', (e)=>{ if(e.button===1) e.preventDefault(); });
+  el.addEventListener('pointerup', endMid);
+  el.addEventListener('pointercancel', endMid);
+  el.addEventListener('auxclick', (e)=>{ if(e.button===1) e.preventDefault(); });
 
   /* 손가락 위아래 스와이프. 갤러리의 좌우 스와이프와는 방향으로 구분됩니다. */
   let y0=null, x0=0, startTarget=null;
-  pages.addEventListener('touchstart', (e)=>{
+  el.addEventListener('touchstart', (e)=>{
     if(e.touches.length!==1 || document.body.classList.contains('touch-dragging')){ y0=null; return; }
     y0=e.touches[0].clientY; x0=e.touches[0].clientX; startTarget=e.target;
   }, {passive:true});
-  pages.addEventListener('touchend', (e)=>{
+  el.addEventListener('touchend', (e)=>{
     if(y0===null) return;
     const dy=e.changedTouches[0].clientY-y0, dx=e.changedTouches[0].clientX-x0;
     y0=null;
     if(document.body.classList.contains('touch-dragging')) return;
     if(Math.abs(dy)<50 || Math.abs(dy)<Math.abs(dx)) return;
-    // 안에서 아직 더 스크롤될 곳이 남았으면 페이지를 넘기지 않습니다
+    // 안에서 아직 더 스크롤될 곳이 남았으면 장을 넘기지 않습니다
     if(lockedByThemeList(startTarget)) return;
     if(consumedByInnerScroll(startTarget, dy<0)) return;
-    setOcPage(ocPageIdx + (dy<0 ? 1 : -1));
+    step(dy<0 ? 1 : -1);
   }, {passive:true});
 }
 
@@ -7636,6 +7821,9 @@ async function boot(){
   initLogRoot(PAIR_LOG_HOST);
   initLogRoot(OC_LOG_HOST);
   initOcDetail();
+  /* PAIR 상세도 OC 와 같은 방식으로 장을 넘깁니다 */
+  bindPageGestures(document.querySelector('#modalPairDetail .pd-tab-content'),
+    (d)=> setPdPage(pdPageIdx + d), '.pd-tab-pane');
   initSidePagers();
   initMobileDrawer();
   initHomeTouchNav();
