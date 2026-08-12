@@ -245,25 +245,35 @@
   /* ---- 재생 목록 ----
      사이드바 오른쪽에 붙습니다. 자리는 JS 가 잡고(position:fixed), 보는 전용이라
      순서 변경·삭제는 없습니다 — 그건 노래 관리 창(＋)이 합니다. */
-  /* 폭·자리·높이는 JS(placePlaylistPanel)가 넣습니다 — 위젯 바로 아래에 붙어
-     메뉴를 밀어내지 않고 그 위를 덮습니다. */
-  /* z-index 65 — 위젯이 좁은 화면에서는 서랍(60) 안에 들어 있으므로 그보다 위여야
-     하고, 창(모달 100)보다는 아래여야 합니다. */
-  .mb-playlist{position:fixed;display:none;z-index:65;
-    background:var(--bg);border:1px solid var(--border);
-    box-shadow:0 8px 24px rgba(0,0,0,.22);flex-direction:column;overflow:hidden;}
-  .mb-playlist.open{display:flex;}
-  .mbp-list{flex:1;min-height:0;overflow-y:auto;padding:5px 0;}
+  /* 재생 목록 — 위젯 바로 아래에 펼쳐지고, 떠 있는 창이 아니라 자리를 차지해
+     아래 메뉴를 밀어냅니다. 테두리도 그림자도 없이 사이드바 바탕에 얹힙니다.
+     왼쪽 끝은 위젯 글자와 같은 자리(2px)에 맞춥니다. */
+  /* 열릴 때 위에서 아래로 내려옵니다. 여백을 margin 이 아니라 padding 으로 둔 것은
+     펼쳐지는 높이(max-height)에 그 여백까지 포함시켜 메뉴가 먼저 툭 밀리지 않게
+     하려는 것입니다. 끝 값 116 = 목록 104 + 위 여백 12 이고, 실제 높이가 그보다
+     짧으면 max-height 는 아무것도 하지 않습니다. */
+  .mb-playlist{display:none;overflow:hidden;padding-top:12px;}
+  .mb-playlist.open{display:block;animation:mbp-drop .34s cubic-bezier(.22,1,.36,1);}
+  @keyframes mbp-drop{
+    from{max-height:0;opacity:0;transform:translateY(-8px);}
+    to  {max-height:116px;opacity:1;transform:none;}
+  }
+  /* 다섯 칸까지만 보이고 나머지는 스크롤합니다.
+     한 칸 = 위아래 여백 3+3 + 줄 높이 14 = 20px, 칸 사이 실선 1px 이 네 줄.
+     글자 크기나 여백을 바꾸면 이 값도 다시 계산해야 합니다. */
+  .mbp-list{max-height:104px;overflow-y:auto;}
   .mbp-item{display:flex;align-items:baseline;gap:7px;width:100%;text-align:left;
     border:none;background:transparent;
-    font-family:var(--mono);font-size:11px;color:var(--text);
-    padding:3px 10px;line-height:1.4;transition:color .16s ease;}
-  .mbp-no{flex:none;font-size:9px;font-weight:700;letter-spacing:.04em;color:var(--text-muted);}
+    font-family:var(--mono);font-size:10px;color:var(--text);
+    padding:3px 2px;line-height:1.4;transition:color .16s ease;}
+  /* 칸과 칸 사이에만 긋습니다 (#c1440e 를 옅게) */
+  .mbp-item + .mbp-item{border-top:1px solid rgba(193,68,14,.4);}
+  .mbp-no{flex:none;font-size:8.5px;font-weight:700;letter-spacing:.04em;color:var(--text-muted);}
   .mbp-t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .mbp-item:hover{color:var(--accent);}
   .mbp-item.active{color:var(--accent);font-weight:700;}
   .mbp-item.active .mbp-no{color:var(--accent);}
-  .mbp-empty{font-family:var(--mono);font-size:10px;color:var(--text-muted);padding:10px 12px;}
+  .mbp-empty{font-family:var(--mono);font-size:9.5px;color:var(--text-muted);padding:4px 2px;}
   /* 유튜브 플레이어는 소리만 쓰므로 눈에 띄지 않게 둡니다.
      display:none 이나 화면 밖(left:-9999px)으로 치우면 브라우저가 '그릴 필요 없는
      것'으로 보고 재생을 시작하지 않거나 버퍼링에서 멈추는 일이 있습니다.
@@ -358,11 +368,9 @@
   .ns-add-ok:hover{color:var(--accent);border-color:var(--accent);}
   .ns-add-cancel:hover{color:#c0392b;border-color:#c0392b;}
 
-  .login-widget{margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:10px;border-top:1px solid var(--border);}
-  .login-badge{font-family:var(--mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:5px 9px;border-radius:0;background:var(--surface-2);color:var(--text-muted);}
-  body.logged-in .login-badge{background:var(--accent-soft);color:var(--accent);}
-  .login-btn-small{font-size:11px;font-weight:700;border:1px solid var(--border);background:var(--bg);border-radius:var(--radius-sm);padding:6px 10px;color:var(--text);}
-  .login-btn-small:hover{background:var(--surface-2);}
+  /* 로그인/로그아웃은 사이드바가 아니라 HOME 엽서 아래에 있습니다
+     (.postcard-btn / .login-sheet — 아래 HOME 항목 참고).
+     LOCKED/UNLOCKED 배지는 없앴습니다 — 버튼 글자가 그 역할을 합니다. */
 
   [data-editonly]{display:none;}
   body.logged-in [data-editonly]{display:inline-flex;}
@@ -377,6 +385,14 @@
   .main{flex:1;overflow-y:auto;position:relative;}
   .view{display:none;height:100%;}
   .view.active{display:block;}
+  /* 메뉴를 옮기면 새 화면이 아래에서 부드럽게 올라옵니다.
+     transition 이 아니라 animation 인 까닭 — 화면은 display:none 에서 나타나므로
+     그 순간에는 transition 이 걸리지 않습니다.
+     .view 는 .main 높이를 꽉 채우므로, 아래로 20px 밀린 동안에는 .main 이
+     그만큼 넘칩니다. 그 0.4초 동안만 스크롤 막대가 번쩍이지 않게 넘침을 감춥니다. */
+  .view.view-enter{animation:view-in .42s cubic-bezier(.22,1,.36,1) both;}
+  @keyframes view-in{ from{opacity:0;transform:translateY(20px);} to{opacity:1;transform:none;} }
+  .main:has(.view.view-enter){overflow:hidden;}
   /* 높이를 편집 모드 기준(60px = 여백 14+14 + 버튼 31 + 아래 보더 1)으로 고정합니다.
      보기 모드에서는 버튼이 사라져 44px 로 줄어들고 LOVE INTEREST 바는 50px 라,
      화면을 옮기거나 로그인할 때마다 제목 줄이 위아래로 튀었습니다.
@@ -415,12 +431,123 @@
      따로 있어서, 상자를 두르면 선이 겹쳐 보였습니다.
      좌우 여백(24px)은 남깁니다 — 없애면 소개글이 배너보다 넓어져 폭이 어긋납니다. */
   /* HOME 첫 화면만 조선일보명조입니다 (사이트 이름·인사말) */
-  .intro-card{width:100%;max-width:420px;border:none;border-radius:0;padding:0 24px;text-align:center;background:var(--bg);font-family:var(--font-chosun);}
+  .intro-card{width:100%;max-width:420px;border:none;border-radius:0;padding:0 24px;text-align:center;background:var(--bg);font-family:var(--font-chosun);position:relative;}
   .intro-banner{width:100%;aspect-ratio:3/1;border-radius:0;border:1px solid var(--border);margin-bottom:16px;}
   .intro-sitename{font-family:inherit;font-size:17px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;border:none;background:transparent;text-align:center;width:100%;outline:none;color:var(--text);}
   .intro-divider{color:var(--text-muted);font-size:12px;margin:10px 0;}
   .home-intro{font-size:12.5px;line-height:1.9;outline:none;color:var(--text);min-height:24px;white-space:pre-wrap;}
   .home-intro:empty:before{content:'소개글을 입력하세요...';color:var(--text-muted);}
+
+  /* ---- 로그인 (예전 사이드바 위젯 자리) ----
+     엽서 아래의 글자 버튼 하나뿐입니다. 테두리도 바탕도 없이 오렌지 글자만. */
+  /* 엽서 아래에 띄워 놓습니다 — 흐름에 두면 엽서(가운데 정렬)가 이 버튼 높이의
+     절반만큼 위로 올라갑니다. top:100% 는 엽서 상자의 바로 아래를 뜻합니다. */
+  .postcard-btn{position:absolute;top:100%;left:0;right:0;margin-top:90px;
+    border:none;background:transparent;padding:6px 4px;
+    font-family:var(--font-chosun);font-size:13px;letter-spacing:.03em;color:var(--accent);
+    transition:opacity .16s ease;}
+  .postcard-btn:hover{opacity:.65;}
+  /* 로그인 상자는 창(모달)이 아니라 엽서를 정확히 덮으며 그 자리에 열립니다.
+     엽서의 내용은 visibility 로만 숨깁니다 — display:none 으로 지우면 엽서 높이가
+     줄어들어 상자 크기가 달라지고 페이지가 한 번 튑니다.
+     Write a Postcard 버튼만은 남깁니다 — 열려 있는 동안 그것이 로그인 단추입니다. */
+  .intro-card.login-open > *:not(.login-sheet):not(.postcard-btn){visibility:hidden;}
+  /* 창이 다 닫힌 뒤, 가려져 있던 엽서가 제자리에서 서서히 진해집니다 —
+     visibility 를 되돌리기만 하면 툭 하고 튀어나옵니다.
+     Write a Postcard 는 내내 보이고 있었으므로 여기서 빼야 합니다(깜빡이지 않게).
+     시간은 main.js 의 CARD_BACK_MS 와 같아야 합니다. */
+  .intro-card.login-back > *:not(.login-sheet):not(.postcard-btn){
+    animation:ls-card-back .45s ease both;}
+  @keyframes ls-card-back{ from{opacity:0;} to{opacity:1;} }
+  /* 엽서보다 사방으로 조금씩 큽니다 — 처음에는 엽서와 똑같은 크기(inset:0)였는데
+     너무 옹색해 보인다고 하여 키웠습니다. 음수 inset 이라 엽서 높이가 글 길이에
+     따라 달라져도 늘어나는 양은 그대로입니다. 결과: 530 x 엽서높이+116.
+     (좁은 화면에서는 화면 밖으로 나가므로 아래 모바일 규칙에서 inset:0 으로
+      되돌립니다 — 거기서는 엽서가 이미 화면 폭을 거의 다 씁니다.) */
+  .login-sheet{display:none;position:absolute;left:-55px;right:-55px;top:-58px;bottom:-58px;z-index:6;}
+  .login-sheet.open{display:block;}
+  /* 상자에는 border 를 주지 않습니다 — 네 변을 따로 그려야 꼭짓점에서
+     자라 나오게 만들 수 있습니다. */
+  .ls-box{position:relative;height:100%;background:var(--bg);padding:30px 36px;text-align:left;}
+  .ls-line{position:absolute;background:var(--border);}
+  /* 왼쪽 위 꼭짓점에서 오른쪽으로, 아래로 */
+  .ls-t{top:0;left:0;height:1px;width:100%;transform:scaleX(0);transform-origin:left center;}
+  .ls-l{top:0;left:0;width:1px;height:100%;transform:scaleY(0);transform-origin:center top;}
+  /* 오른쪽 아래 꼭짓점에서 왼쪽으로, 위로 */
+  .ls-b{bottom:0;right:0;height:1px;width:100%;transform:scaleX(0);transform-origin:right center;}
+  .ls-r{bottom:0;right:0;width:1px;height:100%;transform:scaleY(0);transform-origin:center bottom;}
+  /* transition 이 아니라 animation 인 까닭 — 상자는 display:none 에서 나타나므로
+     그 순간에는 transition 이 걸리지 않습니다(애니메이션은 걸립니다). */
+  /* 선이 자라는 것이 눈에 보여야 하므로 앞이 급하지 않은 곡선을 씁니다 —
+     cubic-bezier(.22,1,.36,1)(사이트의 기본 곡선)은 절반 시점에 이미 96% 가 그려져
+     선이 그냥 튀어나온 것처럼 보였습니다.
+     :not(.closing) 이 필요합니다 — 닫을 때는 아래의 되감기 규칙이 대신 걸립니다. */
+  .login-sheet.open:not(.closing) .ls-t,
+  .login-sheet.open:not(.closing) .ls-b{animation:ls-draw-x .55s cubic-bezier(.4,0,.2,1) both;}
+  .login-sheet.open:not(.closing) .ls-l,
+  .login-sheet.open:not(.closing) .ls-r{animation:ls-draw-y .55s cubic-bezier(.4,0,.2,1) both;}
+  @keyframes ls-draw-x{ from{transform:scaleX(0);} to{transform:scaleX(1);} }
+  @keyframes ls-draw-y{ from{transform:scaleY(0);} to{transform:scaleY(1);} }
+  /* 닫을 때는 열릴 때와 똑같은 애니메이션을 거꾸로 돌립니다(animation-direction:reverse).
+     순서도 뒤집습니다 — 내용이 먼저 사라지고, 그 다음 테두리가 두 꼭짓점으로 빨려 듭니다.
+     전체 시간 .37 + .55 = .92초이고, JS 의 LOGIN_CLOSE_MS 와 같아야 합니다.
+
+     ★ 이름(-r)이 열 때와 반드시 달라야 합니다. 이름이 같으면 브라우저가 '새
+     애니메이션'이 아니라 '돌고 있던 그 애니메이션의 설정이 바뀐 것'으로 보고
+     흐른 시간(currentTime)을 그대로 물려줍니다. 열기 애니메이션은 이미 끝나 있으니
+     그 시간은 끝을 지나 있고, 거기서 방향만 뒤집히면 되감기가 보이는 대신
+     시작 모습(투명·선 없음)으로 곧바로 튑니다. 실제로 그렇게 되어 있었습니다.
+     내용은 열 때와 같지만 이름만 다른 규칙을 따로 두어 새로 시작하게 합니다
+     (0→1 그대로 두고 reverse 로 돌려야 가속 곡선까지 정확히 뒤집힙니다). */
+  @keyframes ls-draw-x-r{ from{transform:scaleX(0);} to{transform:scaleX(1);} }
+  @keyframes ls-draw-y-r{ from{transform:scaleY(0);} to{transform:scaleY(1);} }
+  @keyframes ls-fade-r{ from{opacity:0;} to{opacity:1;} }
+  .login-sheet.closing .ls-t,
+  .login-sheet.closing .ls-b{animation:ls-draw-x-r .55s cubic-bezier(.4,0,.2,1) .37s reverse both;}
+  .login-sheet.closing .ls-l,
+  .login-sheet.closing .ls-r{animation:ls-draw-y-r .55s cubic-bezier(.4,0,.2,1) .37s reverse both;}
+  .login-sheet.closing .ls-inner{animation:ls-fade-r .5s ease reverse both;}
+  /* 테두리가 거의 다 그려질 즈음 안쪽이 떠오릅니다.
+     엽서 뒷면 배치 — 두 칸 두 줄로 나눠 왼쪽 위와 오른쪽 아래에만 칸을 놓습니다.
+     빈 왼쪽 아래 칸은 오류 안내가 씁니다. */
+  /* 칸 사이 간격은 상자의 좌우 안쪽 여백(36px)의 두 배입니다 —
+     그래야 두 칸이 가운데 구분선에서 떨어진 거리와 상자 바깥에서 떨어진 거리가 같습니다. */
+  .ls-inner{opacity:0;height:100%;position:relative;
+    display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;column-gap:72px;}
+  .ls-field-email{grid-column:1;grid-row:1;align-self:start;}
+  .ls-stamp{grid-column:2;grid-row:1;justify-self:end;align-self:start;}
+  .ls-field-pw{grid-column:2;grid-row:2;align-self:end;}
+  .ls-inner .login-error{grid-column:1;grid-row:2;align-self:end;margin:0;}
+  /* 엽서 뒷면의 세로 구분선. 실제 엽서에서 사연과 주소를 가르는 그 선입니다 —
+     두 칸을 대각선으로 떼어 놓은 이유를 눈에 보이게 해 줍니다. */
+  .ls-divider{position:absolute;left:50%;top:6%;bottom:6%;width:1px;
+    background:var(--border);opacity:.25;}
+  /* 우표 — 바깥 점선이 구멍 자리, 안쪽 실선이 인쇄 테두리입니다.
+     가운데 글자는 엽서 첫 화면의 구분 기호(.intro-divider)와 같은 * 입니다. */
+  .ls-stamp{width:50px;height:60px;border:1px dashed var(--border);padding:4px;
+    display:flex;}
+  .ls-stamp-in{flex:1;border:1px solid var(--border);}
+  /* 항공 우편 소인(img/postmark.png) — 우표를 왼쪽에서 덮고(z-index) 물결선이
+     우표 위를 지나 오른쪽으로 빠져나갑니다. 자리는 .ls-inner(격자) 기준입니다.
+     mix-blend-mode:multiply — 원본 그림의 흰 바탕을 지우고 잉크만 남깁니다.
+     투명 배경(PNG)이면 이 줄이 있어도 그대로 보입니다.
+     색은 원본 그대로 둡니다(사이트 색으로 바꾸지 않습니다). */
+  .ls-postmark{position:absolute;top:-8px;right:-14px;width:138px;height:auto;z-index:2;
+    transform:rotate(-9deg);pointer-events:none;mix-blend-mode:multiply;
+    -webkit-user-select:none;user-select:none;}
+  /* 제자리에서 서서히 진해지기만 합니다 (위로 떠오르지 않습니다) */
+  .login-sheet.open:not(.closing) .ls-inner{animation:ls-fade .5s ease .42s both;}
+  @keyframes ls-fade{ from{opacity:0;} to{opacity:1;} }
+  .ls-label{display:block;font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.1em;
+    color:var(--text-muted);margin-bottom:6px;}
+  /* 상자가 아니라 엽서 주소 칸처럼 가로줄 세 개입니다. 맨 윗줄이 입력 칸이고
+     아래 두 줄은 모양만 냅니다 — 줄 높이(26px)는 셋이 같아야 간격이 고릅니다. */
+  .ls-lines{display:flex;flex-direction:column;}
+  .ls-input,.ls-rule{display:block;height:26px;box-sizing:border-box;
+    border:none;border-bottom:1px solid rgba(26,26,26,.5);}
+  .ls-input{width:100%;border-radius:0;background:transparent;outline:none;
+    font-family:var(--mono);font-size:12.5px;color:var(--text);padding:0 2px;}
+  .ls-input:focus{border-bottom-color:var(--accent);}
   .to-cards-btn{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);width:36px;height:36px;border-radius:0;border:1px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;}
 
   /* PAIR·OC·ARCHIVE 의 .topbar 와 같은 모양입니다 — 좌우 여백 28px, 높이 60px,
@@ -448,6 +575,15 @@
   .dream-card{position:relative;overflow:hidden;min-height:0;border:none;border-right:1px solid var(--border);border-bottom:1px solid var(--border);background:#222;color:#fff;}
   .dream-card.dragging{opacity:.4;}
   .dream-card .dc-adjustable{position:absolute;inset:0;}
+  /* 평소에는 흑백, 마우스를 올리면 천천히 색이 돌아옵니다.
+     filter 는 사진 칸(.dc-adjustable)에만 겁니다 — 카드 전체에 걸면 그 위의
+     그라데이션과 글자, ✕·⠿ 단추까지 함께 빛이 바랩니다.
+     hover 가 없는 기기(터치)에서는 아예 걸지 않습니다 — 색을 되돌릴 방법이
+     없어 사진이 흑백으로 굳어버립니다. */
+  @media (hover:hover){
+    .dream-card .dc-adjustable{filter:grayscale(1);transition:filter .5s ease;}
+    .dream-card:hover .dc-adjustable{filter:grayscale(0);}
+  }
   /* 그라데이션을 카드 왼쪽 절반(0~50%)으로 압축.
      중간에 끊지 않고 기존 곡선을 그대로 눌러 담기 위해
      각 정지점을 50/74 비율로 줄임 (34% → 23%, 74% → 50%) */
@@ -1856,7 +1992,25 @@
     .ns-add-row{padding:8px 8px 8px 10px;}
     .ns-add-ok,.ns-add-cancel{width:36px;height:36px;font-size:14px;}
     .ns-add-input{padding:9px 10px;font-size:13px;}
-    .login-btn-small{min-height:40px;padding:10px 14px;font-size:12px;}
+    /* 좁은 화면은 아래 여백 자체가 적어서 데스크톱(90px)만큼 내리면
+       ︾ 단추와 부딪힙니다. 절반쯤만 내립니다. */
+    .postcard-btn{min-height:40px;font-size:14px;margin-top:44px;}
+    /* 좁은 화면에서는 엽서가 이미 화면 폭을 거의 다 쓰므로 키우지 않고
+       엽서와 같은 자리·같은 크기로 되돌립니다 */
+    .login-sheet{left:0;right:0;top:0;bottom:0;padding:0 24px;}
+    .ls-box{padding:18px;}
+    /* 두 칸을 대각선으로 놓을 폭이 없습니다 — 위아래로 세우고 우표와 구분선은 뺍니다.
+       align-self 는 격자에서 쓰던 것이라 여기서는 되돌려야 합니다 —
+       안 그러면 세로 배치에서 한 칸은 왼쪽, 한 칸은 오른쪽으로 붙습니다. */
+    .ls-inner{display:flex;flex-direction:column;justify-content:center;gap:16px;}
+    .ls-inner > *{align-self:stretch;}
+    .ls-stamp,.ls-divider,.ls-postmark{display:none;}
+    /* 상자 높이가 엽서만큼(약 198px)뿐이라 줄 세 개짜리 칸 둘은 들어가지 않습니다.
+       장식용 줄은 빼고 입력 줄만 남깁니다. */
+    .ls-rule{display:none;}
+    /* iOS 는 16px 미만 입력칸에 포커스하면 화면을 확대합니다.
+       글자가 커진 만큼 줄 높이도 올립니다 — 26px 에는 16px 글자가 들어가지 않습니다. */
+    .ls-input{font-size:16px;height:34px;padding:0 2px;}
 
     /* ---------- Home ---------- */
     #home-intro-page{padding:20px 16px 56px;}

@@ -13,8 +13,10 @@ function safely(label, fn){
 }
 function applyEditMode(){
   document.body.classList.toggle('logged-in', isLoggedIn);
-  document.getElementById('loginBadge').innerText = isLoggedIn ? 'UNLOCKED' : 'LOCKED';
-  document.getElementById('loginBtn').innerText = isLoggedIn ? '로그아웃' : '로그인';
+  /* 예전의 LOCKED/UNLOCKED 배지는 없앴습니다 — 이 글자가 그 역할을 합니다 */
+  const pcBtn = document.getElementById('postcardBtn');
+  if(pcBtn) pcBtn.innerText = isLoggedIn ? 'Send a Postcard' : 'Write a Postcard';
+  if(isLoggedIn) closeLoginSheet();
 
   document.getElementById('siteName').readOnly = !isLoggedIn;
   document.getElementById('homeIntro').contentEditable = isLoggedIn ? 'true' : 'false';
@@ -47,46 +49,117 @@ function applyEditMode(){
   });
 }
 
-const loginBtnEl = document.getElementById('loginBtn');
-loginBtnEl.addEventListener('click', async ()=>{
-  if(isLoggedIn){
-    /* 저장이 밀려 있으면 몇 초 걸릴 수 있어 버튼을 잠가 둡니다 */
-    loginBtnEl.disabled = true;
-    const before = loginBtnEl.innerText;
-    loginBtnEl.innerText = '로그아웃 중…';
-    try{
-      await window.SiteStore.signOut();
-    }catch(e){
-      console.error('로그아웃 실패', e);
-      alert('로그아웃하지 못했어요. 잠시 뒤 다시 눌러주세요.');
-    }finally{
-      loginBtnEl.disabled = false;
-      if(loginBtnEl.innerText==='로그아웃 중…') loginBtnEl.innerText = before;
-    }
+/* ---- 로그인 ----
+   창(모달)이 아니라 HOME 엽서 자리에서 열립니다. 엽서 내용은 visibility 로만
+   숨기므로 높이가 그대로여서 상자가 화면 가운데에 앉고 페이지가 튀지 않습니다. */
+/* 닫히는 애니메이션(테두리 되감기)에 걸리는 시간. style.css 의 .login-sheet.closing
+   규칙(.37s 지연 + .55s)과 같아야 합니다. */
+const LOGIN_CLOSE_MS = 940;
+/* 창이 사라진 뒤 가려져 있던 엽서가 다시 진해지는 데 걸리는 시간.
+   style.css 의 .intro-card.login-back 규칙과 같아야 합니다. */
+const CARD_BACK_MS = 470;
+let loginCloseTimer = null;
+let cardBackTimer = null;
+function loginSheetOpen(){
+  const s = document.getElementById('loginSheet');
+  /* 닫히는 중은 '열려 있음'으로 보지 않습니다 — 그 사이 버튼을 누르면
+     로그인을 시도하는 대신 다시 열려야 하기 때문입니다. */
+  return !!(s && s.classList.contains('open') && !s.classList.contains('closing'));
+}
+function openLoginSheet(){
+  const sheet = document.getElementById('loginSheet');
+  const card  = document.querySelector('.intro-card');
+  if(!sheet || !card) return;
+  clearTimeout(loginCloseTimer);
+  clearTimeout(cardBackTimer);
+  sheet.classList.remove('closing');            // 닫히던 중이었다면 되돌립니다
+  card.classList.remove('login-back');          // 엽서가 다시 나타나던 중이었다면 그만둡니다
+  document.getElementById('loginId').value = '';
+  document.getElementById('loginPw').value = '';
+  const err = document.getElementById('loginError');
+  err.style.display = 'none';
+  sheet.classList.add('open');
+  card.classList.add('login-open');
+  /* 테두리가 다 그려진 뒤에 칸으로 들어갑니다. preventScroll 을 주는 것은
+     칸에 포커스가 가면 브라우저가 엽서 칸을 스크롤해 버리기 때문입니다. */
+  setTimeout(()=>{
+    if(loginSheetOpen()) document.getElementById('loginId').focus({preventScroll:true});
+  }, 620);
+}
+/* 열릴 때의 애니메이션을 거꾸로 돌린 뒤에 감춥니다. 그동안 .open 은 그대로 두어야
+   합니다 — 지우는 순간 display:none 이 되어 되감기가 보이지 않습니다.
+   immediate 는 화면 밖에서 접을 때(다른 메뉴로 옮길 때) 씁니다. */
+function closeLoginSheet(immediate){
+  const sheet = document.getElementById('loginSheet');
+  const card  = document.querySelector('.intro-card');
+  if(!sheet || !sheet.classList.contains('open')) return;
+  clearTimeout(loginCloseTimer);
+  clearTimeout(cardBackTimer);
+  if(immediate){
+    sheet.classList.remove('open', 'closing');
+    if(card) card.classList.remove('login-open', 'login-back');
+    return;
   }
-  else{
-    document.getElementById('loginId').value='';
-    document.getElementById('loginPw').value='';
-    document.getElementById('loginError').style.display='none';
-    openModal('modalLogin');
-  }
-});
-document.getElementById('loginSubmitBtn').addEventListener('click', async ()=>{
-  const email=document.getElementById('loginId').value.trim();
-  const pw=document.getElementById('loginPw').value;
-  const errEl=document.getElementById('loginError');
-  const btn=document.getElementById('loginSubmitBtn');
-  errEl.style.display='none';
-  btn.disabled=true;
+  if(sheet.classList.contains('closing')) return;
+  sheet.classList.add('closing');
+  loginCloseTimer = setTimeout(()=>{
+    sheet.classList.remove('open', 'closing');
+    if(!card) return;
+    card.classList.remove('login-open');
+    /* 가려져 있던 엽서가 툭 하고 튀어나오지 않게 서서히 진해집니다 */
+    card.classList.add('login-back');
+    cardBackTimer = setTimeout(()=> card.classList.remove('login-back'), CARD_BACK_MS);
+  }, LOGIN_CLOSE_MS);
+}
+const postcardBtnEl = document.getElementById('postcardBtn');
+async function submitLogin(){
+  const email = document.getElementById('loginId').value.trim();
+  const pw    = document.getElementById('loginPw').value;
+  const errEl = document.getElementById('loginError');
+  errEl.style.display = 'none';
+  postcardBtnEl.disabled = true;
   try{
     await window.SiteStore.signIn(email, pw);
-    closeModal('modalLogin');
+    closeLoginSheet();
   }catch(e){
     errEl.innerText = loginErrorMessage(e);
-    errEl.style.display='block';
+    errEl.style.display = 'block';
   }finally{
-    btn.disabled=false;
+    postcardBtnEl.disabled = false;
   }
+}
+/* 버튼 하나가 세 가지 일을 합니다 —
+   편집 모드면 로그아웃, 상자가 닫혀 있으면 열기, 열려 있으면 로그인. */
+postcardBtnEl.addEventListener('click', async ()=>{
+  if(!isLoggedIn){
+    if(loginSheetOpen()) await submitLogin();
+    else openLoginSheet();
+    return;
+  }
+  /* 저장이 밀려 있으면 몇 초 걸릴 수 있어 버튼을 잠가 둡니다 */
+  postcardBtnEl.disabled = true;
+  const before = postcardBtnEl.innerText;
+  postcardBtnEl.innerText = 'Sending…';
+  try{
+    await window.SiteStore.signOut();
+  }catch(e){
+    console.error('로그아웃 실패', e);
+    alert('로그아웃하지 못했어요. 잠시 뒤 다시 눌러주세요.');
+  }finally{
+    postcardBtnEl.disabled = false;
+    if(postcardBtnEl.innerText === 'Sending…') postcardBtnEl.innerText = before;
+  }
+});
+/* 그만두려면 Esc 를 누르거나 상자 바깥을 누릅니다 (따로 취소 단추는 없습니다).
+   Write a Postcard 는 지금 로그인 단추이므로 바깥으로 치지 않습니다 — 안 그러면
+   누르는 순간 상자가 먼저 닫혀 로그인이 되지 않습니다. */
+document.getElementById('home-intro-page').addEventListener('mousedown', (e)=>{
+  if(!loginSheetOpen()) return;
+  if(e.target.closest('.ls-box') || e.target.closest('.postcard-btn')) return;
+  closeLoginSheet();
+});
+document.addEventListener('keydown', (e)=>{
+  if(e.key === 'Escape' && loginSheetOpen()) closeLoginSheet();
 });
 /* Firebase 오류 코드를 사람이 읽을 수 있는 안내로 바꿉니다 */
 function loginErrorMessage(e){
@@ -112,7 +185,7 @@ function loginErrorMessage(e){
 
 ['loginId','loginPw'].forEach(id=>{
   document.getElementById(id).addEventListener('keydown', (e)=>{
-    if(e.key==='Enter'){ e.preventDefault(); document.getElementById('loginSubmitBtn').click(); }
+    if(e.key==='Enter'){ e.preventDefault(); submitLogin(); }
   });
 });
 
@@ -887,6 +960,24 @@ function createAdjustable(container, getObj, setObj, opts={}){
 /* ============================================================
    NAV
    ============================================================ */
+/* 화면 올라오는 애니메이션 시간. style.css 의 .view.view-enter 와 같아야 합니다. */
+const VIEW_ENTER_MS = 460;
+let viewEnterTimer = null;
+/* 메뉴를 옮길 때 화면을 바꾸는 유일한 통로입니다. 화면이 실제로 달라질 때만
+   올라오는 애니메이션을 겁니다 — 같은 화면에서 카테고리만 고른 것까지 다시
+   올리면 눈이 피곤합니다. */
+function activateView(view){
+  const el = document.getElementById('view-' + view);
+  if(!el) return;
+  const changed = !el.classList.contains('active');
+  document.querySelectorAll('.view').forEach(v=> v.classList.remove('active', 'view-enter'));
+  el.classList.add('active');
+  if(!changed) return;
+  el.classList.add('view-enter');
+  clearTimeout(viewEnterTimer);
+  viewEnterTimer = setTimeout(()=> el.classList.remove('view-enter'), VIEW_ENTER_MS);
+}
+
 const navItems = document.querySelectorAll('.nav-item');
 const pairSub = document.getElementById('pairSub');
 const ocSub = document.getElementById('ocSub');
@@ -894,8 +985,7 @@ const archiveSub = document.getElementById('archiveSub');
 navItems.forEach(btn=>{
   btn.addEventListener('click', ()=>{
     navItems.forEach(b=>b.classList.remove('active')); btn.classList.add('active');
-    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-    document.getElementById('view-'+btn.dataset.view).classList.add('active');
+    activateView(btn.dataset.view);
     markCurrentView(btn.dataset.view);
     pairSub.classList.toggle('open', btn.dataset.view==='pair');
     ocSub.classList.toggle('open', btn.dataset.view==='oc');
@@ -1010,15 +1100,19 @@ let draggedCatId = null;
    세부 카테고리의 '지금 여기' 표시(오렌지+굵게)는 이 값으로 걸립니다 —
    .active 클래스는 메뉴마다 따로 남아 있어서, 그것만으로 칠하면 다른 메뉴로
    옮긴 뒤에도 그 메뉴에서 마지막에 고른 카테고리가 계속 굵게 보입니다. */
-function markCurrentView(view){ document.body.dataset.view = view; }
+function markCurrentView(view){
+  document.body.dataset.view = view;
+  /* 다른 메뉴로 옮기면 로그인 창은 접어 둡니다 — 돌아왔을 때 로그인 창이 아니라
+     엽서가 보여야 합니다. 화면 밖에서 일어나는 일이라 되감기 없이 곧바로 닫습니다. */
+  closeLoginSheet(true);
+}
 
 /* 화면만 그 메뉴로 전환합니다(고른 카테고리는 건드리지 않음) —
    '+' 로 새 카테고리를 추가하는 중에 다른 메뉴가 보이면 안 되므로 씁니다. */
 function openNavSection(nav){
   navItems.forEach(b=>b.classList.remove('active'));
   document.querySelector(`.nav-item[data-view="${nav.view}"]`).classList.add('active');
-  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-  document.getElementById('view-'+nav.view).classList.add('active');
+  activateView(nav.view);
   markCurrentView(nav.view);
   [pairSub, ocSub, archiveSub].forEach(el=> el.classList.toggle('open', el===nav.subEl()));
 }
@@ -1253,8 +1347,7 @@ document.querySelectorAll('#archiveSub .nav-sub-item').forEach(btn=>{
     arcSelectedIds.clear();   // 카테고리를 옮기면 골라둔 것도 비웁니다
     navItems.forEach(b=>b.classList.remove('active'));
     document.querySelector('.nav-item[data-view="archive"]').classList.add('active');
-    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-    document.getElementById('view-archive').classList.add('active');
+    activateView('archive');
     markCurrentView('archive');
     // 고른 쪽만 열어둡니다 — 큰 메뉴를 눌러 들어왔을 때와 같은 모습이 되도록
     archiveSub.classList.add('open');
@@ -1289,6 +1382,8 @@ function setCardPage(idx, animate){
 }
 let cardWheelLock = 0;
 homePagesWrap.addEventListener('wheel', (e)=>{
+  // 로그인 상자가 열려 있으면 엽서 화면에 머뭅니다
+  if(loginSheetOpen()) return;
   const showingCards = homePagesWrap.classList.contains('show-cards');
   if(!showingCards){
     if(e.deltaY>0){ homePagesWrap.classList.add('show-cards'); }
@@ -1725,24 +1820,9 @@ function renderPlaylistPanel(){
     wrap.appendChild(b);
   });
 }
-/* 위젯 바로 아래에, 메뉴를 밀어내지 않고 그 위를 덮으며 열립니다.
-   폭은 위젯과 같고, 아래로는 로그인 줄까지만 씁니다 — 목록이 길면 그 안에서
-   스크롤됩니다. 자리는 반드시 창을 띄운 뒤에 잡습니다(높이를 재야 합니다). */
-function placePlaylistPanel(){
-  const panel = document.getElementById('mbPlaylist');
-  const body  = document.querySelector('.music-block .mb-body');
-  const side  = document.getElementById('sidebar');
-  if(!panel || !body || !side) return;
-  const br = body.getBoundingClientRect(), sr = side.getBoundingClientRect();
-  const login = document.querySelector('.login-widget');
-  const bottomLimit = login ? login.getBoundingClientRect().top - 10
-                            : Math.min(sr.bottom, window.innerHeight) - 10;
-  const top = Math.round(br.bottom + 10);
-  panel.style.left = Math.round(br.left) + 'px';
-  panel.style.width = Math.round(br.width) + 'px';
-  panel.style.top = top + 'px';
-  panel.style.maxHeight = Math.max(80, Math.round(bottomLimit - top)) + 'px';
-}
+/* 목록은 위젯 아래에 자리를 차지하며 펼쳐집니다 — 떠 있는 창이 아니라
+   아래 메뉴를 그만큼 밀어냅니다. 그래서 자리를 잡아주는 코드가 없습니다.
+   다섯 칸까지 보이고 나머지는 목록 안에서 스크롤됩니다(높이는 CSS). */
 function closeMusicPlaylist(){
   const panel = document.getElementById('mbPlaylist');
   if(panel) panel.classList.remove('open');
@@ -1753,21 +1833,11 @@ function toggleMusicPlaylist(){
   if(panel.classList.contains('open')){ closeMusicPlaylist(); return; }
   renderPlaylistPanel();
   panel.classList.add('open');
-  placePlaylistPanel();
 }
+/* 여닫는 것은 LP 와 Esc 뿐입니다 — 바깥을 눌렀다고 닫으면 메뉴를 고르는
+   순간 목록이 접히면서 화면이 위로 튀어 오릅니다(떠 있던 창일 때와 다릅니다). */
 bindOnce(document.getElementById('mbLp'), toggleMusicPlaylist);
-/* 바깥을 누르면 닫습니다 (LP 자신과 목록 안은 제외) */
-document.addEventListener('click', (e)=>{
-  const panel = document.getElementById('mbPlaylist');
-  if(!panel || !panel.classList.contains('open')) return;
-  if(e.target.closest && (e.target.closest('#mbPlaylist') || e.target.closest('#mbLp'))) return;
-  closeMusicPlaylist();
-});
 document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeMusicPlaylist(); });
-window.addEventListener('resize', ()=>{
-  const panel = document.getElementById('mbPlaylist');
-  if(panel && panel.classList.contains('open')) placePlaylistPanel();
-});
 
 /* ---- 노래 관리 창 (편집 모드) ---- */
 function renderMusicManageList(){
@@ -7609,6 +7679,7 @@ function initHomeTouchNav(){
     if(y0 === null) return;
     const dy = e.changedTouches[0].clientY - y0;
     y0 = null;
+    if(loginSheetOpen()) return;           // 로그인 상자가 열려 있으면 머뭅니다
     if(Date.now() - t0 > 700) return;      // 천천히 끈 것은 스크롤로 봅니다
     if(Math.abs(dy) < 50) return;
     const showing = wrap.classList.contains('show-cards');
