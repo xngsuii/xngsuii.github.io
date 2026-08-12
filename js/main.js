@@ -93,14 +93,21 @@ function closeLoginSheet(immediate){
   const sheet = document.getElementById('loginSheet');
   const card  = document.querySelector('.intro-card');
   if(!sheet || !sheet.classList.contains('open')) return;
-  clearTimeout(loginCloseTimer);
-  clearTimeout(cardBackTimer);
   if(immediate){
+    clearTimeout(loginCloseTimer);
+    clearTimeout(cardBackTimer);
     sheet.classList.remove('open', 'closing');
     if(card) card.classList.remove('login-open', 'login-back');
     return;
   }
+  /* 이미 닫히는 중이면 아무것도 하지 않고 나갑니다 — 특히 타이머를 지우면
+     안 됩니다. 로그인에 성공하면 이 함수가 두 번 불립니다(로그인 알림이
+     signIn() 의 await 가 끝나기 전에 오기 때문에 applyEditMode 가 먼저,
+     그 다음 submitLogin 이). 두 번째에서 타이머를 지워버리면 창을 치우고
+     엽서를 되살리는 일이 영영 일어나지 않아 흰 화면만 남습니다. */
   if(sheet.classList.contains('closing')) return;
+  clearTimeout(loginCloseTimer);
+  clearTimeout(cardBackTimer);
   sheet.classList.add('closing');
   loginCloseTimer = setTimeout(()=>{
     sheet.classList.remove('open', 'closing');
@@ -5442,6 +5449,10 @@ function renderStackEdit(){
     cell.className='se-cell';
     cell.draggable = true;
     cell.dataset.s = s;
+    /* 이 칸이 들고 있는 사진 자체를 붙여 둡니다. 순서를 저장할 때 자리 번호가
+       아니라 이것을 읽습니다 — 번호로 맞추면 그 사이 판이 다시 그려졌을 때
+       같은 번호가 두 번 나와 사진이 복제됩니다. */
+    cell._src = src;
     const img=document.createElement('div');
     img.className='se-img';
     applyThumbBg(img, src, 96);
@@ -5453,6 +5464,10 @@ function renderStackEdit(){
     cell.addEventListener('dragover', (e)=>{
       e.preventDefault();
       if(!seDragEl || seDragEl===cell) return;
+      /* 끌던 칸이 그새 판이 다시 그려지며 떨어져 나갔으면 손을 뗍니다.
+         그대로 insertBefore 하면 떨어져 나간 낡은 칸이 되살아나 붙어서
+         칸이 한 개 늘고, 그 상태로 저장하면 사진이 복제됩니다. */
+      if(seDragEl.parentNode !== grid) return;
       const rects = flipCapture(grid, '.se-cell');
       const r = cell.getBoundingClientRect();
       const before = (e.clientX - r.left) < r.width/2;
@@ -5464,17 +5479,26 @@ function renderStackEdit(){
       if(!seDragEl){ return; }
       seDragEl = null;
       /* 끌어 놓은 뒤의 화면 순서를 그대로 스택에 옮겨 적습니다.
-         원본 배열을 직접 고치므로 대표 사진(첫 장)도 함께 바뀝니다. */
-      const order = Array.from(grid.querySelectorAll('.se-cell')).map(c=> Number(c.dataset.s));
+         원본 배열을 직접 고치므로 대표 사진(첫 장)도 함께 바뀝니다.
+         자리 번호가 아니라 칸이 들고 있는 사진(_src)을 읽습니다. */
       const cur = stackEditTarget();
       if(!cur) return;
-      const moved = order.map(i=> cur.entry.images[i]);
-      if(moved.some(v=> typeof v !== 'string')) { renderStackEdit(); return; }
+      const before = cur.entry.images;
+      const moved = Array.from(grid.querySelectorAll('.se-cell')).map(c=> c._src);
+      /* 자리만 바뀐 것이 맞는지 확인하고 저장합니다 — 장수가 다르거나 사진이
+         하나라도 늘거나 빠졌으면 순서 변경이 아니므로 손대지 않고 다시 그립니다.
+         (저장이 끝나기 전에 다음 끌기가 시작되면 이런 상태가 나올 수 있습니다.) */
+      const key = (a)=> [...a].sort().join(' ');
+      const ok = moved.length === before.length
+        && moved.every(v=> typeof v === 'string' && v)
+        && key(moved) === key(before);
+      if(!ok){ renderStackEdit(); return; }
+      /* 보고 있던 장이 어디로 갔는지 따라갑니다 (자리를 바꾸기 전에 읽어둡니다) */
+      const flat = galleryLbFlat[galleryLbIndex];
+      const wasSrc = flat ? before[flat.s] : null;
       cur.entry.images = moved;
       await gallerySave();
-      /* 보고 있던 장이 어디로 갔는지 따라갑니다 */
-      const wasS = galleryLbFlat[galleryLbIndex] ? galleryLbFlat[galleryLbIndex].s : 0;
-      const nowS = Math.max(0, order.indexOf(wasS));
+      const nowS = Math.max(0, moved.indexOf(wasSrc));
       refreshGalleryLb(galleryLbFlat.findIndex(f=> f.e===cur.e && f.s===nowS));
       renderStackEdit();
       renderGallery(galleryPost());

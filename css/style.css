@@ -1396,7 +1396,10 @@
   .arc-attach-item a{color:var(--text);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .arc-attach-item .arc-attach-del{border:none;background:none;color:var(--text-muted);font-size:11px;flex:none;}
   .arc-view-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:2px;padding-right:36px;}
-  .arc-view-head h3{margin:0;}
+  /* LOG 크게보기 창(#modalLogView h3)과 같은 이유로 서체를 다시 씁니다 —
+     .modal h3 의 기본값은 KoPub 돋움 + 대문자 변환이라 영문 제목이 목록에서는
+     소문자, 창에서는 대문자로 보였습니다. */
+  .arc-view-head h3{margin:0;font-family:var(--font-free);text-transform:none;letter-spacing:0;}
   /* LOG 게시글 보기: 제목과 게시일 간격을 ARCHIVE 와 동일하게(2px) */
   /* 미리보기 카드 제목(.lc-title)과 같은 서체로 맞춥니다 — .modal h3 의 기본값은
      KoPub 돋움 + 대문자 변환이라, 같은 제목이 카드에서는 소문자로 카드 밖에서는
