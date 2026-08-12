@@ -1705,7 +1705,13 @@ function renderPlaylistPanel(){
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'mbp-item' + (i===musicIndex ? ' active' : '');
-    b.innerText = s.title || '(제목 없음)';
+    const no = document.createElement('span');
+    no.className = 'mbp-no';
+    no.innerText = String(i+1).padStart(2, '0');
+    const t = document.createElement('span');
+    t.className = 'mbp-t';
+    t.innerText = s.title || '(제목 없음)';
+    b.append(no, t);
     b.title = s.title || '';
     b.addEventListener('click', (e)=>{
       e.stopPropagation();
@@ -1719,19 +1725,23 @@ function renderPlaylistPanel(){
     wrap.appendChild(b);
   });
 }
-/* 사이드바 오른쪽에 붙이되 화면 위아래로는 넘어가지 않게 합니다.
-   높이를 재야 해서 자리는 반드시 창을 띄운 뒤에 잡습니다. */
+/* 위젯 바로 아래에, 메뉴를 밀어내지 않고 그 위를 덮으며 열립니다.
+   폭은 위젯과 같고, 아래로는 로그인 줄까지만 씁니다 — 목록이 길면 그 안에서
+   스크롤됩니다. 자리는 반드시 창을 띄운 뒤에 잡습니다(높이를 재야 합니다). */
 function placePlaylistPanel(){
   const panel = document.getElementById('mbPlaylist');
-  const side = document.getElementById('sidebar');
-  const lp = document.getElementById('mbLp');
-  if(!panel || !side || !lp) return;
-  const sr = side.getBoundingClientRect(), lr = lp.getBoundingClientRect();
-  panel.style.left = Math.round(sr.right + 10) + 'px';
-  const h = panel.offsetHeight;
-  let top = lr.top + lr.height/2 - h/2;
-  top = Math.max(8, Math.min(top, window.innerHeight - h - 8));
-  panel.style.top = Math.round(top) + 'px';
+  const body  = document.querySelector('.music-block .mb-body');
+  const side  = document.getElementById('sidebar');
+  if(!panel || !body || !side) return;
+  const br = body.getBoundingClientRect(), sr = side.getBoundingClientRect();
+  const login = document.querySelector('.login-widget');
+  const bottomLimit = login ? login.getBoundingClientRect().top - 10
+                            : Math.min(sr.bottom, window.innerHeight) - 10;
+  const top = Math.round(br.bottom + 10);
+  panel.style.left = Math.round(br.left) + 'px';
+  panel.style.width = Math.round(br.width) + 'px';
+  panel.style.top = top + 'px';
+  panel.style.maxHeight = Math.max(80, Math.round(bottomLimit - top)) + 'px';
 }
 function closeMusicPlaylist(){
   const panel = document.getElementById('mbPlaylist');

@@ -245,18 +245,24 @@
   /* ---- 재생 목록 ----
      사이드바 오른쪽에 붙습니다. 자리는 JS 가 잡고(position:fixed), 보는 전용이라
      순서 변경·삭제는 없습니다 — 그건 노래 관리 창(＋)이 합니다. */
-  .mb-playlist{position:fixed;display:none;z-index:40;width:190px;max-height:min(320px,60vh);
+  /* 폭·자리·높이는 JS(placePlaylistPanel)가 넣습니다 — 위젯 바로 아래에 붙어
+     메뉴를 밀어내지 않고 그 위를 덮습니다. */
+  /* z-index 65 — 위젯이 좁은 화면에서는 서랍(60) 안에 들어 있으므로 그보다 위여야
+     하고, 창(모달 100)보다는 아래여야 합니다. */
+  .mb-playlist{position:fixed;display:none;z-index:65;
     background:var(--bg);border:1px solid var(--border);
     box-shadow:0 8px 24px rgba(0,0,0,.22);flex-direction:column;overflow:hidden;}
   .mb-playlist.open{display:flex;}
   .mbp-list{flex:1;min-height:0;overflow-y:auto;padding:5px 0;}
-  .mbp-item{display:block;width:100%;text-align:left;border:none;background:transparent;
+  .mbp-item{display:flex;align-items:baseline;gap:7px;width:100%;text-align:left;
+    border:none;background:transparent;
     font-family:var(--mono);font-size:11px;color:var(--text);
-    padding:3px 12px;line-height:1.4;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-    transition:color .16s ease;}
+    padding:3px 10px;line-height:1.4;transition:color .16s ease;}
+  .mbp-no{flex:none;font-size:9px;font-weight:700;letter-spacing:.04em;color:var(--text-muted);}
+  .mbp-t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .mbp-item:hover{color:var(--accent);}
   .mbp-item.active{color:var(--accent);font-weight:700;}
+  .mbp-item.active .mbp-no{color:var(--accent);}
   .mbp-empty{font-family:var(--mono);font-size:10px;color:var(--text-muted);padding:10px 12px;}
   /* 유튜브 플레이어는 소리만 쓰므로 눈에 띄지 않게 둡니다.
      display:none 이나 화면 밖(left:-9999px)으로 치우면 브라우저가 '그릴 필요 없는
