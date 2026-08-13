@@ -287,6 +287,9 @@
   /* 창 제목의 글자 사이 간격만 없앱니다 — 아래 라벨(유튜브 링크·음원 파일)과
      같은 서체(KoPub 돋움)인데도 .modal h3 의 letter-spacing 때문에 달라 보였습니다 */
   #modalMusic h3{letter-spacing:0;}
+  /* '게시글 작성 / 게시글 수정' 도 같은 이유입니다 — 한글 제목에 .04em 이 붙어
+     사이트의 다른 한글보다 자간이 넓어 보였습니다. */
+  #logWriteHeading,#stickerModalHeading{letter-spacing:0;}
   .mm-file-row{display:flex;align-items:center;gap:10px;min-width:0;}
   .mm-file-name{flex:1;min-width:0;font-family:var(--mono);font-size:10.5px;color:var(--text-muted);
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -1929,6 +1932,160 @@
   /* 모바일 전용으로 새로 넣은 요소들 — PC 에서는 존재하지 않는 것처럼 숨깁니다 */
   .mobile-menu-btn,.drawer-backdrop,.to-cards-btn,.to-intro-btn{display:none;}
 
+  /* ================= 스티커 =================
+     화면에 붙여 두는 그림입니다. 창(.app-window)과 빨간 배경 위, 종이 질감(50)
+     아래인 z-index 30 에 놓습니다 — 질감이 스티커 위로도 지나가야 같은 종이에
+     붙은 것처럼 보이고, 창(모달, 100 이상)보다 아래라는 조건도 함께 지켜집니다.
+     서랍은 그 바로 위(31)에 두어 스티커에 가리지 않게 합니다. */
+  .sticker-layer{position:fixed;inset:0;pointer-events:none;z-index:30;}
+  /* touch-action:none 은 손가락으로 끌 때 화면이 함께 스크롤되지 않게 합니다 */
+  .sticker{position:absolute;pointer-events:auto;cursor:grab;touch-action:none;
+    -webkit-user-select:none;user-select:none;}
+  .sticker img{display:block;width:100%;height:auto;-webkit-user-drag:none;pointer-events:none;}
+  /* 끌 때도 불투명도는 그대로입니다 — 반투명하게 끌려오지 않게 해달라는 요청 */
+  .sticker.dragging{cursor:grabbing;}
+  .sticker-del{position:absolute;top:-9px;right:-9px;width:20px;height:20px;border-radius:50%;
+    border:1px solid var(--border);background:var(--bg);color:var(--text);
+    font-size:10px;line-height:1;padding:0;display:none;align-items:center;justify-content:center;
+    box-shadow:0 2px 6px rgba(0,0,0,.2);}
+  .sticker-layer.removing .sticker-del{display:flex;}
+  /* 오른쪽 아래 모서리 손잡이. 가로만 바꾸고 세로는 img 의 height:auto 가
+     따라오므로 원본 비율이 저절로 유지됩니다. */
+  .sticker-size{position:absolute;right:-6px;bottom:-6px;width:13px;height:13px;padding:0;
+    border:1px solid var(--border);background:var(--bg);cursor:nwse-resize;
+    touch-action:none;display:none;}
+  @media (hover:hover){ .sticker:hover .sticker-size{display:block;} }
+  @media (hover:none){ .sticker .sticker-size{display:block;opacity:.55;} }
+  /* 말풍선 — 스티커를 누르면 위로 떠오릅니다. 꼬리는 세모 두 개를 겹쳐
+     테두리 한 겹처럼 보이게 만든 것입니다. */
+  .sticker-bubble{position:absolute;left:50%;bottom:100%;transform:translateX(-50%);
+    margin-bottom:11px;max-width:230px;min-width:52px;width:max-content;
+    background:var(--bg);border:1px solid var(--border);padding:7px 11px;
+    font-family:var(--mono);font-size:11.5px;line-height:1.55;color:var(--text);
+    white-space:pre-wrap;text-align:center;pointer-events:none;
+    box-shadow:0 3px 10px rgba(0,0,0,.16);}
+  .sticker-bubble:before,.sticker-bubble:after{content:'';position:absolute;top:100%;left:50%;
+    border:7px solid transparent;border-bottom:none;}
+  .sticker-bubble:before{margin-left:-7px;border-top-color:var(--border);}
+  .sticker-bubble:after{margin-left:-6px;border-width:6px;border-bottom:none;border-top-color:var(--bg);}
+
+  /* ---------- 스티커의 두 가지 움직임 ----------
+     · 서랍에서 꺼낼 때 : 위에서 툭 떨어져 통 튑니다. 눌리는(scaleY) 효과는 없습니다.
+     · 눌렀을 때 : 스티커 자신이 말랑하게 눌렸다 늘어납니다. 말풍선은 그냥 뜹니다.
+     둘 다 클래스를 붙여 도는 animation 입니다(transition 이 아닙니다 —
+     스티커는 display:none 에서 나타나거나 새로 만들어지기 때문입니다). */
+  @keyframes st-drop{
+    0%  {transform:translateY(-92px);opacity:0;}
+    12% {opacity:1;}
+    52% {transform:translateY(0);}
+    68% {transform:translateY(-15px);}
+    84% {transform:translateY(0);}
+    92% {transform:translateY(-4px);}
+    100%{transform:none;}
+  }
+  .sticker.dropping{animation:st-drop .58s cubic-bezier(.33,.7,.45,1) both;}
+  @keyframes st-squish{
+    0%  {transform:scale(1,1);}
+    22% {transform:scale(1.16,.84);}
+    48% {transform:scale(.92,1.1);}
+    72% {transform:scale(1.05,.97);}
+    100%{transform:scale(1,1);}
+  }
+  .sticker.squishing{animation:st-squish .46s cubic-bezier(.3,.9,.4,1) both;transform-origin:50% 100%;}
+  @media (prefers-reduced-motion:reduce){
+    .sticker.dropping,.sticker.squishing{animation-duration:.01s;}
+  }
+
+  /* ---------- 스티커 서랍 ----------
+     창 오른쪽 위에 끼워진 클립입니다. 누르면 그 아래로 사진 한 장이 끼워지듯
+     서랍이 미끄러져 들어옵니다. .main 은 이미 position:relative 라 그 안에
+     붙였습니다(창 바깥으로 나가지 않고, 화면 크기가 바뀌어도 창을 따라갑니다).
+     z-index 40 은 상단바(20) 위, 종이 질감(50)·창(모달, 100) 아래입니다.
+     꺼내기·자리 옮기기는 보기 모드에서도 되어야 해서 클립은 항상 보이고,
+     추가·제거만 [data-editonly] 로 가립니다. */
+  /* 자리(left/top)는 JS 가 창 위치를 재서 잡습니다 — 창은 화면 가운데에 놓이고
+     크기가 뷰포트에 따라 달라져서 CSS 만으로는 오른쪽 펀치 줄을 짚을 수 없습니다.
+     상단바 단추를 피할 걱정도 여기서는 없습니다(창 바깥 여백이라서). */
+  .sticker-drawer{position:fixed;left:0;top:0;width:34px;z-index:40;}
+  /* 클립은 살짝 기울어져 종이 윗변을 뭅니다. 회전 기준점은 종이 선(높이의 40%)입니다. */
+  .sticker-clip{position:relative;z-index:2;display:block;width:34px;height:85px;
+    padding:0;border:none;background:transparent;color:var(--border);cursor:pointer;
+    transform:rotate(-11deg);transform-origin:50% 40%;}
+  .sticker-clip svg{width:100%;height:100%;display:block;overflow:visible;
+    fill:none;stroke:currentColor;stroke-linecap:round;}
+  .sticker-clip .sc-outer{stroke-width:2.6;}
+  .sticker-clip .sc-inner{stroke-width:2.2;}
+  .sticker-clip:hover{color:var(--accent);}
+  /* 카드는 클립 아래(z-index 1)에서 왼쪽 아래로 늘어집니다 — 오른쪽으로 펼치면
+     창 밖으로 나가기 때문입니다. 클립에 물린 위쪽 모서리가 기준점입니다. */
+  /* 클립이 무는 자리는 종이 선(드로어 위에서 30px)입니다. 카드는 그 바로 아래에서
+     왼쪽 아래로 늘어집니다 — 오른쪽은 창 바깥이라 펼칠 곳이 없습니다. */
+  .sticker-drawer-box{display:none;position:absolute;top:33px;right:-4px;width:208px;z-index:1;
+    background:var(--bg);border:1px solid var(--border);padding:14px 11px 11px;
+    box-shadow:0 8px 22px rgba(0,0,0,.24);transform:rotate(-3deg);transform-origin:88% 0;}
+  .sticker-drawer.open .sticker-drawer-box{display:block;animation:sd-slip .42s cubic-bezier(.22,1,.36,1) both;}
+  @keyframes sd-slip{
+    from{opacity:0;transform:translateY(-26px) rotate(-10deg);}
+    to  {opacity:1;transform:translateY(0) rotate(-3deg);}
+  }
+  /* 닫을 때는 같은 움직임을 되감습니다. 키프레임 이름이 달라야 합니다 —
+     같은 이름으로 direction 만 뒤집으면 크롬이 끝난 애니메이션의 시각을 그대로
+     들고 있어서 되감기지 않고 첫 자세로 튑니다(로그인 상자에서 겪은 그것). */
+  @keyframes sd-slip-r{
+    from{opacity:0;transform:translateY(-26px) rotate(-10deg);}
+    to  {opacity:1;transform:translateY(0) rotate(-3deg);}
+  }
+  .sticker-drawer.closing .sticker-drawer-box{display:block;animation:sd-slip-r .3s ease reverse both;}
+  /* 오른쪽 위는 클립이 물고 있으므로 제목은 왼쪽에만 둡니다 */
+  .sd-head{margin-bottom:8px;padding-right:34px;}
+  .sd-title{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--text-muted);}
+  /* 스크롤 상자와 단 나누기를 분리합니다 — 단(column-count)에 직접 높이를 주면
+     넘치는 내용이 아래가 아니라 옆으로 새 단을 만들어 버립니다. */
+  .sd-scroll{max-height:210px;overflow-y:auto;}
+  /* 이미지 비율 그대로, 두 줄로 벽돌 쌓듯 채웁니다 (LOG 카드와 같은 모양) */
+  .sd-list{column-count:2;column-gap:6px;}
+  .sd-empty{font-family:var(--mono);font-size:10.5px;color:var(--text-muted);line-height:1.5;padding:2px 0 4px;
+    column-span:all;}
+  .sd-item{position:relative;display:block;width:100%;padding:0;margin:0 0 6px;
+    border:1px solid var(--border);background:var(--surface);
+    break-inside:avoid;-webkit-column-break-inside:avoid;overflow:hidden;}
+  .sd-item img{display:block;width:100%;height:auto;pointer-events:none;}
+  /* 이미 화면에 나와 있는 것은 흐리게 — 한 번 더 누르면 서랍으로 들어갑니다 */
+  .sd-item.out{opacity:.38;}
+  .sd-item.out:after{content:'';position:absolute;right:3px;bottom:3px;width:5px;height:5px;
+    border-radius:50%;background:var(--accent);}
+  .sd-edit,.sd-item .sticker-del{position:absolute;font-size:9px;line-height:1;}
+  .sd-edit{top:2px;left:2px;width:15px;height:15px;border:1px solid var(--border);
+    background:var(--bg);color:var(--text-muted);display:flex;align-items:center;justify-content:center;}
+  .sd-item .sticker-del{top:2px;right:2px;width:15px;height:15px;box-shadow:none;}
+  .sticker-drawer.removing .sd-item .sticker-del{display:flex;}
+  .sd-tools{display:none;gap:6px;margin-top:9px;}
+  body.logged-in .sd-tools[data-editonly]{display:flex;}
+  .sd-tool{flex:1;padding:6px 4px;border:1px solid var(--border);background:var(--bg);
+    font-family:var(--mono);font-size:10.5px;color:var(--text);}
+  .sd-tool:hover{background:var(--surface-2);}
+  .sd-tool.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+  /* 추가/편집 창 */
+  .st-pick-row{display:flex;align-items:center;gap:10px;}
+  .st-preview{width:74px;height:74px;flex:none;border:1px solid var(--border);background:var(--surface);
+    display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .st-preview img{max-width:100%;max-height:100%;display:block;}
+  .st-preview span{font-family:var(--mono);font-size:9.5px;color:var(--text-muted);}
+  .st-line-add{display:flex;align-items:flex-start;gap:8px;}
+  #stLineInput{flex:1;min-height:56px;font-family:var(--mono);font-size:12px;line-height:1.6;}
+  #stLineAddBtn{flex:none;}
+  .st-line-list{display:flex;flex-direction:column;gap:4px;margin-top:8px;}
+  .st-line-row{display:flex;align-items:flex-start;gap:8px;padding:6px 8px;
+    border:1px solid var(--border);background:var(--surface);}
+  .st-line-no{flex:none;font-family:var(--mono);font-size:9px;font-weight:700;
+    letter-spacing:.04em;color:var(--text-muted);padding-top:2px;}
+  .st-line-text{flex:1;min-width:0;font-family:var(--mono);font-size:11.5px;line-height:1.55;
+    color:var(--text);white-space:pre-wrap;word-break:break-word;}
+  .st-line-del{flex:none;width:16px;height:16px;padding:0;border:none;background:transparent;
+    font-size:10px;color:var(--text-muted);line-height:1;}
+  .st-line-del:hover{color:var(--accent);}
+
   /* ---------- 태블릿 (769~1100px) ----------
      16:9 를 고정해두면 1024x768 에서 983x553 이 되어 세로 215px 를 버립니다.
      사이드바 구조는 그대로 두고 창 비율만 풀어 화면을 꽉 쓰게 합니다. */
@@ -2306,6 +2463,18 @@
       flex-direction:row;max-height:none;width:100%;overflow-x:auto;overflow-y:hidden;
       padding:0 12px;gap:6px;justify-content:flex-start;}
     .arc-lb-thumb{width:52px;height:52px;}
+
+    /* ---------- 스티커 ----------
+       폰에서는 스티커가 기본으로 다 들어가 있고(JS 쪽 stickerOut 참고),
+       서랍에서 꺼낸 것만 뜹니다. 클립은 상단바 오른쪽 끝에 붙이고,
+       카드는 화면 폭에 맞춰 줄입니다. */
+    /* 폰은 펀치 줄이 가로로 눕고 창 옆에 여백이 없습니다 — 상단바 아래
+       오른쪽에 붙입니다(자리는 positionStickerDrawer 가 잡습니다). */
+    .sticker-drawer-box{top:34px;right:-4px;width:min(230px, calc(100vw - 28px));}
+    .sticker-del{width:26px;height:26px;top:-12px;right:-12px;font-size:12px;}
+    .sticker-size{width:18px;height:18px;right:-8px;bottom:-8px;}
+    .sd-tool{padding:9px 4px;}
+    .sd-scroll{max-height:46vh;}
   }
 
   /* 세로가 짧은 기기(iPhone SE 667px) — 한 페이지는 JS 에서 6장으로 줄입니다 */

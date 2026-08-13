@@ -11,7 +11,7 @@
      css/js를 고칠 때마다 이 숫자를 함께 올려주세요.
      올리지 않으면 브라우저가 옛 파일을 계속 써서
      새 HTML과 짝이 맞지 않아 화면이 깨질 수 있습니다. -->
-<link rel="stylesheet" href="css/style.css?v=104" />
+<link rel="stylesheet" href="css/style.css?v=108" />
 </head>
 <body>
 <div class="app-window">
@@ -930,6 +930,70 @@
 </div>
 
 
+<!-- 스티커 추가 / 편집 -->
+<div class="modal-overlay" id="modalSticker">
+  <div class="modal">
+    <button class="modal-close" data-close>✕</button>
+    <h3 id="stickerModalHeading">스티커 추가</h3>
+    <div class="form-row"><label>이미지</label>
+      <div class="st-pick-row">
+        <button type="button" class="btn-ghost" id="stPickBtn">이미지 고르기</button>
+        <div class="st-preview" id="stPreview"><span>없음</span></div>
+      </div>
+    </div>
+    <!-- 문구는 '추가'로 하나씩 담습니다 — 엔터는 줄바꿈이라 여러 줄짜리 문구도 넣을 수 있습니다 -->
+    <div class="form-row"><label>문구</label>
+      <div class="st-line-add">
+        <textarea id="stLineInput" placeholder="문구를 적고 추가를 누르세요. 엔터는 줄바꿈입니다."></textarea>
+        <button type="button" class="btn-ghost" id="stLineAddBtn">추가</button>
+      </div>
+      <div class="st-line-list" id="stLineList"></div>
+    </div>
+    <div class="login-error" id="stError"></div>
+    <div class="form-actions"><button class="btn-ghost" data-close>취소</button><button class="btn-primary" id="stSaveBtn">저장</button></div>
+  </div>
+</div>
+
+<!-- 스티커 — 창과 빨간 배경 위, 창(모달)보다는 아래에 뜹니다(z-index 30).
+     서랍에서 꺼내기·끌어서 옮기기·크기 조절은 보기 모드에서도 되고,
+     추가·제거·문구 편집만 편집 모드에서 합니다. -->
+<div class="sticker-layer" id="stickerLayer"></div>
+
+<!-- 스티커 서랍 — 창 오른쪽 펀치 줄에 끼워진 클립입니다. 창 위 모서리를 물고
+     바깥으로 튀어나와야 해서 .app-window 바깥(overflow:hidden 을 피해)에 두고,
+     자리는 positionStickerDrawer() 가 창 위치를 재서 잡아 줍니다.
+     클립이 카드 위에 오도록 카드를 먼저 적습니다(뒤에 적은 것이 위에 그려집니다). -->
+<div class="sticker-drawer" id="stickerDrawer">
+  <div class="sticker-drawer-box">
+    <!-- 닫기 단추는 두지 않습니다 — 오른쪽 위는 클립이 물고 있는 자리이고,
+         클립을 다시 누르거나 Esc 로 닫습니다. -->
+    <div class="sd-head"><span class="sd-title">Sticker</span></div>
+    <div class="sd-scroll"><div class="sd-list" id="sdList"></div></div>
+    <div class="sd-tools" id="sdTools" data-editonly>
+      <button class="sd-tool" id="sdAddBtn" type="button">＋ 추가</button>
+      <button class="sd-tool" id="sdRemoveBtn" type="button">✕ 제거</button>
+    </div>
+  </div>
+  <!-- 선으로 그린 클립.
+       · 바깥 고리는 닫힌 타원(위 곡선 → 양 옆 → 아래 곡선)으로 통째로 보입니다.
+       · 안쪽 고리는 종이 뒤로 들어가므로 종이 윗변(뷰박스 y=40) 위쪽만 그립니다
+         — 실물처럼 두 팔이 종이 선에서 사라집니다.
+       클립이 기울어져 있으므로 자르는 사각형도 같은 각도로 돌려 두어야
+       화면에서 잘리는 선이 수평이 됩니다. -->
+  <button class="sticker-clip" id="stickerHandle" type="button" title="스티커 서랍">
+    <svg viewBox="0 0 40 100" aria-hidden="true">
+      <defs>
+        <clipPath id="stickerClipPaper">
+          <rect x="-60" y="-60" width="160" height="100" transform="rotate(11 20 40)" />
+        </clipPath>
+      </defs>
+      <rect class="sc-outer" x="8" y="6" width="24" height="88" rx="12" />
+      <path class="sc-inner" clip-path="url(#stickerClipPaper)"
+            d="M15 66 V25 a5 5 0 0 1 10 0 V56" />
+    </svg>
+  </button>
+</div>
+
 <!-- 종이 질감. 화면 전체(빨간 여백까지)를 덮고, 창(모달)보다는 아래에 깝니다.
      background-image 가 아니라 <img> 로 둔 것은, 사진에 박힌 회전 정보(EXIF)를
      <img> 만 확실하게 따라 주기 때문입니다 — 배경으로 깔면 브라우저에 따라
@@ -937,7 +1001,7 @@
      맨 끝에 두어 화면 그리기를 막지 않게 합니다. -->
 <img class="paper-grain" src="img/paper-grain.jpg" alt="" aria-hidden="true" draggable="false" />
 
-<script src="js/main.js?v=104"></script>
-<script type="module" src="js/firebase-store.js?v=104"></script>
+<script src="js/main.js?v=108"></script>
+<script type="module" src="js/firebase-store.js?v=108"></script>
 </body>
 </html>

@@ -22,7 +22,7 @@ import {
   getFirestore, doc, getDoc, setDoc, deleteDoc, deleteField,
   collection, getDocs, writeBatch
 } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
-import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=104';
+import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=108';
 
 const app  = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -47,7 +47,10 @@ const SCALAR_KEYS = ['profile', 'siteName', 'homeIntro', 'homeBanner', 'archiveS
                      'ocFolders', 'pairCats', 'ocCats',
                      /* 사이드바 뮤직 위젯의 재생 목록. 곡마다 영상 번호와 제목·아티스트뿐이라
                         몇십 곡이 되어도 작습니다(음량은 기기별 취향이라 저장하지 않습니다). */
-                     'musicList'];
+                     'musicList',
+                     /* 화면에 붙여 두는 스티커. 그림은 blob:// 로 빠져나가므로
+                        남는 것은 자리·크기·문구뿐이라 작습니다. */
+                     'stickers'];
 const LIST_KEYS   = ['cards', 'pairPosts', 'archive', 'ocPosts'];
 
 /* Firestore 문서 1개 최대 1MiB. 여유를 두고 자릅니다. */
@@ -95,6 +98,34 @@ const BLOB_REF  = /^blob:\/\/([a-f0-9]{32})$/;
    1800px면 충분합니다. 썸네일 계단 현상은 해상도가 아니라 축소 방식 문제였고
    main.js 의 downscaleThumb 이 담당하므로, 여기서 원본을 더 키울 이유는 없습니다.
    화질이 뭉개지지 않도록 최저 품질은 0.6으로 둡니다. */
+/* 투명도를 담을 수 있는 형식들. JPEG 는 여기 없습니다(담지 못합니다). */
+const ALPHA_TYPES = ['image/png', 'image/webp'];
+let webpOk = null;
+function canEncodeWebp() {
+  if (webpOk === null) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 1;
+    webpOk = c.toDataURL('image/webp').startsWith('data:image/webp');
+  }
+  return webpOk;
+}
+/* 실제로 뚫린 곳이 있는지 봅니다 — PNG 로 저장했을 뿐 속은 꽉 찬 사진이면
+   JPEG 로 바꾸는 편이 훨씬 작기 때문입니다. 원본 크기를 다 훑으면 느리므로
+   240px 로 줄여서 봅니다(줄이면 알파값이 섞이므로, 조금이라도 뚫려 있으면
+   250 미만으로 내려옵니다). */
+function hasTransparency(bmp) {
+  const s = Math.min(1, 240 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(bmp.width * s));
+  c.height = Math.max(1, Math.round(bmp.height * s));
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(bmp, 0, 0, c.width, c.height);
+  try {
+    const d = ctx.getImageData(0, 0, c.width, c.height).data;
+    for (let i = 3; i < d.length; i += 4) if (d[i] < 250) return true;
+  } catch (e) { return true; }   // 읽지 못하면 안전한 쪽(투명하다고 보고 유지)
+  return false;
+}
 export async function compressImage(file, maxDim = 1800, targetChars = 900000) {
   const raw = () => new Promise((res, rej) => {
     const r = new FileReader();
@@ -121,13 +152,36 @@ export async function compressImage(file, maxDim = 1800, targetChars = 900000) {
     return c;
   };
 
-  // PNG는 투명도가 있을 수 있으니, 충분히 작으면 PNG 그대로 유지
-  if (file.type === 'image/png') {
-    const png = draw(w, h, false).toDataURL('image/png');
-    if (png.length <= targetChars) { bmp.close?.(); return png; }
+  /* 투명한 그림은 절대 JPEG 로 바꾸지 않습니다 — JPEG 에는 투명도가 없어서
+     뚫린 자리가 흰 바탕으로 메워집니다(배경을 지운 스티커를 넣었더니 흰 네모가
+     따라 붙던 문제). 예전에는 'PNG 로 만들어 보고 목표 크기보다 크면 JPEG'
+     였는데, PNG 는 화질 손잡이가 없어서 조금만 큰 그림이면 늘 JPEG 로 넘어갔습니다.
+     WebP 는 투명도를 지키면서 화질을 낮출 수 있으므로 그쪽을 먼저 쓰고,
+     WebP 를 못 만드는 브라우저에서만 PNG 로 크기를 줄여 가며 맞춥니다. */
+  if (ALPHA_TYPES.includes(file.type) && hasTransparency(bmp)) {
+    const webp = canEncodeWebp();
+    let cw = w, ch = h, out = '';
+    for (let round = 0; round < 6; round++) {
+      const canvas = draw(cw, ch, false);
+      if (webp) {
+        let q = 0.92;
+        out = canvas.toDataURL('image/webp', q);
+        while (out.length > targetChars && q > 0.55) {
+          q -= 0.07;
+          out = canvas.toDataURL('image/webp', q);
+        }
+      } else {
+        out = canvas.toDataURL('image/png');
+      }
+      if (out.length <= targetChars) break;
+      cw = Math.max(1, Math.round(cw * 0.8));
+      ch = Math.max(1, Math.round(ch * 0.8));
+    }
+    bmp.close?.();
+    return out;
   }
 
-  // 그 외에는 JPEG로 변환 (투명 부분은 흰색으로)
+  // 불투명한 그림은 JPEG 로 (가장 작습니다)
   let cw = w, ch = h, out = '';
   for (let round = 0; round < 4; round++) {
     const canvas = draw(cw, ch, true);

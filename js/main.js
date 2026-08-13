@@ -37,6 +37,8 @@ function applyEditMode(){
   safely('카드', renderCards);
   safely('OC 목록', renderOcPosts);
   safely('ARCHIVE', renderArchive);
+  /* 보기 모드로 돌아오면 제거 모드(✕)는 남아 있으면 안 됩니다 */
+  safely('스티커', ()=>{ if(!isLoggedIn) stickerRemoveMode = false; renderStickers(); });
   safely('PAIR 상세', ()=>{
     if(!currentPairPostId) return;
     const p = getCurrentPost();
@@ -271,7 +273,9 @@ let state = {
   archiveFolders:[], archiveFoldersOoc:[], archiveFoldersEtc:[], ocPosts:[],
   pairCats:[], ocCats:[],
   /* 사이드바 뮤직 위젯의 재생 목록 — [{id, title, artist, videoId 또는 src}] */
-  musicList:[]
+  musicList:[],
+  /* 화면에 붙여 두는 스티커 — [{id, src, lines, w, x, y, out}] */
+  stickers:[]
 };
 
 /* ---- PROMPT 폴더 ----
@@ -587,6 +591,7 @@ function migrateArchiveItem(item){
 
 async function loadState(){
   state.musicList = normalizeMusicList(await storageGet('musicList', []));
+  state.stickers  = normalizeStickers(await storageGet('stickers', []));
   state.profile   = await storageGet('profile', state.profile);
   state.siteName  = await storageGet('siteName', state.siteName);
   state.homeIntro = await storageGet('homeIntro', '');
@@ -633,6 +638,7 @@ function renderAll(){
   renderPairPosts();
   renderOcPosts();
   renderArchive();
+  renderStickers();
   applyEditMode();
 }
 
@@ -2963,20 +2969,77 @@ function mdBuildTable(rows){
   if(body.childNodes.length) table.appendChild(body);
   return table;
 }
-function mdBuildQuote(lines){
+/* 인용문·글머리는 원래 글자만 새로 뽑아 다시 만들었습니다. 그래서 그 줄에
+   칠해 둔 형광펜·글자색·볼드가 그릴 때 통째로 사라졌습니다("인용구 안에
+   형광펜이 안 보인다"). 이제는 그 자리의 DOM 을 그대로 들어내(extractContents)
+   새 그릇에 옮겨 담고, 줄 맨 앞의 표시 글자(> 또는 #)만 떼어냅니다.
+   (표는 아직 글자만 옮깁니다 — | 로 칸을 나누려면 DOM 을 잘라야 해서 별개입니다) */
+/* 띄어쓰기 자리에 &nbsp; 가 들어 있는 일이 흔해서 함께 봅니다 */
+const MD_QUOTE_MARK_RE   = /^[ \t ]*>[ \t ]?/;
+const MD_HEADING_MARK_RE = /^[ \t ]*#{1,6}[ \t ]+/;
+/* 각 줄의 첫 글자 자리에서만 표시를 떼어냅니다. 줄이 어디서 시작하는지는
+   flattenForFences 와 같은 기준(<br>·블록 요소·글자 속 \n)으로 셉니다 —
+   표시가 <span style="background">> 인용</span> 처럼 서식 안에 들어 있어도
+   그 안의 글자 노드에서 떼어내므로 서식은 그대로 남습니다. */
+function stripLineMarks(root, re){
+  let lineStart = true;
+  const visit = (node)=>{
+    if(node.nodeType === 3){
+      const parts = node.data.split('\n');
+      for(let i=0;i<parts.length;i++){
+        if(i) lineStart = true;
+        if(lineStart){
+          const cut = parts[i].replace(re, '');
+          if(cut !== parts[i]){ parts[i] = cut; lineStart = false; }
+        }
+        if(/\S/.test(parts[i])) lineStart = false;
+      }
+      node.data = parts.join('\n');
+      return;
+    }
+    if(node.nodeType !== 1) return;
+    if(node.tagName === 'BR'){ lineStart = true; return; }
+    const isBlock = BLOCK_TAGS.includes(node.tagName);
+    if(isBlock) lineStart = true;
+    Array.from(node.childNodes).forEach(visit);
+    if(isBlock) lineStart = true;
+  };
+  Array.from(root.childNodes).forEach(visit);
+}
+/* 들어낸 조각을 다듬습니다.
+   · 끝에 딸려 온 줄바꿈은 상자 안에 빈 줄을 만드므로 뗍니다. 조각을 잘라내면
+     끝에 빈 글자 노드가 남기도 해서, 그것도 함께 건너뛰며 봅니다.
+   · 줄 하나가 통째로 <div> 에 감싸여 있던 경우에는 그 껍데기를 벗깁니다 —
+     인용구/글머리 자체가 이미 한 줄짜리 상자라 한 겹 더 감쌀 이유가 없습니다. */
+function tidyMdBlock(el){
+  let n = el.lastChild;
+  while(n){
+    const prev = n.previousSibling;
+    if(n.nodeType === 3 && !n.data.trim()){ n.remove(); n = prev; continue; }
+    if(n.nodeType === 1 && n.tagName === 'BR'){ n.remove(); n = prev; continue; }
+    break;
+  }
+  const only = el.childNodes.length === 1 ? el.firstChild : null;
+  if(only && only.nodeType === 1 && only.tagName === 'DIV' && !only.attributes.length){
+    while(only.firstChild) el.insertBefore(only.firstChild, only);
+    only.remove();
+  }
+}
+function mdBuildQuote(frag){
   const q = document.createElement('blockquote');
   q.className = 'md-quote';
-  lines.forEach((line, i)=>{
-    if(i) q.appendChild(document.createElement('br'));
-    q.appendChild(document.createTextNode(line.trim().replace(/^>\s?/, '')));
-  });
+  q.appendChild(frag);
+  stripLineMarks(q, MD_QUOTE_MARK_RE);
+  tidyMdBlock(q);
   return q;
 }
-function mdBuildHeading(line){
+function mdBuildHeading(frag, line){
   const m = line.trim().match(MD_HEADING_RE);
   const h = document.createElement('h' + m[1].length);
   h.className = 'md-h';
-  h.textContent = m[2].trim();
+  h.appendChild(frag);
+  stripLineMarks(h, MD_HEADING_MARK_RE);
+  tidyMdBlock(h);
   return h;
 }
 /* 코드 블록·코드 상자 안의 글은 적은 그대로 보여야 하므로 건드리지 않습니다 */
@@ -3029,13 +3092,19 @@ function applyMarkdownBlocks(root){
              || resolveFenceOffset(marks, Math.min(text.length, last.end + 1));
       const rows = [];
       for(let k=grp.from; k<=grp.to; k++) rows.push(lines[k].s);
-      const node = grp.kind==='table' ? mdBuildTable(rows)
-                 : grp.kind==='quote' ? mdBuildQuote(rows)
-                 : mdBuildHeading(rows[0]);
       const range = document.createRange();
       range.setStart(s.container, s.offset);
       range.setEnd(e.container, e.offset);
-      range.deleteContents();
+      /* 인용문·글머리는 그 자리의 DOM 을 들어내 그대로 옮겨 담습니다
+         (형광펜·색·볼드가 살아남는 이유). 표만 아직 글자로 다시 만듭니다. */
+      let node;
+      if(grp.kind === 'table'){
+        range.deleteContents();
+        node = mdBuildTable(rows);
+      }else{
+        const frag = range.extractContents();
+        node = grp.kind === 'quote' ? mdBuildQuote(frag) : mdBuildHeading(frag, rows[0]);
+      }
       range.insertNode(node);
     }catch(err){ /* 예상 밖의 DOM 모양이면 이 줄은 건드리지 않고 넘어갑니다 */ }
   }
@@ -7910,12 +7979,467 @@ function initResponsiveWatch(){
     pairPage = 1; ocPage = 1;
     if(document.getElementById('view-pair').classList.contains('active')) renderPairPosts();
     if(document.getElementById('view-oc').classList.contains('active')) renderOcPosts();
+    /* PC ↔ 폰 사이에서 '나와있음'을 읽는 곳이 달라지므로(stickerOut) 다시 그리고,
+       클립이 붙는 자리도 창 모양을 따라 달라집니다 */
+    renderStickers();
+    positionStickerDrawer();
   };
   window.matchMedia(MOBILE_MQ).addEventListener('change', onChange);
   window.matchMedia(SHORT_MQ).addEventListener('change', onChange);
 }
 
+/* ============================================================
+   스티커
+   ------------------------------------------------------------
+   화면에 붙여 두는 그림입니다. 창(.app-window)과 빨간 배경 위, 창(모달)보다는
+   아래(z-index 30)에 뜹니다.
+   · 서랍에서 꺼내기 / 넣기, 끌어서 옮기기, 모서리로 크기 바꾸기 — 보기 모드에서도 됩니다
+   · 추가 / 제거 / 문구 편집 — 편집 모드에서만
+   저장은 편집 모드일 때만 합니다. 보기 모드에서 옮긴 자리는 그 자리에서만
+   기억되고 새로고침하면 원래 자리로 돌아옵니다(쓸 권한이 서버에 없습니다).
+
+   폰(768px 이하)은 화면이 좁아 글자를 가리므로 저장된 '나와있음'을 따르지 않고
+   항상 다 들어가 있는 채로 시작합니다. 폰에서 꺼낸 것과 그 자리는 그 화면에서만
+   (stickerLocal) 기억하고 저장하지 않습니다 — 폰에서 잠깐 꺼낸 것 때문에
+   PC 화면이 바뀌면 안 되기 때문입니다.
+   ============================================================ */
+const STICKER_BUBBLE_MS = 3400;
+const STICKER_DEFAULT_W = 130;
+/* style.css 의 .sticker.dropping / .sticker.squishing 규칙과 같아야 합니다 */
+const STICKER_DROP_MS = 580;
+const STICKER_SQUISH_MS = 460;
+let stickerRemoveMode = false;
+/* 폰 전용, 저장하지 않습니다 */
+const stickerLocal = { out:new Set(), pos:new Map() };
+let stickerEditId = null;     // 편집 중인 스티커 id (추가면 null)
+let stickerDraftSrc = '';     // 창에서 고른 이미지
+let stickerDraftLines = [];   // 창에서 '추가'로 담은 문구들
+/* 방금 서랍에서 꺼낸 스티커 — 이번에 그릴 때만 떨어지는 움직임을 줍니다.
+   그리는 함수는 여러 이유로 불리므로(로그인 상태 바뀜 등), 표시가 남아 있으면
+   가만히 있던 스티커까지 다시 떨어집니다. */
+const stickerDropIds = new Set();
+
+function normalizeStickers(list){
+  if(!Array.isArray(list)) return [];
+  return list.filter(s=> s && s.src).map(s=>({
+    id: s.id || (Date.now() + Math.floor(Math.random()*1000)),
+    src: s.src,
+    lines: Array.isArray(s.lines) ? s.lines.filter(t=> typeof t === 'string') : [],
+    w: Number(s.w) > 0 ? Number(s.w) : STICKER_DEFAULT_W,
+    x: Number.isFinite(s.x) ? s.x : 50,
+    y: Number.isFinite(s.y) ? s.y : 50,
+    out: !!s.out
+  }));
+}
+function saveStickers(){ return storageSet('stickers', state.stickers); }
+/* 폰에서는 저장된 out 을 무시하고 이 화면에서 꺼낸 것만 봅니다 */
+function stickerOut(s){ return isMobileWidth() ? stickerLocal.out.has(s.id) : !!s.out; }
+function stickerPos(s){
+  const p = isMobileWidth() ? stickerLocal.pos.get(s.id) : null;
+  return p || { x:s.x, y:s.y };
+}
+/* 꺼낼 때마다 새 자리에 나옵니다. 스티커 크기를 감안해 가장자리는 비워 둡니다. */
+function randomStickerPos(){ return { x: 8 + Math.random()*60, y: 10 + Math.random()*60 }; }
+
+function renderStickers(){
+  const layer = document.getElementById('stickerLayer');
+  if(!layer) return;
+  const removing = stickerRemoveMode && isLoggedIn;
+  layer.classList.toggle('removing', removing);
+  layer.innerHTML = '';
+  state.stickers.forEach(s=>{
+    if(!stickerOut(s)) return;
+    const el = document.createElement('div');
+    el.className = 'sticker';
+    el.dataset.id = s.id;
+    const pos = stickerPos(s);
+    el.style.left  = pos.x + '%';
+    el.style.top   = pos.y + '%';
+    el.style.width = (s.w || STICKER_DEFAULT_W) + 'px';
+
+    const img = document.createElement('img');
+    img.alt = ''; img.draggable = false;
+    const url = imgUrl(s.src);
+    if(url) img.src = url;                     // 빈 문자열은 넣지 않습니다 (error 가 즉시 납니다)
+    whenImgArrives(s.src, el, ()=>{ const u = imgUrl(s.src); if(u) img.src = u; });
+    el.appendChild(img);
+
+    const size = document.createElement('button');
+    size.type = 'button'; size.className = 'sticker-size'; size.title = '크기 조절';
+    el.appendChild(size);
+
+    const del = document.createElement('button');
+    del.type = 'button'; del.className = 'sticker-del'; del.title = '스티커 지우기';
+    del.innerText = '✕';
+    del.addEventListener('click', (e)=>{ e.stopPropagation(); deleteSticker(s); });
+    el.appendChild(del);
+
+    /* 떨어지고 나면 클래스를 반드시 떼야 합니다. 붙은 채로 두면, 나중에 눌러서
+       .squishing 이 붙었다 떨어질 때 animation-name 이 st-drop 으로 되돌아가면서
+       가만히 있던 스티커가 다시 떨어집니다("넣자마자 누르면 두 움직임이 겹친다").
+       animationend 대신 타이머를 쓰는 것은, 화면이 안 보이는 탭에서는
+       애니메이션이 돌지 않아 그 사건이 영영 오지 않기 때문입니다. */
+    if(stickerDropIds.has(s.id)){
+      el.classList.add('dropping');
+      setTimeout(()=> el.classList.remove('dropping'), STICKER_DROP_MS + 40);
+    }
+    bindStickerDrag(el, s);
+    bindStickerResize(size, el, s);
+    layer.appendChild(el);
+  });
+  stickerDropIds.clear();
+  renderStickerDrawer();
+}
+
+/* 끌어서 옮기기. HTML5 드래그가 아니라 포인터 이벤트라서 브라우저가 만드는
+   반투명 고스트가 없습니다 — 불투명도를 유지한 채 그대로 따라옵니다.
+   움직이지 않고 뗐으면 '누른 것'으로 보고 말풍선을 띄웁니다. */
+function bindStickerDrag(el, s){
+  let sx=0, sy=0, ox=0, oy=0, moved=false, dragging=false;
+  el.addEventListener('pointerdown', (e)=>{
+    if(e.button != null && e.button !== 0) return;
+    if(e.target.closest('.sticker-del, .sticker-size')) return;
+    const r = el.getBoundingClientRect();
+    dragging = true; moved = false;
+    sx = e.clientX; sy = e.clientY; ox = r.left; oy = r.top;
+    el.classList.add('dragging');
+    try{ el.setPointerCapture(e.pointerId); }catch(_){}
+    e.preventDefault();
+  });
+  el.addEventListener('pointermove', (e)=>{
+    if(!dragging) return;
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if(!moved && Math.abs(dx) + Math.abs(dy) < 5) return;   // 손떨림은 누름으로 봅니다
+    moved = true;
+    setStickerPos(el, s, ox + dx, oy + dy);
+  });
+  const end = (e)=>{
+    if(!dragging) return;
+    dragging = false;
+    el.classList.remove('dragging');
+    try{ el.releasePointerCapture(e.pointerId); }catch(_){}
+    if(moved){ commitStickerChange(); return; }
+    squishSticker(el);          // 눌린 것은 스티커 자신이 말랑하게 반응합니다
+    speakSticker(el, s);        // 말풍선은 움직임 없이 그냥 뜹니다
+  };
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointercancel', end);
+}
+/* 자리는 화면 크기에 대한 %로 둡니다 — 창 크기가 달라져도 같은 자리에 옵니다.
+   최소 30px 은 화면 안에 남겨 두어 끌어다 잃어버리는 일이 없게 합니다. */
+function setStickerPos(el, s, left, top){
+  const w = el.offsetWidth, h = el.offsetHeight;
+  const vw = window.innerWidth || 1, vh = window.innerHeight || 1;
+  const x = clamp(left, -w + 30, vw - 30) / vw * 100;
+  const y = clamp(top,  -h + 30, vh - 30) / vh * 100;
+  el.style.left = x + '%';
+  el.style.top  = y + '%';
+  if(isMobileWidth()) stickerLocal.pos.set(s.id, { x, y });
+  else { s.x = x; s.y = y; }
+}
+/* 폰에서 옮긴 자리는 저장하지 않습니다(위 주석 참고).
+   보기 모드에서는 쓸 권한이 없으므로 화면에만 남습니다. */
+function commitStickerChange(){
+  if(isMobileWidth() || !isLoggedIn) return;
+  saveStickers();
+}
+/* 가로만 바꾸고 세로는 img 의 height:auto 가 따라오므로 원본 비율이 유지됩니다 */
+function bindStickerResize(handle, el, s){
+  let sw=0, sx=0, active=false;
+  handle.addEventListener('pointerdown', (e)=>{
+    active = true; sx = e.clientX; sw = el.offsetWidth;
+    try{ handle.setPointerCapture(e.pointerId); }catch(_){}
+    e.preventDefault(); e.stopPropagation();
+  });
+  handle.addEventListener('pointermove', (e)=>{
+    if(!active) return;
+    const w = clamp(Math.round(sw + (e.clientX - sx)), 40, 640);
+    el.style.width = w + 'px';
+    s.w = w;
+  });
+  const end = (e)=>{
+    if(!active) return;
+    active = false;
+    try{ handle.releasePointerCapture(e.pointerId); }catch(_){}
+    if(isLoggedIn) saveStickers();
+  };
+  handle.addEventListener('pointerup', end);
+  handle.addEventListener('pointercancel', end);
+}
+/* 눌렀을 때 스티커가 말랑하게 눌렸다 늘어납니다.
+   연달아 눌러도 다시 돌도록, 클래스를 뗀 뒤 한 번 강제로 계산시키고 다시 붙입니다 —
+   껐다 켜기를 한 흐름에 하면 크롬은 '바뀐 게 없다'고 보고 아무 것도 하지 않습니다. */
+function squishSticker(el){
+  /* 아직 떨어지는 중이면 그쪽을 먼저 끝냅니다 — 두 규칙이 같은 transform 을
+     다투기 때문입니다(위 renderStickers 주석 참고). */
+  el.classList.remove('dropping');
+  el.classList.remove('squishing');
+  void el.offsetWidth;
+  el.classList.add('squishing');
+  clearTimeout(el._squishTimer);
+  el._squishTimer = setTimeout(()=> el.classList.remove('squishing'), STICKER_SQUISH_MS + 40);
+}
+/* 문구가 여러 개면 누를 때마다 무작위로 하나. 바로 앞에 나온 것은 피합니다 */
+function speakSticker(el, s){
+  const lines = (s.lines || []).filter(t=> t && t.trim());
+  if(!lines.length) return;
+  let i = Math.floor(Math.random() * lines.length);
+  if(lines.length > 1 && i === el._lastLine) i = (i + 1) % lines.length;
+  el._lastLine = i;
+  el.querySelectorAll('.sticker-bubble').forEach(b=> b.remove());
+  const b = document.createElement('div');
+  b.className = 'sticker-bubble';
+  b.innerText = lines[i];
+  el.appendChild(b);
+  clearTimeout(el._bubbleTimer);
+  el._bubbleTimer = setTimeout(()=> b.remove(), STICKER_BUBBLE_MS);
+}
+
+/* ---- 서랍 ---- */
+function renderStickerDrawer(){
+  const list = document.getElementById('sdList');
+  if(!list) return;
+  const drawer = document.getElementById('stickerDrawer');
+  drawer.classList.toggle('removing', stickerRemoveMode && isLoggedIn);
+  list.innerHTML = '';
+  if(!state.stickers.length){
+    const n = document.createElement('div');
+    n.className = 'sd-empty';
+    n.innerText = isLoggedIn ? '아직 스티커가 없어요. ＋ 추가로 만들어 주세요.' : '아직 스티커가 없어요.';
+    list.appendChild(n);
+  }
+  state.stickers.forEach(s=>{
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'sd-item'; b.dataset.id = s.id;
+    b.title = stickerOut(s) ? '서랍에 넣기' : '꺼내기';
+    b.classList.toggle('out', stickerOut(s));
+    const im = document.createElement('img');
+    im.alt = ''; im.draggable = false;
+    const u = imgUrl(s.src);
+    if(u) im.src = u;
+    whenImgArrives(s.src, b, ()=>{ const v = imgUrl(s.src); if(v) im.src = v; });
+    b.appendChild(im);
+    if(isLoggedIn){
+      const ed = document.createElement('span');
+      ed.className = 'sd-edit'; ed.innerText = '✎'; ed.title = '이미지·문구 고치기';
+      b.appendChild(ed);
+      const del = document.createElement('span');
+      del.className = 'sticker-del'; del.innerText = '✕'; del.title = '스티커 지우기';
+      b.appendChild(del);
+    }
+    b.addEventListener('click', (e)=>{
+      if(e.target.closest('.sticker-del')){ deleteSticker(s); return; }
+      if(e.target.closest('.sd-edit')){ openStickerModal(s); return; }
+      toggleStickerOut(s);
+    });
+    list.appendChild(b);
+  });
+  const rm = document.getElementById('sdRemoveBtn');
+  if(rm) rm.classList.toggle('on', stickerRemoveMode);
+}
+function toggleStickerOut(s){
+  if(isMobileWidth()){
+    if(stickerLocal.out.has(s.id)) stickerLocal.out.delete(s.id);
+    else{
+      stickerLocal.out.add(s.id);
+      stickerLocal.pos.set(s.id, randomStickerPos());
+      stickerDropIds.add(s.id);
+    }
+  }else{
+    s.out = !s.out;
+    if(s.out){
+      const p = randomStickerPos(); s.x = p.x; s.y = p.y;
+      stickerDropIds.add(s.id);
+    }
+    if(isLoggedIn) saveStickers();
+  }
+  renderStickers();
+}
+async function deleteSticker(s){
+  if(!isLoggedIn) return;
+  if(!await siteConfirm('이 스티커를 지울까요? 서랍에서도 사라집니다.')) return;
+  state.stickers = state.stickers.filter(x=> x.id !== s.id);
+  stickerLocal.out.delete(s.id); stickerLocal.pos.delete(s.id);
+  await saveStickers();
+  renderStickers();
+}
+
+/* ---- 추가 / 편집 창 ---- */
+function paintStickerPreview(){
+  const box = document.getElementById('stPreview');
+  if(!box) return;
+  box.innerHTML = '';
+  if(!stickerDraftSrc){
+    const t = document.createElement('span'); t.innerText = '없음';
+    box.appendChild(t); return;
+  }
+  const im = document.createElement('img');
+  im.alt = '';
+  const u = imgUrl(stickerDraftSrc);
+  if(u) im.src = u;
+  box.appendChild(im);
+}
+/* 문구는 '추가'로 하나씩 담습니다 — 엔터를 구분자로 쓰면 여러 줄짜리 문구를
+   아예 넣을 수 없기 때문입니다. 담긴 것은 아래에 줄바꿈까지 그대로 보여줍니다. */
+function renderStickerLines(){
+  const box = document.getElementById('stLineList');
+  if(!box) return;
+  box.innerHTML = '';
+  stickerDraftLines.forEach((t, i)=>{
+    const row = document.createElement('div');
+    row.className = 'st-line-row';
+    const no = document.createElement('span');
+    no.className = 'st-line-no';
+    no.innerText = String(i + 1).padStart(2, '0');
+    const txt = document.createElement('div');
+    txt.className = 'st-line-text';
+    txt.innerText = t;
+    const del = document.createElement('button');
+    del.type = 'button'; del.className = 'st-line-del'; del.title = '이 문구 빼기';
+    del.innerText = '✕';
+    del.addEventListener('click', ()=>{ stickerDraftLines.splice(i, 1); renderStickerLines(); });
+    row.appendChild(no); row.appendChild(txt); row.appendChild(del);
+    box.appendChild(row);
+  });
+}
+function addStickerLine(){
+  const input = document.getElementById('stLineInput');
+  /* 줄바꿈은 살리고 각 줄의 앞뒤 공백과 위아래 빈 줄만 다듬습니다 —
+     말풍선은 가운데 정렬이라 앞에 붙은 공백이 그대로 밀림으로 보입니다. */
+  const t = input.value.split('\n').map(l=> l.trim()).join('\n').replace(/^\n+|\n+$/g, '');
+  if(!t.trim()) return;
+  stickerDraftLines.push(t);
+  input.value = '';
+  input.focus();
+  renderStickerLines();
+}
+function openStickerModal(s){
+  if(!isLoggedIn) return;
+  stickerEditId = s ? s.id : null;
+  stickerDraftSrc = s ? s.src : '';
+  stickerDraftLines = s ? (s.lines || []).slice() : [];
+  document.getElementById('stickerModalHeading').innerText = s ? '스티커 편집' : '스티커 추가';
+  document.getElementById('stLineInput').value = '';
+  document.getElementById('stError').innerText = '';
+  renderStickerLines();
+  paintStickerPreview();
+  openModal('modalSticker');
+}
+/* ---- 클립 자리 ----
+   클립은 창(.app-window) 오른쪽 펀치 줄에 끼워지고, 창 위 모서리 바깥으로
+   튀어나옵니다. 창은 화면 가운데에 놓이고 크기가 뷰포트에 따라 달라지므로
+   CSS 만으로는 그 자리를 짚을 수 없어, 창을 재서 잡아 줍니다.
+   style.css 의 .sticker-clip 크기(30x75)와 짝이 맞아야 합니다. */
+const CLIP_W = 34;
+const CLIP_ABOVE = 34;      // 종이 선이 클립 위에서 34px — 뷰박스 y=40 자리입니다(85 × 0.4)
+const PUNCH_W = 40;         // .punch-margin 의 폭
+function positionStickerDrawer(){
+  const d = document.getElementById('stickerDrawer');
+  const win = document.querySelector('.app-window');
+  if(!d || !win) return;
+  const r = win.getBoundingClientRect();
+  if(isMobileWidth()){
+    /* 폰은 펀치 줄이 가로로 눕고 창 옆에 여백이 없습니다 — 상단바 아래 오른쪽에 */
+    d.style.left = (r.right - CLIP_W - 12) + 'px';
+    d.style.top  = (r.top + 96) + 'px';
+  }else{
+    d.style.left = (r.right - PUNCH_W + (PUNCH_W - CLIP_W) / 2) + 'px';
+    d.style.top  = (r.top - CLIP_ABOVE) + 'px';
+  }
+}
+
+/* 서랍 닫기 — 끼워지던 움직임을 거꾸로 돌립니다.
+   style.css 의 .sticker-drawer.closing 규칙(.3s)과 같아야 합니다. */
+const SD_CLOSE_MS = 320;
+let sdCloseTimer = null;
+function openStickerDrawer(){
+  const drawer = document.getElementById('stickerDrawer');
+  if(!drawer) return;
+  clearTimeout(sdCloseTimer);
+  drawer.classList.remove('closing');
+  drawer.classList.add('open');
+  renderStickerDrawer();
+}
+function closeStickerDrawer(){
+  const drawer = document.getElementById('stickerDrawer');
+  if(!drawer || !drawer.classList.contains('open')) return;
+  if(drawer.classList.contains('closing')) return;   // 판정을 타이머 지우기보다 먼저
+  clearTimeout(sdCloseTimer);
+  drawer.classList.add('closing');
+  sdCloseTimer = setTimeout(()=> drawer.classList.remove('open','closing'), SD_CLOSE_MS);
+  /* 서랍을 닫으면 제거 모드도 함께 풉니다 — ✕ 만 남아 있으면 무섭습니다 */
+  if(stickerRemoveMode){ stickerRemoveMode = false; renderStickers(); }
+}
+function initStickers(){
+  const drawer = document.getElementById('stickerDrawer');
+  if(!drawer) return;
+  /* 창은 열릴 때 아래에서 떠오르므로(window-in), 그 움직임이 끝난 뒤 다시 잽니다 */
+  positionStickerDrawer();
+  const win = document.querySelector('.app-window');
+  if(win) win.addEventListener('animationend', positionStickerDrawer);
+  window.addEventListener('resize', positionStickerDrawer);
+  document.getElementById('stickerHandle').addEventListener('click', ()=>{
+    if(drawer.classList.contains('open') && !drawer.classList.contains('closing')) closeStickerDrawer();
+    else openStickerDrawer();
+  });
+  document.addEventListener('keydown', (e)=>{
+    if(e.key !== 'Escape') return;
+    if(document.querySelector('.modal-overlay.open')) return;   // 창이 열려 있으면 그쪽이 임자
+    closeStickerDrawer();
+  });
+
+  document.getElementById('stLineAddBtn').addEventListener('click', addStickerLine);
+  document.getElementById('sdAddBtn').addEventListener('click', ()=> openStickerModal(null));
+  document.getElementById('sdRemoveBtn').addEventListener('click', ()=>{
+    stickerRemoveMode = !stickerRemoveMode;
+    renderStickers();
+  });
+
+  document.getElementById('stPickBtn').addEventListener('click', ()=>{
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = 'image/*';
+    input.onchange = async ()=>{
+      const f = input.files[0]; if(!f) return;
+      stickerDraftSrc = await fileToDataUrl(f);
+      document.getElementById('stError').innerText = '';
+      paintStickerPreview();
+    };
+    input.click();
+  });
+
+  bindOnce(document.getElementById('stSaveBtn'), async ()=>{
+    if(!stickerDraftSrc){
+      document.getElementById('stError').innerText = '이미지를 먼저 골라주세요.';
+      return;
+    }
+    /* 창을 닫지 않고 저장을 누른 경우를 위해, 적다 만 문구도 함께 담아 줍니다 */
+    addStickerLine();
+    const lines = stickerDraftLines.slice();
+    const cur = stickerEditId ? state.stickers.find(x=> x.id === stickerEditId) : null;
+    if(cur){
+      cur.src = stickerDraftSrc;
+      cur.lines = lines;
+    }else{
+      const p = randomStickerPos();
+      const made = { id: Date.now(), src: stickerDraftSrc, lines,
+                     w: STICKER_DEFAULT_W, x: p.x, y: p.y, out: true };
+      state.stickers.push(made);
+      stickerDropIds.add(made.id);          // 만들자마자 툭 떨어지며 나옵니다
+      if(isMobileWidth()){
+        /* 폰에서 만든 것은 그 화면에서 바로 보이게 하되 저장값은 건드리지 않습니다 */
+        made.out = false;
+        stickerLocal.out.add(made.id);
+        stickerLocal.pos.set(made.id, p);
+      }
+    }
+    await saveStickers();
+    closeModal('modalSticker');
+    renderStickers();
+  });
+}
+
 async function boot(){
+  initStickers();
   initPairImageAdjusters();
   initSaveIndicator();
   initFolderModal();
