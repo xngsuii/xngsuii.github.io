@@ -39,6 +39,8 @@ function applyEditMode(){
   safely('ARCHIVE', renderArchive);
   /* 보기 모드로 돌아오면 제거 모드(✕)는 남아 있으면 안 됩니다 */
   safely('스티커', ()=>{ if(!isLoggedIn) stickerRemoveMode = false; renderStickers(); });
+  /* 로그인해야 보이는 자리라, 편집 모드로 들어온 그때 한 번 그려 둡니다 */
+  safely('용량 게이지', renderStorageMeter);
   safely('PAIR 상세', ()=>{
     if(!currentPairPostId) return;
     const p = getCurrentPost();
@@ -7998,10 +8000,12 @@ function initResponsiveWatch(){
    저장은 편집 모드일 때만 합니다. 보기 모드에서 옮긴 자리는 그 자리에서만
    기억되고 새로고침하면 원래 자리로 돌아옵니다(쓸 권한이 서버에 없습니다).
 
-   폰(768px 이하)은 화면이 좁아 글자를 가리므로 저장된 '나와있음'을 따르지 않고
-   항상 다 들어가 있는 채로 시작합니다. 폰에서 꺼낸 것과 그 자리는 그 화면에서만
-   (stickerLocal) 기억하고 저장하지 않습니다 — 폰에서 잠깐 꺼낸 것 때문에
-   PC 화면이 바뀌면 안 되기 때문입니다.
+   폰(768px 이하)에서는 스티커를 쓰지 않습니다. 창 옆에 여백이 없어 클립이
+   상단바 위에 어정쩡하게 떠 있었기 때문입니다(주인 요청). 서랍과 스티커 칸을
+   CSS 에서 숨기고, positionStickerDrawer 는 열려 있던 서랍을 닫고 물러납니다.
+   아래 stickerOut / stickerLocal 의 폰 갈래는 그대로 둡니다 — 폰에서는 저장된
+   '나와있음'을 무시하므로 꺼낼 방법이 없어진 지금은 늘 빈 칸이 되고,
+   화면 폭이 오가는 동안에도 저장값이 폰 쪽에서 더럽혀지지 않습니다.
    ============================================================ */
 const STICKER_BUBBLE_MS = 3400;
 const STICKER_DEFAULT_W = 130;
@@ -8014,6 +8018,7 @@ const stickerLocal = { out:new Set(), pos:new Map() };
 let stickerEditId = null;     // 편집 중인 스티커 id (추가면 null)
 let stickerDraftSrc = '';     // 창에서 고른 이미지
 let stickerDraftLines = [];   // 창에서 '추가'로 담은 문구들
+let stickerDraftFlip = false; // 창에서 켜 둔 좌우반전
 /* 방금 서랍에서 꺼낸 스티커 — 이번에 그릴 때만 떨어지는 움직임을 줍니다.
    그리는 함수는 여러 이유로 불리므로(로그인 상태 바뀜 등), 표시가 남아 있으면
    가만히 있던 스티커까지 다시 떨어집니다. */
@@ -8028,6 +8033,7 @@ function normalizeStickers(list){
     w: Number(s.w) > 0 ? Number(s.w) : STICKER_DEFAULT_W,
     x: Number.isFinite(s.x) ? s.x : 50,
     y: Number.isFinite(s.y) ? s.y : 50,
+    flip: !!s.flip,
     out: !!s.out
   }));
 }
@@ -8050,7 +8056,7 @@ function renderStickers(){
   state.stickers.forEach(s=>{
     if(!stickerOut(s)) return;
     const el = document.createElement('div');
-    el.className = 'sticker';
+    el.className = 'sticker' + (s.flip ? ' flipped' : '');
     el.dataset.id = s.id;
     const pos = stickerPos(s);
     el.style.left  = pos.x + '%';
@@ -8213,6 +8219,7 @@ function renderStickerDrawer(){
     b.type = 'button'; b.className = 'sd-item'; b.dataset.id = s.id;
     b.title = stickerOut(s) ? '서랍에 넣기' : '꺼내기';
     b.classList.toggle('out', stickerOut(s));
+    b.classList.toggle('flipped', !!s.flip);
     const im = document.createElement('img');
     im.alt = ''; im.draggable = false;
     const u = imgUrl(s.src);
@@ -8269,6 +8276,9 @@ function paintStickerPreview(){
   const box = document.getElementById('stPreview');
   if(!box) return;
   box.innerHTML = '';
+  box.classList.toggle('flipped', stickerDraftFlip);
+  const fb = document.getElementById('stFlipBtn');
+  if(fb) fb.classList.toggle('on', stickerDraftFlip);
   if(!stickerDraftSrc){
     const t = document.createElement('span'); t.innerText = '없음';
     box.appendChild(t); return;
@@ -8318,6 +8328,7 @@ function openStickerModal(s){
   stickerEditId = s ? s.id : null;
   stickerDraftSrc = s ? s.src : '';
   stickerDraftLines = s ? (s.lines || []).slice() : [];
+  stickerDraftFlip = s ? !!s.flip : false;
   document.getElementById('stickerModalHeading').innerText = s ? '스티커 편집' : '스티커 추가';
   document.getElementById('stLineInput').value = '';
   document.getElementById('stError').innerText = '';
@@ -8337,15 +8348,18 @@ function positionStickerDrawer(){
   const d = document.getElementById('stickerDrawer');
   const win = document.querySelector('.app-window');
   if(!d || !win) return;
-  const r = win.getBoundingClientRect();
+  /* 폰에서는 서랍을 쓰지 않습니다(CSS 에서 숨김). 창 옆에 여백이 없어 클립이
+     상단바 위에 어정쩡하게 떠 있었기 때문입니다. 화면이 좁아지는 순간
+     열려 있던 서랍은 닫아 둡니다 — 다시 넓어졌을 때 열린 채로 튀어나오지
+     않게 하려는 것입니다. */
   if(isMobileWidth()){
-    /* 폰은 펀치 줄이 가로로 눕고 창 옆에 여백이 없습니다 — 상단바 아래 오른쪽에 */
-    d.style.left = (r.right - CLIP_W - 12) + 'px';
-    d.style.top  = (r.top + 96) + 'px';
-  }else{
-    d.style.left = (r.right - PUNCH_W + (PUNCH_W - CLIP_W) / 2) + 'px';
-    d.style.top  = (r.top - CLIP_ABOVE) + 'px';
+    clearTimeout(sdCloseTimer);
+    d.classList.remove('open','closing');
+    return;
   }
+  const r = win.getBoundingClientRect();
+  d.style.left = (r.right - PUNCH_W + (PUNCH_W - CLIP_W) / 2) + 'px';
+  d.style.top  = (r.top - CLIP_ABOVE) + 'px';
 }
 
 /* 서랍 닫기 — 끼워지던 움직임을 거꾸로 돌립니다.
@@ -8407,6 +8421,13 @@ function initStickers(){
     input.click();
   });
 
+  /* 좌우반전 — 그림 자체는 그대로 두고 그리기만 뒤집습니다(CSS scaleX(-1)).
+     미리보기에도 바로 반영해 어느 쪽인지 보고 저장할 수 있게 합니다. */
+  document.getElementById('stFlipBtn').addEventListener('click', ()=>{
+    stickerDraftFlip = !stickerDraftFlip;
+    paintStickerPreview();
+  });
+
   bindOnce(document.getElementById('stSaveBtn'), async ()=>{
     if(!stickerDraftSrc){
       document.getElementById('stError').innerText = '이미지를 먼저 골라주세요.';
@@ -8419,9 +8440,10 @@ function initStickers(){
     if(cur){
       cur.src = stickerDraftSrc;
       cur.lines = lines;
+      cur.flip = stickerDraftFlip;
     }else{
       const p = randomStickerPos();
-      const made = { id: Date.now(), src: stickerDraftSrc, lines,
+      const made = { id: Date.now(), src: stickerDraftSrc, lines, flip: stickerDraftFlip,
                      w: STICKER_DEFAULT_W, x: p.x, y: p.y, out: true };
       state.stickers.push(made);
       stickerDropIds.add(made.id);          // 만들자마자 툭 떨어지며 나옵니다
@@ -8442,6 +8464,9 @@ async function boot(){
   initStickers();
   initPairImageAdjusters();
   initSaveIndicator();
+  /* 용량 게이지 — 불러오기·저장·미사용 사진 정리가 끝날 때마다 다시 그립니다 */
+  window.SiteStore.onStorageChange(renderStorageMeter);
+  renderStorageMeter();
   initFolderModal();
   initFolderUnlock();
   /* 갤러리·LOG 는 PAIR 상세와 OC 상세 두 곳에서 같은 코드로 돕니다 */
@@ -8526,6 +8551,45 @@ function initSaveIndicator(){
   window.addEventListener('beforeunload', (e)=>{
     if(window.SiteStore.hasUnsaved){ e.preventDefault(); e.returnValue = ''; }
   });
+}
+
+/* ------------------------------------------------------------
+   저장 용량 게이지 (사이드바 맨 아래, 편집 모드 전용)
+   ------------------------------------------------------------
+   Firestore 무료 한도는 1 GiB 이고, 이 사이트가 쓰는 용량은 사실상 전부
+   사진입니다. 숫자는 firebase-store.js 의 storageStats() 가 냅니다 —
+   서버에 다시 묻지 않고 이미 받아 둔 표와 마지막으로 저장한 JSON 만 셉니다.
+   ------------------------------------------------------------ */
+const SM_WARN_AT = 0.8;
+function fmtBytes(n){
+  /* 한도(1 GB)가 '1.00 GB' 로 나오지 않게 뒤의 0 은 떼어냅니다 */
+  if(n >= 1024*1024*1024) return (n/1024/1024/1024).toFixed(2).replace(/\.?0+$/, '') + ' GB';
+  if(n >= 1024*1024)      return (n/1024/1024).toFixed(1) + ' MB';
+  if(n >= 1024)           return Math.round(n/1024) + ' KB';
+  return n + ' B';
+}
+function renderStorageMeter(){
+  const box = document.getElementById('storageMeter');
+  if(!box || !window.SiteStore || !window.SiteStore.storageStats) return;
+  const s = window.SiteStore.storageStats();
+  const fill = document.getElementById('smFill');
+  const pct  = document.getElementById('smPct');
+  const sub  = document.getElementById('smSub');
+  if(!s.ready && !s.bytes){
+    /* 사진 크기 표가 아직 없습니다 — 관리자로 열면 한 번만 만들어집니다 */
+    pct.innerText = '—';
+    fill.style.width = '0%';
+    sub.innerText = '계산 중…';
+    box.classList.remove('warn');
+    return;
+  }
+  const ratio = Math.min(1, s.bytes / s.quota);
+  /* 아주 조금 찼을 때도 막대가 보이도록 최소 두께를 줍니다 */
+  fill.style.width = (ratio > 0 ? Math.max(1.5, ratio*100) : 0) + '%';
+  pct.innerText = (ratio*100).toFixed(1) + '%';
+  sub.innerText = fmtBytes(s.bytes) + ' / ' + fmtBytes(s.quota)
+    + ' · 사진 ' + s.blobs + '장';
+  box.classList.toggle('warn', ratio >= SM_WARN_AT);
 }
 
 /* ------------------------------------------------------------

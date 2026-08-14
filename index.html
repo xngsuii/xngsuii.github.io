@@ -11,7 +11,7 @@
      css/js를 고칠 때마다 이 숫자를 함께 올려주세요.
      올리지 않으면 브라우저가 옛 파일을 계속 써서
      새 HTML과 짝이 맞지 않아 화면이 깨질 수 있습니다. -->
-<link rel="stylesheet" href="css/style.css?v=108" />
+<link rel="stylesheet" href="css/style.css?v=111" />
 </head>
 <body>
 <div class="app-window">
@@ -97,6 +97,17 @@
         <button class="nav-sub-item" data-archivesub="etc">ETC</button>
       </div>
     </nav>
+
+    <!-- 저장 용량 — 편집 모드에서만, 사이드바 맨 아래에 얇게.
+         숫자는 firebase-store.js 의 storageStats() 가 냅니다. -->
+    <div class="storage-meter" id="storageMeter" data-editonly>
+      <div class="sm-top">
+        <span class="sm-label">STORAGE</span>
+        <span class="sm-pct" id="smPct">—</span>
+      </div>
+      <div class="sm-bar"><div class="sm-fill" id="smFill"></div></div>
+      <div class="sm-sub" id="smSub">계산 중…</div>
+    </div>
 
   </aside>
 
@@ -936,9 +947,14 @@
     <button class="modal-close" data-close>✕</button>
     <h3 id="stickerModalHeading">스티커 추가</h3>
     <div class="form-row"><label>이미지</label>
+      <!-- 미리보기가 먼저, 단추는 그 아래 -->
       <div class="st-pick-row">
-        <button type="button" class="btn-ghost" id="stPickBtn">이미지 고르기</button>
         <div class="st-preview" id="stPreview"><span>없음</span></div>
+        <div class="st-pick-btns">
+          <button type="button" class="btn-ghost" id="stPickBtn">이미지 고르기</button>
+          <!-- 좌우반전은 이미지를 다시 만들지 않고 그리기만 뒤집습니다 -->
+          <button type="button" class="btn-ghost" id="stFlipBtn">좌우반전</button>
+        </div>
       </div>
     </div>
     <!-- 문구는 '추가'로 하나씩 담습니다 — 엔터는 줄바꿈이라 여러 줄짜리 문구도 넣을 수 있습니다 -->
@@ -1001,7 +1017,7 @@
      맨 끝에 두어 화면 그리기를 막지 않게 합니다. -->
 <img class="paper-grain" src="img/paper-grain.jpg" alt="" aria-hidden="true" draggable="false" />
 
-<script src="js/main.js?v=108"></script>
-<script type="module" src="js/firebase-store.js?v=108"></script>
+<script src="js/main.js?v=111"></script>
+<script type="module" src="js/firebase-store.js?v=111"></script>
 </body>
 </html>

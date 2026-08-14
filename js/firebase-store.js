@@ -22,7 +22,7 @@ import {
   getFirestore, doc, getDoc, setDoc, deleteDoc, deleteField,
   collection, getDocs, writeBatch
 } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
-import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=108';
+import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=111';
 
 const app  = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -558,6 +558,49 @@ function startBlobQueue() {
   pumpBlobs();
 }
 
+/* ------------------------------------------------------------
+   사진 크기 표 (저장 용량 표시용)
+   ------------------------------------------------------------
+   사이드바 아래 게이지가 쓰는 표입니다. 위 blobIndex 는 '조각 수'만 갖고
+   있어서 실제 용량을 알 수 없습니다 — 조각 하나가 1 글자일 수도 700,000 글자일
+   수도 있어서, 조각 수로 어림하면 오차가 배로 납니다. 사진 문서에는 len 이
+   적혀 있으므로, 표가 없을 때 관리자가 딱 한 번 훑어 만들어 둡니다.
+
+   그 뒤로는 다시 훑지 않습니다: 새로 올린 사진은 flush 가 표에 함께 적고,
+   지운 사진은 collectGarbage 가 표에서도 뺍니다. blobIndex 와 완전히 같은
+   생애주기라, 둘 중 하나만 낡는 일이 없습니다.
+
+   표는 meta 문서 안에 있어 읽기가 0 건입니다(이미 받아 온 문서에 딸려 옵니다).
+   ------------------------------------------------------------ */
+const FREE_QUOTA_BYTES = 1024 * 1024 * 1024;   // Firestore 무료 한도 1 GiB
+let blobSizes = null;          // id -> 글자 수 (null = 표가 아직 없음)
+let blobSizesScanned = false;  // 이번 세션에 이미 훑었음 (다시 훑지 않게)
+
+async function ensureBlobSizes() {
+  if (!isAdmin || blobSizesScanned) return;
+  const have = blobSizes || {};
+  /* 표에 없는 사진이 하나라도 있으면 만들어야 합니다. 하나도 없으면 그냥 둡니다. */
+  if (![...knownBlobIds].some(id => !(id in have))) { blobSizes = have; return; }
+  blobSizesScanned = true;
+  try {
+    const snap = await getDocs(blobsRef());
+    const sizes = {};
+    snap.docs.forEach(d => { sizes[d.id] = d.data().len || 0; });
+    blobSizes = sizes;
+    if (Object.keys(sizes).length) await setDoc(metaRef(), { blobSizes: sizes }, { merge: true });
+    emitStorage();
+  } catch (e) {
+    blobSizesScanned = false;
+    console.warn('사진 크기 표를 만들지 못했습니다 — 용량 표시가 비어 보입니다.', e);
+  }
+}
+
+/* 용량이 달라졌음을 화면에 알립니다 (사이드바 게이지) */
+const storageListeners = new Set();
+function emitStorage() {
+  storageListeners.forEach(fn => { try { fn(); } catch (e) { console.error(e); } });
+}
+
 /* 표가 아직 없을 때(이 기능을 처음 켠 직후) 딱 한 번 만들어 둡니다.
    관리자만 합니다 — 쓰기 권한이 있어야 하고, 보는 사람에게 984건을
    물릴 이유가 없습니다. 표가 없는 동안에도 사진은 readBlob 이 문서를
@@ -619,8 +662,12 @@ async function loadAll() {
 
   /* 사진 목록은 방금 받은 meta 문서 안에 들어 있습니다 (추가 읽기 없음) */
   applyBlobIndex(meta.blobIndex);
+  blobSizes = (meta.blobSizes && typeof meta.blobSizes === 'object') ? { ...meta.blobSizes } : null;
   startBlobQueue();
-  if (isAdmin) ensureBlobIndex().then(collectGarbage);
+  emitStorage();
+  /* 크기 표는 정리가 끝난 뒤에 만듭니다 — 먼저 만들면 곧바로 지워질 사진까지
+     세어, 게이지가 잠깐 실제보다 크게 나옵니다. */
+  if (isAdmin) ensureBlobIndex().then(collectGarbage).then(ensureBlobSizes);
 }
 
 function stripMeta(o) {
@@ -741,8 +788,15 @@ async function flush() {
     /* 새로 올린 사진은 사진 목록(meta 의 blobIndex)에도 적어 둡니다.
        merge 는 표 안쪽까지 합쳐주므로 다른 사진의 항목은 건드리지 않습니다. */
     const indexAdds = {};
-    for (const [id, dataUrl] of pending) indexAdds[id] = await writeBlob(id, dataUrl);
-    if (Object.keys(indexAdds).length) metaPatch.blobIndex = indexAdds;
+    const sizeAdds = {};
+    for (const [id, dataUrl] of pending) {
+      indexAdds[id] = await writeBlob(id, dataUrl);
+      sizeAdds[id] = dataUrl.length;     // 용량 게이지가 쓰는 크기 표
+    }
+    if (Object.keys(indexAdds).length) {
+      metaPatch.blobIndex = indexAdds;
+      metaPatch.blobSizes = sizeAdds;
+    }
 
     if (Object.keys(metaPatch).length) await setDoc(metaRef(), metaPatch, { merge: true });
 
@@ -764,6 +818,8 @@ async function flush() {
     Object.assign(savedJson, nextSaved);
     Object.assign(savedOrder, nextOrder);
     dropSaved.forEach(sk => { delete savedJson[sk]; delete savedOrder[sk]; });
+    if (blobSizes) Object.assign(blobSizes, sizeAdds);
+    emitStorage();
   } catch (e) {
     keys.forEach(k => dirty.add(k));       // 저장 기록을 건드리지 않았으므로 그대로 재시도됨
     throw e;
@@ -827,8 +883,11 @@ async function collectGarbage() {
   try {
     const patch = {};
     removed.forEach(id => { patch[id] = deleteField(); });
-    await setDoc(metaRef(), { blobIndex: patch }, { merge: true });
+    /* 크기 표도 같은 항목만 콕 집어 뺍니다 — 두 표는 생애주기가 같아야 합니다 */
+    await setDoc(metaRef(), { blobIndex: patch, blobSizes: patch }, { merge: true });
+    if (blobSizes) removed.forEach(id => { delete blobSizes[id]; });
   } catch (e) { console.warn('사진 목록 정리 실패', e); }
+  emitStorage();
   cacheDropBlobs(removed);
 }
 
@@ -869,7 +928,7 @@ onAuthStateChanged(auth, (user) => {
   isAdmin = admin;
   notify();
   /* 로그인은 불러오기보다 늦게 확정될 수 있어, 여기서도 한 번 챙깁니다 */
-  if (isAdmin && loaded) ensureBlobIndex().then(collectGarbage);
+  if (isAdmin && loaded) ensureBlobIndex().then(collectGarbage).then(ensureBlobSizes);
 });
 
 /* ------------------------------------------------------------
@@ -966,6 +1025,42 @@ const SiteStore = {
   blobStats() {
     const pending = blobQueue.length + blobActive.size;
     return { done: blobCache.size, total: blobCache.size + pending };
+  },
+
+  /* ---- 저장 용량 ---- */
+
+  /* 용량이 달라지면 알립니다 (불러오기 끝 · 저장 끝 · 미사용 사진 정리 끝) */
+  onStorageChange(fn) { storageListeners.add(fn); return () => storageListeners.delete(fn); },
+
+  /* 사이드바 게이지가 쓰는 값입니다.
+     · photos — 사진 크기 표의 합. 이 사이트 데이터의 거의 전부입니다.
+     · docs   — 글·목록 문서. 마지막으로 저장한 JSON 을 그대로 재서, 서버에
+                다시 묻지 않고 셉니다.
+     · tables — meta 문서 안 사진 표 두 개(blobIndex/blobSizes). 사진 한 장당
+                'id 32글자 + 숫자 + 필드 이름' 두 벌이라 90 바이트로 잡습니다.
+     data URL 은 base64(ASCII)라 글자 수가 곧 바이트 수입니다. Firestore 가
+     실제로 세는 값에는 문서 이름과 색인 몫이 조금 더 붙으므로, 이 값은
+     '조금 모자라게 잡은 근사치'입니다 — 게이지에 그렇게 표시합니다.
+     ready 가 false 면 크기 표가 아직 없다는 뜻입니다(관리자로 한 번 열면
+     저절로 만들어집니다). */
+  storageStats() {
+    let photos = 0, sized = 0;
+    if (blobSizes) {
+      for (const id of knownBlobIds) {
+        const n = blobSizes[id];
+        if (typeof n === 'number') { photos += n; sized++; }
+      }
+    }
+    let docs = 0;
+    for (const k of Object.keys(savedJson)) docs += savedJson[k].length;
+    const tables = knownBlobIds.size * 90;
+    return {
+      bytes: photos + docs + tables,
+      quota: FREE_QUOTA_BYTES,
+      photos, docs, tables,
+      blobs: knownBlobIds.size, sized,
+      ready: !!blobSizes && sized === knownBlobIds.size
+    };
   },
 
   get(key, fallback) {
