@@ -2665,48 +2665,118 @@ function htmlToPlainText(html){
   return d.innerText || '';
 }
 
-/* "따옴표" → 보조색, (괄호) → 괄호색, **별표** → 볼드.
-   HTML 문자열을 정규식으로 건드리면 태그·속성이 깨지므로
-   글자 노드만 골라서 바꿉니다. */
-function applyAutoFormat(root, subColor, parenColor){
-  /* **볼드** 를 *기울임* 보다 먼저 적어야 합니다 — 갈래는 적힌 순서대로 시도되므로,
-     기울임이 앞에 오면 **볼드** 의 앞쪽 별 두 개를 기울임으로 먼저 채가 버립니다. */
-  const RE = /\*\*([^*\n]+)\*\*|\*([^*\n]+)\*|"([^"\n]*)"|\(([^)\n]*)\)/g;
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
-  const targets = [];
-  let n;
-  while((n = walker.nextNode())){
-    // 코드 블록 안은 적은 그대로 보여야 하므로 자동 서식을 걸지 않습니다
-    if(n.parentNode && n.parentNode.closest && n.parentNode.closest('.code-block')) continue;
-    if(n.nodeValue && RE.test(n.nodeValue)) targets.push(n);
-    RE.lastIndex = 0;
+/* ---- 한 줄 안의 서식 ----
+   ***굵은기울임*** / **볼드** / *기울임* / "따옴표"(보조색) / (괄호)(괄호색).
+
+   예전에는 글자 노드를 하나씩 따로 보고 그 안에서만 짝을 찾았습니다. 그래서
+   이미 형광펜·글자색·볼드가 칠해진 글에 *…* 를 쓰면, 여는 별과 닫는 별이
+   서로 다른 노드로 쪼개져 있어 짝을 못 찾고 별표가 그대로 보인 채 기울임도
+   안 걸렸습니다("이탤릭에 다른 효과를 겹치면 * 가 그대로 보여요").
+   지금은 코드 블록·마크다운과 똑같은 방식으로 본문 전체를 줄바꿈이 살아있는
+   글자열로 펼쳐(flattenForFences) 짝을 찾은 다음, 그 구간의 DOM 을 통째로
+   들어내(extractContents) 새 껍데기에 옮겨 담습니다 — 안에 있던 형광펜·색·
+   볼드가 그대로 살아남고, 서식 경계를 가로질러도 짝이 맞습니다.
+   겹쳐 쓴 마크다운(**볼드 *기울임* 끝**)은 껍데기를 씌운 뒤 그 안에서 한 번
+   더 찾아 붙입니다. 표시를 떼어낸 만큼 글이 매번 짧아지므로 끝없이 돌지 않습니다. */
+/* 갈래는 적힌 순서대로 시도됩니다 — 별 세 개, 두 개, 하나 순으로 적어야
+   *** 를 기울임이 먼저 채가지 않습니다.
+   볼드 안에는 홀별(기울임)을, 기울임 안에는 겹별(볼드)을 넣을 수 있게
+   내용 쪽을 열어 두었고, 닫는 별 뒤에 별이 또 오면 닫는 별로 보지 않습니다
+   (그래야 *기울임 **볼드** 끝* 에서 볼드의 첫 별을 닫는 별로 착각하지 않습니다). */
+const AF_RE_FULL  = /\*\*\*([^*\n]+)\*\*\*|\*\*((?:[^*\n]|\*(?!\*))+?)\*\*|\*(?!\*)((?:[^*\n]|\*\*[^*\n]+\*\*)+?)\*(?!\*)|"([^"\n]*)"|\(([^)\n]*)\)/g;
+/* 따옴표·괄호 껍데기 안에서 다시 찾을 때 쓰는 것 — 따옴표·괄호 갈래를 빼야
+   방금 만든 껍데기가 자기 자신을 또 감싸는 일이 없습니다. */
+const AF_RE_STARS = /\*\*\*([^*\n]+)\*\*\*|\*\*((?:[^*\n]|\*(?!\*))+?)\*\*|\*(?!\*)((?:[^*\n]|\*\*[^*\n]+\*\*)+?)\*(?!\*)/g;
+const AF_MAX_DEPTH = 5;
+
+/* 들어낸 조각의 맨 앞(또는 맨 뒤)에서 표시 글자 n 개를 떼어냅니다.
+   표시가 서식 안에 들어 있어도(<b>**</b>굵게) 그 글자 노드에서 지웁니다. */
+function afCutEdge(frag, n, fromEnd){
+  const walker = document.createTreeWalker(frag, NodeFilter.SHOW_TEXT, null);
+  const nodes = [];
+  let t;
+  while((t = walker.nextNode())) nodes.push(t);
+  if(fromEnd) nodes.reverse();
+  for(const node of nodes){
+    if(n <= 0) break;
+    const len = node.data.length;
+    if(!len) continue;
+    const take = Math.min(n, len);
+    node.data = fromEnd ? node.data.slice(0, len - take) : node.data.slice(take);
+    n -= take;
   }
-  targets.forEach(node=>{
-    const frag = document.createDocumentFragment();
-    let last = 0, m;
-    RE.lastIndex = 0;
-    while((m = RE.exec(node.nodeValue))){
-      if(m.index > last) frag.appendChild(document.createTextNode(node.nodeValue.slice(last, m.index)));
-      if(m[1] !== undefined){                       // **볼드** — 기호는 제거
-        const b = document.createElement('b'); b.textContent = m[1];
-        frag.appendChild(b);
-      }else if(m[2] !== undefined){                 // *기울임* — 기호는 제거
-        const it = document.createElement('i'); it.textContent = m[2];
-        frag.appendChild(it);
-      }else if(m[3] !== undefined){                 // "보조색" — 따옴표 유지
-        const s = document.createElement('span');
-        s.style.color = subColor; s.textContent = `"${m[3]}"`;
-        frag.appendChild(s);
-      }else{                                        // (괄호색) — 괄호 유지
-        const s = document.createElement('span');
-        s.style.color = parenColor; s.textContent = `(${m[4]})`;
-        frag.appendChild(s);
-      }
-      last = m.index + m[0].length;
-    }
-    if(last < node.nodeValue.length) frag.appendChild(document.createTextNode(node.nodeValue.slice(last)));
-    node.parentNode.replaceChild(frag, node);
-  });
+}
+/* 어느 갈래인지 보고 껍데기를 만듭니다.
+   cut 은 양 끝에서 떼어낼 표시 글자 수입니다 — 따옴표·괄호는 그대로 둡니다. */
+function afWrapper(m, subColor, parenColor){
+  if(m[1] !== undefined){                      // ***굵은기울임***
+    const b = document.createElement('b'), i = document.createElement('i');
+    b.appendChild(i);
+    return { outer:b, inner:i, cut:3, stars:true };
+  }
+  if(m[2] !== undefined){                      // **볼드**
+    const b = document.createElement('b');
+    return { outer:b, inner:b, cut:2, stars:true };
+  }
+  if(m[3] !== undefined){                      // *기울임*
+    const i = document.createElement('i');
+    return { outer:i, inner:i, cut:1, stars:true };
+  }
+  const s = document.createElement('span');    // "보조색" / (괄호색) — 기호는 유지
+  s.style.color = m[4] !== undefined ? subColor : parenColor;
+  return { outer:s, inner:s, cut:0, stars:false };
+}
+/* 짝을 지어도 되는 '한 상자' 인지 봅니다. 표의 칸(td·th)은 블록 태그 목록에
+   없어서 펼친 글자열에서는 옆 칸과 그냥 이어져 보이는데, 실제로는 서로 다른
+   상자라 그 둘을 가로질러 들어내면 표가 무너집니다. */
+function afLineBox(point){
+  let el = point.container.nodeType === 3 ? point.container.parentNode : point.container;
+  while(el && el.nodeType === 1
+        && !(BLOCK_TAGS.includes(el.tagName) || el.tagName === 'TD' || el.tagName === 'TH')){
+    el = el.parentNode;
+  }
+  return el;
+}
+function applyAutoFormat(root, subColor, parenColor, opts){
+  const depth    = (opts && opts.depth) || 0;
+  const starsOnly = !!(opts && opts.starsOnly);
+  if(depth >= AF_MAX_DEPTH) return;
+  const re = starsOnly ? AF_RE_STARS : AF_RE_FULL;
+  const { text, marks } = flattenForFences(root);
+  if(!text) return;
+
+  /* 짝은 먼저 전부 찾아 둡니다 — 아래에서 껍데기 안을 다시 훑을 때
+     같은 정규식을 다시 쓰기 때문에, 찾는 중에 끼어들면 자리가 어긋납니다. */
+  const hits = [];
+  re.lastIndex = 0;
+  let m;
+  while((m = re.exec(text))) hits.push({ start:m.index, end:m.index + m[0].length, m:Array.from(m) });
+  if(!hits.length) return;
+
+  /* 뒤에서부터 바꿉니다 — marks 는 바꾸기 전 좌표라, 앞에서부터 손대면
+     그 뒤 좌표가 전부 밀립니다 (코드 블록·마크다운과 같은 이유). */
+  for(let k = hits.length - 1; k >= 0; k--){
+    const h = hits[k];
+    try{
+      const s = resolveFenceOffset(marks, h.start);
+      const e = resolveFenceOffset(marks, h.end);
+      // 코드 블록 안은 적은 그대로 보여야 하므로 자동 서식을 걸지 않습니다
+      if(mdInsideCode(s) || mdInsideCode(e)) continue;
+      if(afLineBox(s) !== afLineBox(e)) continue;
+      const range = document.createRange();
+      range.setStart(s.container, s.offset);
+      range.setEnd(e.container, e.offset);
+      const frag = range.extractContents();
+      const w = afWrapper(h.m, subColor, parenColor);
+      if(w.cut){ afCutEdge(frag, w.cut, false); afCutEdge(frag, w.cut, true); }
+      w.inner.appendChild(frag);
+      range.insertNode(w.outer);
+      /* 껍데기 안에 겹쳐 쓴 서식이 남아 있을 수 있습니다.
+         따옴표·괄호는 기호를 그대로 두므로 별표 갈래만 다시 찾습니다. */
+      applyAutoFormat(w.inner, subColor, parenColor,
+        { depth: depth + 1, starsOnly: starsOnly || !w.stars });
+    }catch(err){ /* 예상 밖의 DOM 모양이면 이 자리는 건드리지 않고 넘어갑니다 */ }
+  }
 }
 
 /* ============================================================
@@ -2807,7 +2877,14 @@ function isLineSeparator(node){
    백틱을 친 경우), <br> 만 찾으면 그 사진까지 지워집니다. 그래서 사진·구분선
    같은 것도 줄 끝으로 봅니다(isLineSeparator).
    그 방향에 줄 끝이 하나도 없으면 el 자체가 통째로 한 줄이라는 뜻이므로,
-   el 을 지울 단위로 보고 el 의 부모 안에서 el 의 위치를 씁니다. */
+   el 을 지울 단위로 보고 el 의 부모 안에서 el 의 위치를 씁니다.
+   다만 인용구만은 예외입니다 — 아래 MD_KEEP_TAGS 참고. */
+/* 인용구는 '줄을 감싼 껍데기'가 아니라 그 자체로 남아야 하는 상자입니다.
+   줄 하나만 든 인용구를 통째로 바꿀 단위로 보면, 그 안의 # 제목이
+   <h1><blockquote>제목</blockquote></h1> 처럼 인용구를 삼켜 버려 화면에는
+   여전히 인용구로만 보였습니다("인용구 안에서 헤더 문법이 안 먹는다").
+   이 태그 안에서는 경계를 바깥으로 넘기지 않고 상자 안쪽 끝을 씁니다. */
+const MD_KEEP_TAGS = ['BLOCKQUOTE'];
 function localLineBoundary(el, node, dir){
   let cur = node;
   while(cur.parentNode !== el) cur = cur.parentNode;
@@ -2818,6 +2895,9 @@ function localLineBoundary(el, node, dir){
       return { container: el, offset: dir < 0 ? idx + 1 : idx };
     }
     sib = dir < 0 ? sib.previousSibling : sib.nextSibling;
+  }
+  if(MD_KEEP_TAGS.includes(el.tagName)){
+    return { container: el, offset: dir < 0 ? 0 : el.childNodes.length };
   }
   const parent = el.parentNode;
   const idx = Array.prototype.indexOf.call(parent.childNodes, el);
@@ -3567,54 +3647,57 @@ function renderLogList(p){
 
   /* 선택 모드에서는 카드 위에 체크 표시가 하나 더 붙습니다 (갤러리와 같은 모양) */
   const sel = isLoggedIn && logSelectMode;
-  let cards='';
-  pageItems.forEach((entry, i)=>{
-    const checked = logSelectedIds.has(entry.id);
-    const thumb = extractFirstImage(entry.content);
-    /* 사진이 있으면 글 대신 첫 사진을 미리 보여줍니다. 아직 안 받은 사진은
-       imgUrl 이 '' 을 돌려주므로 자리만 잡아두고 아래에서 대기표를 답니다. */
-    const body = thumb
-      ? `<div class="lc-thumb" data-src="1"><img alt="" /></div>`
-      : `<div class="lc-text">${escapeHtml(logPreviewText(entry.content))}</div>`;
-    cards += `<article class="log-card${checked?' selected':''}${thumb?' has-img':''}" data-abs="${start+i}">`
-      + (sel?`<div class="gallery-check lc-check${checked?' checked':''}">${checked?'✓':''}</div>`:'')
-      + `<div class="lc-no">${String(displayNo.get(entry)||'').padStart(2,'0')}</div>`
-      + `<h4 class="lc-title">${entry.pinned?'<span class="arc-pin-tag">📌</span> ':''}${escapeHtml(entry.title)}</h4>`
-      + body
-      + `<div class="lc-foot"><span class="lc-date">${entry.date||''}</span><span class="lc-more">MORE →</span></div>`
-      + `</article>`;
-  });
+  /* 폰에서는 벽돌식 카드 대신 예전의 줄 목록(표)으로 보여줍니다 — 좁은 화면에서
+     세 칸으로 벌여 놓으면 카드 하나가 손톱만 해지고, 사진 미리보기가 화면을
+     거의 다 먹습니다. 표는 ARCHIVE 의 OOC·ETC 와 같은 마크업(.log-table)이라
+     스타일도 그대로 따라옵니다. 아래 그리기·묶기 두 군데만 갈라집니다. */
+  const asRows = isMobileWidth();
   let pag='';
   if(totalPages>1){
     pag += `<button class="log-pg-btn" data-pg="prev" ${pdLogPage===1?'disabled':''}>&lt;</button>`;
     for(let i=1;i<=totalPages;i++){ pag += `<button class="log-pg-btn ${i===pdLogPage?'active':''}" data-pg="${i}">${i}</button>`; }
     pag += `<button class="log-pg-btn" data-pg="next" ${pdLogPage===totalPages?'disabled':''}>&gt;</button>`;
   }
-  wrap.innerHTML = `<div class="log-cards-scroll"><div class="log-cards" id="pdLogCards">${cards}</div></div>
-    <div class="log-pagination-slot">${totalPages>1?`<div class="log-pagination">${pag}</div>`:''}</div>`;
+  const pagHtml = `<div class="log-pagination-slot">${totalPages>1?`<div class="log-pagination">${pag}</div>`:''}</div>`;
+
+  if(asRows){
+    let rows='';
+    pageItems.forEach((entry, i)=>{
+      const checked = logSelectedIds.has(entry.id);
+      rows += `<tr data-abs="${start+i}"${checked?' class="selected"':''}>`
+        + (sel?`<td class="arc-td-check"><div class="gallery-check${checked?' checked':''}">${checked?'✓':''}</div></td>`:'')
+        + `<td>${displayNo.get(entry)||''}</td>`
+        + `<td class="log-td-title">${entry.pinned?'<span class="arc-pin-tag">📌</span> ':''}${escapeHtml(entry.title)}</td>`
+        + `<td>${entry.date||''}</td></tr>`;
+    });
+    wrap.innerHTML = `<div class="log-table-scroll"><table class="log-table"><thead><tr>`
+      + `${sel?'<th class="arc-th-check"></th>':''}<th>No</th><th>Title</th><th>Date</th>`
+      + `</tr></thead><tbody>${rows}</tbody></table></div>` + pagHtml;
+  }else{
+    let cards='';
+    pageItems.forEach((entry, i)=>{
+      const checked = logSelectedIds.has(entry.id);
+      const thumb = extractFirstImage(entry.content);
+      /* 사진이 있으면 글 대신 첫 사진을 미리 보여줍니다. 아직 안 받은 사진은
+         imgUrl 이 '' 을 돌려주므로 자리만 잡아두고 아래에서 대기표를 답니다. */
+      const body = thumb
+        ? `<div class="lc-thumb" data-src="1"><img alt="" /></div>`
+        : `<div class="lc-text">${escapeHtml(logPreviewText(entry.content))}</div>`;
+      cards += `<article class="log-card${checked?' selected':''}${thumb?' has-img':''}" data-abs="${start+i}">`
+        + (sel?`<div class="gallery-check lc-check${checked?' checked':''}">${checked?'✓':''}</div>`:'')
+        + `<div class="lc-no">${String(displayNo.get(entry)||'').padStart(2,'0')}</div>`
+        + `<h4 class="lc-title">${entry.pinned?'<span class="arc-pin-tag">📌</span> ':''}${escapeHtml(entry.title)}</h4>`
+        + body
+        + `<div class="lc-foot"><span class="lc-date">${entry.date||''}</span><span class="lc-more">MORE →</span></div>`
+        + `</article>`;
+    });
+    wrap.innerHTML = `<div class="log-cards-scroll"><div class="log-cards" id="pdLogCards">${cards}</div></div>` + pagHtml;
+  }
   updateLogSelectBtns();
 
-  wrap.querySelectorAll('.log-card[data-abs]').forEach(card=>{
-    const entry = items[Number(card.dataset.abs)];
-    /* 사진은 늦게 올 수 있습니다. 도착하면 그 칸만 다시 칠하고 배치를 다시 잽니다 */
-    const im = card.querySelector('.lc-thumb img');
-    if(im){
-      const src = extractFirstImage(entry.content);
-      /* 아직 안 온 사진에 빈 src 를 넣으면 곧바로 error 가 나서, 도착하기도 전에
-         자리를 접어 버립니다. 주소가 생겼을 때만 넣고 그때까지는 비워 둡니다
-         (src 가 없는 img 는 높이 0 이라 카드가 제목·날짜만큼만 차지합니다). */
-      const draw = ()=>{ const u = imgUrl(src); if(u) im.src = u; };
-      draw();
-      whenImgArrives(src, im, draw);
-      im.addEventListener('load', ()=> layoutLogCards(wrap));
-      im.addEventListener('error', ()=>{
-        // 정말 못 읽는 사진일 때만 자리를 접습니다
-        const box = im.closest('.lc-thumb');
-        if(box) box.remove();
-        layoutLogCards(wrap);
-      });
-    }
-    card.addEventListener('click', ()=>{
+  /* 카드든 줄이든 누르고 끄는 동작은 같습니다 */
+  const bindItem = (el, entry)=>{
+    el.addEventListener('click', ()=>{
       if(sel){
         if(logSelectedIds.has(entry.id)) logSelectedIds.delete(entry.id);
         else logSelectedIds.add(entry.id);
@@ -3623,18 +3706,45 @@ function renderLogList(p){
       }
       openLogView(entry);
     });
-    /* 편집 모드에서는 카드를 끌어다 폴더 탭에 놓아 옮길 수 있습니다 */
+    /* 편집 모드에서는 끌어다 폴더 탭에 놓아 옮길 수 있습니다 */
     if(isLoggedIn){
-      card.setAttribute('draggable','true');
-      card.addEventListener('dragstart', (e)=>{
+      el.setAttribute('draggable','true');
+      el.addEventListener('dragstart', (e)=>{
         draggedLogId = entry.id;
-        card.classList.add('dragging');
+        el.classList.add('dragging');
         if(e.dataTransfer){ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', String(entry.id)); }
       });
-      card.addEventListener('dragend', ()=>{ card.classList.remove('dragging'); draggedLogId=null; });
+      el.addEventListener('dragend', ()=>{ el.classList.remove('dragging'); draggedLogId=null; });
     }
-  });
-  layoutLogCards(wrap);
+  };
+
+  if(asRows){
+    wrap.querySelectorAll('tr[data-abs]').forEach(tr=> bindItem(tr, items[Number(tr.dataset.abs)]));
+  }else{
+    wrap.querySelectorAll('.log-card[data-abs]').forEach(card=>{
+      const entry = items[Number(card.dataset.abs)];
+      /* 사진은 늦게 올 수 있습니다. 도착하면 그 칸만 다시 칠하고 배치를 다시 잽니다 */
+      const im = card.querySelector('.lc-thumb img');
+      if(im){
+        const src = extractFirstImage(entry.content);
+        /* 아직 안 온 사진에 빈 src 를 넣으면 곧바로 error 가 나서, 도착하기도 전에
+           자리를 접어 버립니다. 주소가 생겼을 때만 넣고 그때까지는 비워 둡니다
+           (src 가 없는 img 는 높이 0 이라 카드가 제목·날짜만큼만 차지합니다). */
+        const draw = ()=>{ const u = imgUrl(src); if(u) im.src = u; };
+        draw();
+        whenImgArrives(src, im, draw);
+        im.addEventListener('load', ()=> layoutLogCards(wrap));
+        im.addEventListener('error', ()=>{
+          // 정말 못 읽는 사진일 때만 자리를 접습니다
+          const box = im.closest('.lc-thumb');
+          if(box) box.remove();
+          layoutLogCards(wrap);
+        });
+      }
+      bindItem(card, entry);
+    });
+    layoutLogCards(wrap);
+  }
   wrap.querySelectorAll('.log-pg-btn').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       if(btn.dataset.pg==='prev') pdLogPage=Math.max(1,pdLogPage-1);
@@ -7471,6 +7581,37 @@ const ARC_FOLDER_DD = {
 };
 function renderArcFolderBar(){ renderFolderDropdown(ARC_FOLDER_DD); }
 
+/* ---- 폰에서 OOC·ETC 표의 한 페이지 줄 수 ----
+   PC 는 창 높이가 16:9 로 못 박혀 있어 15줄(읽을 때 14줄)이 딱 맞습니다.
+   폰은 기기마다 화면 높이가 제각각이라 고정 값(예전엔 10줄)으로는 어떤 기기에선
+   스크롤이 생기고 어떤 기기에선 아래가 휑하게 남았습니다. 그래서 그린 뒤에
+   실제 줄 높이와 표 칸의 남은 높이를 재서 몇 줄이 들어가는지 계산하고,
+   지금 쓰는 값과 다르면 그 수로 한 번만 다시 그립니다.
+   표 칸(.archive-table-scroll)의 높이는 내용과 무관하게 부모가 정해 주므로
+   (flex:1) 줄이 넘치든 모자라든 같은 값이 나옵니다 — 그래서 한 번에 수렴합니다. */
+let arcRowsPerPage = 0;    // 재서 얻은 줄 수 (0 = 아직 못 쟴 — 그동안은 10줄)
+let arcRowsFitting = false;  // 다시 그리는 중 (한 번만 돌게)
+const ARC_ROWS_FALLBACK = 10;
+function fitArchiveRows(){
+  const scroll = document.querySelector('#archiveBody .archive-table-scroll');
+  if(!scroll) return;
+  const row = scroll.querySelector('tbody tr');
+  if(!row) return;
+  const rowH = row.getBoundingClientRect().height;
+  const boxH = scroll.clientHeight;
+  if(rowH <= 0 || boxH <= 0) return;      // 아직 안 보이는 화면 — 잴 수 없습니다
+  const head = scroll.querySelector('thead');
+  const headH = head ? head.getBoundingClientRect().height : 0;
+  /* 소수점 높이가 정수로 반올림되며 1px 이 모자라 스크롤이 생기는 것을 막으려고
+     0.5px 만 봐줍니다. 넘치는 쪽보다 한 줄 덜 넣는 쪽이 안전합니다. */
+  const fit = Math.max(1, Math.floor((boxH - headH + 0.5) / rowH));
+  if(fit === arcRowsPerPage || arcRowsFitting) return;
+  arcRowsPerPage = fit;
+  arcRowsFitting = true;
+  renderArchive();
+  arcRowsFitting = false;
+}
+
 function renderArchive(){
   const wrap=document.getElementById('archiveBody');
   // PAIR 처럼 상단에 현재 카테고리를 함께 표기
@@ -7490,13 +7631,14 @@ function renderArchive(){
   if(selDelBtn) selDelBtn.style.display = arcSelectMode ? 'inline-flex' : 'none';
 
   // PROMPT 는 4열 x 2행 = 8개, 모바일은 2열 x 2행 = 4개,
-  // OOC/ETC 는 데스크톱 15줄(읽을 때는 14줄) / 모바일 10줄
+  // OOC/ETC 는 데스크톱 15줄(읽을 때는 14줄) / 모바일은 화면 높이에 맞춰 잰 값
   // (PROMPT 의 숫자는 CSS .arc-nai-grid 의 열 x 행과 반드시 같아야 합니다.
   //  OOC/ETC 는 표라서 줄 수만 맞추면 됩니다 — 읽을 때 한 줄을 덜 두는 것은
-  //  그 아래 검색 줄이 보기 모드에만 있기 때문입니다.)
+  //  그 아래 검색 줄이 보기 모드에만 있기 때문입니다.
+  //  폰에서 재는 방법은 위 fitArchiveRows 참고.)
   const perPage = isGallery
     ? (isMobileWidth() ? 4 : 8)
-    : (isMobileWidth() ? 10 : (isLoggedIn ? 15 : 14));
+    : (isMobileWidth() ? (arcRowsPerPage || ARC_ROWS_FALLBACK) : (isLoggedIn ? 15 : 14));
 
   /* 세부 카테고리(OOC·PROMPT·ETC) 안에서 폴더로 한 번 더 걸러 보여줍니다.
      폴더 고르기는 목록 위 탭이 아니라 상단바 드롭다운입니다. */
@@ -7689,6 +7831,10 @@ function renderArchive(){
       renderArchive();
     });
   });
+  /* 폰의 OOC·ETC 표만 — 다 그린 뒤에 실제 높이를 재서 줄 수를 맞춥니다.
+     맨 끝에서 부르는 것이 중요합니다: 안에서 renderArchive 를 다시 부르므로
+     중간에서 부르면 이 호출이 새로 그려진 화면에 단추를 한 번 더 묶습니다. */
+  if(!isGallery && isMobileWidth()) fitArchiveRows();
 }
 
 /* ---- 선택 모드 (세 카테고리 공용) ---- */
@@ -7755,14 +7901,12 @@ function initMobileDrawer(){
   window.matchMedia(MOBILE_MQ).addEventListener('change', (e)=>{ if(!e.matches) setOpen(false); });
 }
 
-/* ---- HOME 페이지 전환 (휠 대체) ---- */
+/* ---- HOME 페이지 전환 (휠 대체) ----
+   화살표 단추(︾ ︽)는 걷어냈습니다 — 스크롤(위아래 쓸기)만으로 오갈 수 있어
+   단추가 없어도 된다는 주인 판단입니다. */
 function initHomeTouchNav(){
   const wrap = document.getElementById('homePagesWrap');
   const cards = document.getElementById('home-cards-page');
-  const toCards = document.getElementById('toCardsBtn');
-  const toIntro = document.getElementById('toIntroBtn');
-  if(toCards) toCards.addEventListener('click', ()=> wrap && wrap.classList.add('show-cards'));
-  if(toIntro) toIntro.addEventListener('click', ()=> wrap && wrap.classList.remove('show-cards'));
   if(!wrap || !cards) return;
 
   let y0 = null, t0 = 0;
@@ -7970,12 +8114,16 @@ function initLightboxKeys(){
 function initResponsiveWatch(){
   const onChange = ()=>{
     galleryPage = 1;
+    /* LOG 는 폰에서 줄 목록, PC 에서 카드로 아예 다르게 그리므로 함께 다시 그립니다.
+       (host 는 지금 열려 있는 창 기준으로 이미 맞춰져 있습니다 — 창은 한 번에 하나뿐) */
     const p = getCurrentPost();
-    if(p && document.getElementById('modalPairDetail').classList.contains('open')) renderGallery(p);
+    if(p && document.getElementById('modalPairDetail').classList.contains('open')){ renderGallery(p); renderLogList(p); }
     const o = getCurrentOc();
-    if(o && document.getElementById('modalOcDetail').classList.contains('open')) renderGallery(o);
-    /* ARCHIVE 도 PROMPT 가 8 ↔ 4 로 달라지므로 첫 페이지로 되돌립니다 */
+    if(o && document.getElementById('modalOcDetail').classList.contains('open')){ renderGallery(o); renderLogList(o); }
+    /* ARCHIVE 도 PROMPT 가 8 ↔ 4 로 달라지므로 첫 페이지로 되돌립니다.
+       OOC·ETC 줄 수는 화면 높이에 맞춰 잰 값이라 다시 재게 지워 둡니다. */
     arcPage = 1;
+    arcRowsPerPage = 0;
     if(document.getElementById('view-archive').classList.contains('active')) renderArchive();
     /* PAIR·OC 목록도 한 페이지 개수가 달라지므로(8 ↔ 4) 첫 페이지로 되돌리고 다시 그립니다 */
     pairPage = 1; ocPage = 1;

@@ -52,15 +52,19 @@
   }
   :root{
     /* 창(엽서) 색. 세 가지가 한 계열이라 하나만 밝히면 단이 어긋나므로
-       늘 같은 비율로 함께 올립니다(지금은 원래 색에서 흰색 쪽으로 50%.
-       원래 색은 #f4f1ea / #ece7d9 / #e2dbc8 이고, 30% 였던 적이 있습니다).
-       --bg 는 본문 바탕, --surface 는 사이드바·머리줄, --surface-2 는 그보다
-       한 단 진한 자리(썸네일 빈칸 등)입니다.
+       늘 함께 움직입니다. --bg 는 본문 바탕, --surface 는 사이드바·머리줄,
+       --surface-2 는 그보다 한 단 진한 자리(썸네일 빈칸 등)입니다.
+       주인 요청으로 이 계열에서 가장 밝은 --bg 를 순백(#ffffff)에 맞췄고,
+       나머지 둘은 그만큼(+5,+7,+10) 같이 올려 단 차이를 그대로 지켰습니다.
+       예전에는 '원래 색에서 흰색 쪽으로 몇 %' 로 잡았습니다 — 원래 색은
+       #f4f1ea / #ece7d9 / #e2dbc8 이고 30% → 50% 를 거쳤습니다. 지금은 위가
+       흰색에 닿아 있어 비율로는 더 못 올리므로, 고칠 때는 세 값을 같은 양만큼
+       더하거나 빼는 방식으로 함께 움직여 주세요.
        머리줄·닫기 단추처럼 반투명이 필요한 자리는 var() 를 쓸 수 없어
-       --bg 와 같은 값을 rgba 로 적어 둡니다 — 여기를 고치면 그 네 곳
+       --bg 와 같은 값을 rgba 로 적어 둡니다 — 여기를 고치면 그 다섯 곳
        (.topbar / .cards-topbar / .modal-close / .arc-kebab-btn / .pd-header-fade)
        도 같이 고쳐야 합니다. */
-    --bg:#faf8f5;--surface:#f6f3ec;--surface-2:#f1ede4;--border:#1a1a1a;
+    --bg:#ffffff;--surface:#fbfaf6;--surface-2:#f6f4ee;--border:#1a1a1a;
     --text:#1a1a1a;--text-muted:#6b675e;--accent:#c1440e;--accent-soft:#f4dcce;
     --page-bg:#EF3921;
     --radius:0px;--radius-sm:0px;--mono:'KoPubDotum',sans-serif;font-family:'KoPubDotum',sans-serif;
@@ -417,7 +421,7 @@
      보기 모드에서는 버튼이 사라져 44px 로 줄어들고 LOVE INTEREST 바는 50px 라,
      화면을 옮기거나 로그인할 때마다 제목 줄이 위아래로 튀었습니다.
      .cards-topbar 도 같은 값으로 맞춰 세 화면의 머리줄이 한 높이로 이어집니다. */
-  .topbar{position:sticky;top:0;background:rgba(250,248,245,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;z-index:20;}
+  .topbar{position:sticky;top:0;background:rgba(255,255,255,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;z-index:20;}
   /* 상단바 제목은 G마켓 산스, 다만 PAIR·OC 만 프리젠테이션입니다 */
   .topbar h2{font-family:var(--font-gm);font-size:14px;margin:0;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
   /* 게시글 제목(.post-title / .pd-title-input)만 프리젠테이션입니다 — 상단바 제목은 아닙니다 */
@@ -568,7 +572,6 @@
   .ls-input{width:100%;border-radius:0;background:transparent;outline:none;
     font-family:var(--mono);font-size:12.5px;color:var(--text);padding:0 2px;}
   .ls-input:focus{border-bottom-color:var(--accent);}
-  .to-cards-btn{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);width:36px;height:36px;border-radius:0;border:1px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;}
 
   /* PAIR·OC·ARCHIVE 의 .topbar 와 같은 모양입니다 — 좌우 여백 28px, 높이 60px,
      제목 14px. 예전에는 왼쪽에 ❣ 정사각형 칸과 세로 구분선이 붙어 있어서
@@ -576,8 +579,7 @@
   /* flex:none 이 필요합니다 — 이 줄은 .home-page(세로 flex) 의 칸이라, 아래 카드
      격자가 자리를 다 쓰면 60px 로 못 박아 두어도 눌립니다(좁은 화면에서 35px 까지
      내려갔습니다). #view-oc .topbar 가 같은 이유로 flex:none 을 갖고 있습니다. */
-  .cards-topbar{position:sticky;top:0;background:rgba(250,248,245,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:0 28px;display:flex;align-items:center;gap:0;z-index:5;height:60px;flex:none;}
-  .to-intro-btn{width:28px;height:28px;border-radius:0;border:1px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:13px;}
+  .cards-topbar{position:sticky;top:0;background:rgba(255,255,255,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);padding:0 28px;display:flex;align-items:center;gap:0;z-index:5;height:60px;flex:none;}
   .cards-topbar h3{font-family:var(--font-gm);font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin:0;flex:1;}
   .li-title{display:flex;align-items:center;gap:0;}
   /* 카드 여섯 장이 남은 높이를 꽉 채웁니다 (2열 x 3행).
@@ -1094,10 +1096,10 @@
      바뀝니다. 보기 창은 예전처럼 .modal 기본값(창 전체 스크롤)을 그대로 씁니다. */
   #modalArcWrite .modal.wide.arc-modal{display:flex;flex-direction:column;}
   .modal h3{margin:0 0 16px;font-family:var(--mono);font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
-  .modal-close{position:absolute;top:14px;right:14px;background:rgba(250,248,245,.9);border:1px solid var(--border);width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text);z-index:10;}
+  .modal-close{position:absolute;top:14px;right:14px;background:rgba(255,255,255,.9);border:1px solid var(--border);width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text);z-index:10;}
   .modal.pd-modal{padding:0;}
   .pd-header-banner{width:100%;aspect-ratio:3.25/1;border-radius:0;margin:0;}
-  .pd-header-fade{height:56px;margin-top:-56px;position:relative;z-index:2;background:linear-gradient(to bottom, rgba(250,248,245,0), var(--bg));pointer-events:none;}
+  .pd-header-fade{height:56px;margin-top:-56px;position:relative;z-index:2;background:linear-gradient(to bottom, rgba(255,255,255,0), var(--bg));pointer-events:none;}
   .pd-modal-body{padding:0 28px 8px;}
   .form-row{margin-bottom:12px;}
   .form-row label{display:block;font-size:11.5px;font-weight:700;color:var(--text-muted);margin-bottom:5px;}
@@ -1441,7 +1443,7 @@
      대문자로 보였습니다. 대문자 변환과 글자 간격을 함께 꺼야 모양이 같아집니다. */
   #modalLogView h3{margin:0 0 2px;padding-right:36px;
     font-family:var(--font-free);text-transform:none;letter-spacing:0;}
-  .arc-kebab-btn{position:absolute;top:14px;right:48px;background:rgba(250,248,245,.9);border:1px solid var(--border);width:26px;height:26px;display:none;align-items:center;justify-content:center;font-size:15px;color:var(--text);z-index:10;}
+  .arc-kebab-btn{position:absolute;top:14px;right:48px;background:rgba(255,255,255,.9);border:1px solid var(--border);width:26px;height:26px;display:none;align-items:center;justify-content:center;font-size:15px;color:var(--text);z-index:10;}
   body.logged-in .arc-kebab-btn{display:flex;}
   /* 항목 앞 기호를 없앤 만큼 폭도 줄였습니다 (120 -> 60px).
      항목이 모두 두 글자라 60px 안에 넉넉히 들어갑니다. */
@@ -1967,7 +1969,7 @@
   /* backdrop-filter 는 Safari 에서 접두사가 필요합니다 */
   .topbar,.cards-topbar{-webkit-backdrop-filter:blur(6px);}
   /* 모바일 전용으로 새로 넣은 요소들 — PC 에서는 존재하지 않는 것처럼 숨깁니다 */
-  .mobile-menu-btn,.drawer-backdrop,.to-cards-btn,.to-intro-btn{display:none;}
+  .mobile-menu-btn,.drawer-backdrop{display:none;}
 
   /* ================= 스티커 =================
      화면에 붙여 두는 그림입니다. 창(.app-window)과 빨간 배경 위, 종이 질감(50)
@@ -2221,10 +2223,6 @@
     .intro-card{padding:0 16px;}
     .intro-sitename{font-size:16px;}
     .home-intro{font-size:14px;line-height:1.8;}
-    /* 휠이 없으므로 페이지 전환 화살표를 실제로 보여줍니다 */
-    .to-cards-btn{display:flex;width:40px;height:40px;bottom:16px;color:var(--accent);font-size:16px;}
-    .to-intro-btn{display:flex;width:34px;height:34px;flex:none;align-self:center;
-      margin-left:8px;color:var(--accent);font-size:14px;}
     /* 한 열이 되면 여섯 장을 한 화면에 우겨넣을 수 없으므로
        데스크톱의 '남은 높이 나눠 쓰기'를 풀고 원래대로 비율만 유지합니다 */
     .cards-section{display:block;flex:none;}
@@ -2238,7 +2236,12 @@
     /* 1열이 되면 카드가 넓어져 왼쪽 그라데이션만으로는 글자가 안 읽힙니다 */
     .dream-card .dc-grad{background:linear-gradient(90deg, rgba(0,0,0,.85) 0%, rgba(0,0,0,.6) 34%, rgba(0,0,0,0) 74%);}
     .dream-card .dc-name{font-size:15px;}
-    .dream-card .dc-del,.dream-card .dc-drag{width:30px;height:30px;display:flex;
+    /* 손가락으로 누를 수 있게 키웁니다. body.logged-in 으로 묶는 것이 핵심입니다 —
+       이 규칙이 display 를 다시 정하는데, 묶지 않으면 [data-editonly]{display:none}
+       보다 선택자가 세서 보기 모드에서도 ✕ 가 보였습니다(폰에서만 나던 증상.
+       눌러도 지워지지는 않았지만 보이면 안 되는 단추였습니다). */
+    body.logged-in .dream-card .dc-del,
+    body.logged-in .dream-card .dc-drag{width:30px;height:30px;display:flex;
       align-items:center;justify-content:center;padding:0;}
     /* 편집 모드에서 어디를 눌러야 고칠 수 있는지 hover 없이 알 수 있게 상시 표시 */
     body.logged-in .dream-card [contenteditable="true"]{outline:1px dashed rgba(255,255,255,.35);}
