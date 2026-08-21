@@ -1768,21 +1768,36 @@
      밖으로 삐져나와 화살표를 덮었습니다. 늘 화살표가 위에 오게 둡니다. */
   .lb-nav{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;width:40px;height:40px;font-size:22px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:0 0 7px;position:relative;z-index:3;}
   .lb-nav:hover{background:rgba(255,255,255,.28);}
-  /* 순서 칩 — 사진 위에 겹칩니다. 마우스를 올렸을 때만 뜹니다. */
-  .lb-count{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);
+  /* 순서 칩 — 사진 **왼쪽 위**에 겹칩니다.
+     예전에는 아래 한가운데였는데, 이제 그 자리는 사진 제목 띠가 씁니다.
+     오른쪽 위는 단추 줄이 쓰므로 남는 모서리가 여기입니다. */
+  .lb-count{position:absolute;left:10px;top:10px;
     background:rgba(0,0,0,.6);color:#fff;font-family:var(--mono);font-size:11px;
     padding:5px 11px;border-radius:999px;pointer-events:none;
-    opacity:0;transition:opacity .15s;white-space:nowrap;}
-  .lb-stage:hover .lb-count{opacity:1;}
+    opacity:0;transition:opacity .15s;white-space:nowrap;z-index:2;}
+  /* 사진뿐 아니라 **화살표까지 포함한 줄**에 올렸을 때 뜹니다.
+     화살표는 사진 옆에 서 있어서, 눌러서 넘기는 동안에는 커서가 사진 밖에
+     있습니다 — .lb-stage 만 보면 정작 넘기는 내내 칩이 안 보였습니다. */
+  .lb-row:hover .lb-count{opacity:1;}
+  /* 열자마자와 넘긴 직후에는 잠깐 저절로 뜹니다(JS 가 .peek 를 붙였다 뗍니다).
+     커서가 멈춰 있으면 브라우저가 새로 뜬 창에 hover 를 다시 매기지 않아,
+     크게보기를 열어도 몇 번째 사진인지 알 길이 없었습니다. */
+  .lightbox.peek .lb-count{opacity:1;}
   /* 마우스가 없는 기기는 올려둘 수가 없으므로 늘 띄웁니다 */
   @media (hover:none){ .lb-count{opacity:1;} }
-  /* 확대 단추 — 순서 칩과 같은 자리 규칙(사진 위에 겹치고, 올렸을 때만 보임)이지만
+  /* ---- 사진 위 오른쪽 단추 줄 ----
+     [스택] [제목] [크게보기]. 한 줄로 묶어 두었으므로 가운데 단추가 없어지면
+     남은 것이 저절로 붙습니다 — 자리를 px 로 박아 두던 때처럼 세 값을 함께
+     고칠 일이 없습니다. */
+  .lb-tools{position:absolute;right:10px;top:10px;z-index:2;
+    display:flex;align-items:center;gap:6px;}
+  /* 단추 — 순서 칩과 같은 규칙(사진 위에 겹치고, 올렸을 때만 보임)이지만
      이건 눌러야 하므로 pointer-events 를 살려둡니다. */
-  .lb-zoom{position:absolute;right:10px;top:10px;width:30px;height:30px;padding:0;
+  .lb-zoom{position:relative;width:30px;height:30px;padding:0;flex:none;
     background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.35);border-radius:50%;
     color:#fff;display:flex;align-items:center;justify-content:center;
-    opacity:0;transition:opacity .15s;cursor:pointer;z-index:2;}
-  .lb-stage:hover .lb-zoom{opacity:1;}
+    opacity:0;transition:opacity .15s;cursor:pointer;}
+  .lb-row:hover .lb-zoom{opacity:1;}
   .lb-zoom:hover{background:rgba(0,0,0,.8);}
   @media (hover:none){ .lb-zoom{opacity:1;} }
   .lb-zoom-ico{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.4;
@@ -1874,7 +1889,31 @@
      남아 있으면 사진 밖으로 삐져나와 지저분합니다. */
   .lightbox.zoomed .lb-stack-back{display:none;}
   /* ---- 스택 편집 판 ---- */
-  .lb-stack-edit{right:46px;}
+  /* ---- 사진 제목 띠 ----
+     사진 아래 모서리에 얇게 깔립니다. 제목이 있을 때만(.on) 보이므로,
+     안 단 사진은 예전과 똑같은 화면입니다.
+     사진 아래 모서리를 따라 6px 만 둥글립니다 — .lightbox img 와 같은 값.
+     밝은 사진 위에서도 읽히도록 아래로 갈수록 짙어지는 그늘을 깝니다. */
+  .lb-title{position:absolute;left:0;right:0;bottom:0;z-index:2;
+    padding:16px 12px 8px;border-radius:0 0 6px 6px;
+    background:linear-gradient(to top, rgba(0,0,0,.62), rgba(0,0,0,0));
+    color:#fff;font-family:var(--mono);font-size:11.5px;line-height:1.5;
+    text-align:center;white-space:pre-wrap;overflow-wrap:anywhere;
+    text-shadow:0 1px 3px rgba(0,0,0,.7);
+    opacity:0;transform:translateY(6px);pointer-events:none;
+    transition:opacity .24s ease, transform .24s ease;}
+  /* 전환 시간 .24s 는 main.js 의 LB_TITLE_MS(240) 와 같아야 합니다 —
+     제목에서 다른 제목으로 넘어갈 때 접혔다 펴는 박자가 여기에 맞춰져 있습니다. */
+  .lb-title.on{opacity:1;transform:none;}
+  /* 크게 보기에서는 사진만 봅니다 — 주인 지시 */
+  .lightbox.zoomed .lb-title{opacity:0;transform:translateY(6px);pointer-events:none;}
+  /* 편집 모드에서는 띠를 눌러 고칠 수 있어야 하므로 누름을 살립니다.
+     빈 제목인 사진도 '여기에 적으면 된다'가 보여야 해서 안내 글을 둡니다. */
+  body.logged-in .lb-title{pointer-events:auto;cursor:text;}
+  .lb-title.editing{background:rgba(0,0,0,.72);outline:1px solid rgba(255,255,255,.55);
+    outline-offset:-1px;cursor:text;}
+  .lb-title.editing:empty:before{content:'사진 제목';color:rgba(255,255,255,.45);}
+  .lb-stack-edit,.lb-title-edit{position:relative;}
   .stack-edit{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
     background:rgba(0,0,0,.6);z-index:10;padding:16px;}
   .stack-edit.open{display:flex;}

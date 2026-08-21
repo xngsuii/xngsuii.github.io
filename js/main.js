@@ -537,24 +537,50 @@ function logFolderIdOf(p, entry){
    낱장은 지금까지와 똑같은 글자 그대로라 예전 데이터는 손댈 것이 없습니다. */
 function isStack(v){ return !!v && typeof v==='object' && Array.isArray(v.images); }
 function stackImagesOf(v){ return isStack(v) ? v.images : [v]; }
-function entryCover(v){ return isStack(v) ? (v.images[0]||'') : v; }
 function entryCount(v){ return isStack(v) ? v.images.length : 1; }
+/* ---- 사진 한 장의 모양 ----
+   사진 한 장은 주소(글자) 하나이거나, 제목이 붙었으면 {src, title} 입니다.
+   **제목을 단 사진만** 덩어리가 되므로 예전 데이터는 한 글자도 달라지지
+   않습니다. 스택 안의 낱장도 똑같이 제목을 가질 수 있습니다.
+   주소를 읽는 자리는 전부 photoSrc 를 거치게 해 두었습니다 — 날것으로 읽으면
+   제목 붙은 사진이 '[object Object]' 로 그려집니다. */
+function photoSrc(v){
+  if(typeof v === 'string') return v;
+  return (v && typeof v === 'object' && typeof v.src === 'string') ? v.src : '';
+}
+function photoTitle(v){
+  return (v && typeof v === 'object' && typeof v.title === 'string') ? v.title : '';
+}
+/* 제목을 붙이거나 뗍니다. 제목이 비면 다시 맨 글자로 돌려놓습니다 —
+   빈 제목을 들고 있는 덩어리를 남겨 둘 이유가 없습니다. */
+function withTitle(v, title){
+  const src = photoSrc(v), t = (title||'').trim();
+  return t ? { src, title:t } : src;
+}
+function entryCover(v){ return photoSrc(isStack(v) ? v.images[0] : v); }
 /* 불러온 폴더의 칸 목록을 손질합니다.
    원래는 "글자가 아닌 것은 전부 버린다"였습니다 — 예전에 폴더로 끌어다 놓을
    때 생기던 빈 칸을 걷어내려던 것인데, 스택은 글자가 아니라 덩어리라
    그대로 두면 새로 만든 묶음이 새로고침할 때마다 통째로 사라집니다.
-   그래서 '글자이거나 사진이 든 스택'만 남기는 것으로 바꿉니다.
-   한 장만 남은 스택은 묶여 있을 이유가 없으므로 낱장으로 되돌립니다. */
+   그래서 '글자이거나, 제목이 붙은 사진이거나, 사진이 든 스택'만 남깁니다.
+   한 장만 남은 스택은 묶여 있을 이유가 없으므로 낱장으로 되돌립니다.
+   **칸의 새로운 모양을 만들면 반드시 여기부터 가르쳐야 합니다** — 여기서
+   걸러지면 다음 로드에 사진이 사라지고 그대로 저장됩니다. */
 function normalizeGalleryEntries(list){
   const out = [];
   list.forEach(v=>{
     if(typeof v === 'string'){ if(v) out.push(v); return; }
-    if(!isStack(v)) return;
-    const imgs = v.images.filter(s=> typeof s === 'string' && s);
-    if(imgs.length === 0) return;
-    if(imgs.length === 1){ out.push(imgs[0]); return; }
-    v.images = imgs;
-    out.push(v);
+    if(isStack(v)){
+      const imgs = v.images.filter(s=> !!photoSrc(s)).map(s=> withTitle(s, photoTitle(s)));
+      if(imgs.length === 0) return;
+      if(imgs.length === 1){ out.push(imgs[0]); return; }
+      v.images = imgs;
+      out.push(v);
+      return;
+    }
+    /* 제목이 붙은 낱장. 이 갈래가 없으면 제목을 단 사진이 다음 로드에서
+       통째로 버려지고 그 상태가 저장됩니다 — 위 설명의 지뢰가 바로 이것입니다. */
+    if(photoSrc(v)) out.push(withTitle(v, photoTitle(v)));
   });
   return out;
 }
@@ -4488,7 +4514,9 @@ function flattenEntries(entries){
   const flat = [];
   entries.forEach((v,e)=>{
     const imgs = stackImagesOf(v);
-    imgs.forEach((src,s)=> flat.push({ src, e, s, len:imgs.length }));
+    /* src 는 여기서 한 번 벗겨 둡니다 — 크게보기의 본줄기(galleryLbImages)는
+       늘 맨 주소만 다루게 되고, 제목은 title 로 따로 실려 옵니다. */
+    imgs.forEach((v2,s)=> flat.push({ src:photoSrc(v2), title:photoTitle(v2), e, s, len:imgs.length }));
   });
   return flat;
 }
@@ -4522,6 +4550,8 @@ function openGalleryLightbox(entries, entryIdx, stackIdx, folder){
   galleryLbIndex = at<0 ? 0 : at;
   lbAnimating = false;    // 넘기는 중에 닫았다 다시 열어도 막히지 않게
   lbBackShown = 0;        // 스택으로 바로 열면 카드가 펼쳐지며 시작합니다
+  cancelLbTitleEdit();    // 지난번에 고치던 중 닫았을 수 있습니다
+  lbTitleShown = null;    // 다른 폴더를 열었는데 지난 제목이 남지 않게
   lbThumbStart = lbThumbWindow(entryIdx);
   prefetchLbWindow();
   renderGalleryLightbox();
@@ -4575,7 +4605,58 @@ function paintGalleryLightbox(){
   paintLbStackBack();
   const seBtn = document.getElementById('lbStackEdit');
   if(seBtn) seBtn.style.display = (isLoggedIn && galleryLbFolder && isStack(lbCurEntry())) ? '' : 'none';
+  /* 제목 고치기 — 편집 모드에서, 폴더를 알고 있을 때만. 폴더가 없는 크게보기
+     (말풍선 사진)는 되돌려 적을 데가 없습니다. */
+  const ttBtn = document.getElementById('lbTitleEdit');
+  if(ttBtn) ttBtn.style.display = (isLoggedIn && galleryLbFolder) ? '' : 'none';
+  paintLbTitle();
+  peekLbCount();
   markGalleryLbThumb();
+}
+/* ---- 사진 제목 ----
+   폴더 격자에는 제목을 내보내지 않습니다(썸네일이 작아 글자 자리가 없습니다).
+   크게보기에서만, 사진 아래에 얇은 띠로 늘 띄웁니다 — 제목은 도구가 아니라
+   주인이 적어 넣은 내용이라, 마우스를 올려야 보이면 있는 줄도 모르고 지나갑니다.
+   제목이 없는 사진에는 띠가 아예 생기지 않으므로 화면이 어지러워지지 않습니다.
+   '크게 보기'(.zoomed)에서는 CSS 가 접습니다 — 그때는 사진만 보자는 뜻이라. */
+const LB_TITLE_MS = 240;      // CSS 의 .lb-title 전환 시간과 같아야 합니다
+let lbTitleShown = null;      // 지금 띠에 적혀 있는 글 (null = 아직 안 그림)
+let lbTitleTimer = null;
+function paintLbTitle(){
+  const box = document.getElementById('lbTitle');
+  if(!box) return;
+  if(box.classList.contains('editing')) return;   // 고치는 중에는 건드리지 않습니다
+  const f = galleryLbFlat[galleryLbIndex];
+  const want = f ? (f.title||'') : '';
+  if(want === lbTitleShown) return;
+  clearTimeout(lbTitleTimer);
+  const swap = ()=>{
+    box.innerText = want;
+    box.classList.toggle('on', !!want);
+    lbTitleShown = want;
+  };
+  /* 제목 → 다른 제목으로 넘어갈 때만 한 번 접었다 폅니다. 없다가 생기거나
+     있다가 없어지는 경우는 opacity 전환이 이미 '스르륵'을 만들어 줍니다 —
+     스택에서 뒤에 깔려 있던 장이 자기 차례가 되는 것이 바로 이 경우입니다. */
+  if(lbTitleShown && want){
+    box.classList.remove('on');
+    lbTitleTimer = setTimeout(swap, LB_TITLE_MS);
+  }else swap();
+}
+/* ---- 순서 칩을 잠깐 띄웁니다 ----
+   칩은 사진 위에 마우스를 올렸을 때 뜨는데, 크게보기는 아래 썸네일 줄을 눌러
+   여는 것이라 열자마자는 커서가 사진 위에 없습니다. 게다가 브라우저는 커서가
+   멈춰 있으면 새로 뜬 창에 hover 를 다시 매기지 않습니다 — 그래서 열어도
+   '3 / 10' 이 안 보이고, 화살표 키로 넘길 때(커서가 우연히 사진 위에 있을 때)만
+   보이는 것처럼 느껴졌습니다. 열 때와 넘길 때 잠깐 띄워 두면 언제나 눈에 띕니다. */
+const LB_PEEK_MS = 1400;
+let lbPeekTimer = null;
+function peekLbCount(){
+  const lb = document.getElementById('lightbox');
+  if(!lb) return;
+  lb.classList.add('peek');
+  clearTimeout(lbPeekTimer);
+  lbPeekTimer = setTimeout(()=> lb.classList.remove('peek'), LB_PEEK_MS);
 }
 /* ---- 사진 뒤에 비스듬히 깔리는 다음 장들 ----
    스택을 보고 있을 때만, 그 스택에 '아직 남은' 장을 최대 세 장까지 깝니다.
@@ -4628,7 +4709,7 @@ function paintLbStackBack(){
   for(let d=depth; d>=1; d--){
     const img = document.createElement('img');
     img.className = 'lb-back lb-back-'+d;
-    const src = entry.images[cur.s + d];
+    const src = photoSrc(entry.images[cur.s + d]);
     img.src = imgUrl(src);
     whenImgArrives(src, img, ()=>{ img.src = imgUrl(src); });
     img.addEventListener('click', (e)=>{ e.stopPropagation(); stepGalleryLightbox(1); });
@@ -4707,7 +4788,7 @@ function renderGalleryLbThumbs(){
     t.dataset.e = i;
     /* 보고 있는 스택 칸에는 지금 보는 장을, 그 밖에는 대표(첫 장)를 보여줍니다 */
     const shown = stack ? (i===curE ? entry.images[curS] : entry.images[0]) : entry;
-    applyThumbBg(t, shown, 64);   // .lb-thumb 는 64x64 고정
+    applyThumbBg(t, photoSrc(shown), 64);   // .lb-thumb 는 64x64 고정
     if(stack){
       const tag=document.createElement('span');
       tag.className='lb-thumb-count'; tag.innerText='+'+(entry.images.length-1);
@@ -4770,7 +4851,7 @@ function buildLbThumbPop(entry, entryIdx){
   entry.images.forEach((src,s)=>{
     const m=document.createElement('div');
     m.className='lb-pop-thumb'+(galleryLbFlat[galleryLbIndex] && galleryLbFlat[galleryLbIndex].s===s ? ' active':'');
-    applyThumbBg(m, src, 44);
+    applyThumbBg(m, photoSrc(src), 44);
     m.addEventListener('click', (e)=>{
       e.stopPropagation();
       const at = galleryLbFlat.findIndex(f=> f.e===entryIdx && f.s===s);
@@ -5161,10 +5242,10 @@ function renderGallery(p){
               && pageIdx.every(i=> i>=start && i<start+pageImages.length);
             const reordered = pageIdx.map(i=> folder.images[i]);
             /* 배열이 그새 줄어들어 빈 칸이 섞였으면 되쓰지 않는다.
-               스택(덩어리)도 정상적인 칸이므로 '글자인지'가 아니라
-               '빈 칸이 아닌지'로 가립니다 — 예전 검사대로 두면 스택이 낀
-               페이지는 순서를 바꿔도 조용히 저장되지 않습니다. */
-            if(stillSameFolder && sameSet && reordered.every(v=> typeof v === 'string' ? !!v : isStack(v))){
+               스택(덩어리)과 제목 붙은 사진도 정상적인 칸이므로 '글자인지'가
+               아니라 '빈 칸이 아닌지'로 가립니다 — 예전 검사대로 두면 그런 칸이
+               낀 페이지는 순서를 바꿔도 조용히 저장되지 않습니다. */
+            if(stillSameFolder && sameSet && reordered.every(v=> isStack(v) || !!photoSrc(v))){
               folder.images.splice(start, reordered.length, ...reordered);
               await gallerySave();
             }
@@ -5253,8 +5334,11 @@ function attachDraggedThumbToGrid(folder){
   const grid = gq('.gallery-grid');
   if(!grid || !draggedGalleryKey) return;
   const idx = Number(draggedGalleryKey.split('::')[1]);
-  const src = folder.images[idx];
-  if(src === undefined) return;
+  const entry = folder.images[idx];
+  if(entry === undefined) return;
+  /* 대표 사진을 씁니다 — 칸이 스택이거나 제목이 붙어 있으면 칸 자체는
+     덩어리라 그대로 주소로 쓸 수 없습니다. */
+  const src = entryCover(entry);
 
   // 빈 자리를 하나 빼서 격자 높이가 그대로 유지되게 한다
   const slot = grid.querySelector('.gallery-slot');
@@ -5636,7 +5720,7 @@ function renderStackEdit(){
     cell._src = src;
     const img=document.createElement('div');
     img.className='se-img';
-    applyThumbBg(img, src, 96);
+    applyThumbBg(img, photoSrc(src), 96);
     cell.appendChild(img);
     const x=document.createElement('div'); x.className='se-x'; x.innerText='✕';
     cell.appendChild(x);
@@ -5669,9 +5753,14 @@ function renderStackEdit(){
       /* 자리만 바뀐 것이 맞는지 확인하고 저장합니다 — 장수가 다르거나 사진이
          하나라도 늘거나 빠졌으면 순서 변경이 아니므로 손대지 않고 다시 그립니다.
          (저장이 끝나기 전에 다음 끌기가 시작되면 이런 상태가 나올 수 있습니다.) */
-      const key = (a)=> [...a].sort().join(' ');
+      /* 견주는 열쇠는 사진 주소로 만듭니다 — 제목이 붙은 사진은 덩어리라
+         그냥 sort 하면 전부 '[object Object]' 가 되어 서로 구별되지 않습니다.
+         가르는 글자는 NUL 입니다 — 사진 주소에는 절대 들어갈 수 없습니다.
+         (예전에는 이 자리에 NUL 을 그대로 박아 두어 화면에는 공백처럼 보였고,
+          그래서 이 줄만 문자열 검색으로 찾히지 않았습니다.) */
+      const key = (a)=> a.map(photoSrc).sort().join('\u0000');
       const ok = moved.length === before.length
-        && moved.every(v=> typeof v === 'string' && v)
+        && moved.every(v=> !!photoSrc(v))
         && key(moved) === key(before);
       if(!ok){ renderStackEdit(); return; }
       /* 보고 있던 장이 어디로 갔는지 따라갑니다 (자리를 바꾸기 전에 읽어둡니다) */
@@ -5730,6 +5819,77 @@ async function unstackCurrent(){
   refreshGalleryLb(keep);
   renderGallery(galleryPost());
 }
+/* ============================================================
+   사진 제목 고치기
+   연필 단추를 누르면 아래 띠가 그대로 입력칸이 됩니다 — 창을 따로 띄우지
+   않는 것은, 제목을 붙일지 말지가 사진을 보면서 정하는 일이기 때문입니다.
+   Enter 로 저장, Esc 로 취소, 다른 데를 누르면 저장합니다.
+   화살표 키가 사진을 넘기지 않는 것은 initLightboxKeys 가 글을 쓰는 중인
+   요소에서는 손을 떼기 때문입니다 — 따로 막을 것이 없습니다.
+   ============================================================ */
+let lbTitleEditing = false;
+function startLbTitleEdit(){
+  const box = document.getElementById('lbTitle');
+  const f = galleryLbFlat[galleryLbIndex];
+  if(!box || !f || !isLoggedIn || !galleryLbFolder) return;
+  clearTimeout(lbTitleTimer);
+  lbTitleEditing = true;
+  box.innerText = f.title || '';
+  box.classList.add('on', 'editing');   // 제목이 없던 사진도 적을 자리가 보여야 합니다
+  box.contentEditable = 'true';
+  box.focus();
+  /* 캐럿을 글 끝에 둡니다 — 기본값은 맨 앞이라 이어 쓰기가 어색합니다 */
+  const sel = window.getSelection(), r = document.createRange();
+  r.selectNodeContents(box); r.collapse(false);
+  sel.removeAllRanges(); sel.addRange(r);
+}
+function cancelLbTitleEdit(){
+  const box = document.getElementById('lbTitle');
+  if(!box || !lbTitleEditing) return;
+  lbTitleEditing = false;
+  box.contentEditable = 'false';
+  box.classList.remove('editing');
+  lbTitleShown = null;      // 원래 제목으로 다시 그리게 합니다
+  paintLbTitle();
+}
+async function commitLbTitleEdit(){
+  const box = document.getElementById('lbTitle');
+  if(!box || !lbTitleEditing) return;
+  const text = (box.innerText||'').replace(/\s+/g,' ').trim();
+  lbTitleEditing = false;
+  box.contentEditable = 'false';
+  box.classList.remove('editing');
+  const f = galleryLbFlat[galleryLbIndex];
+  if(!f || !galleryLbFolder){ lbTitleShown = null; paintLbTitle(); return; }
+  /* 폴더의 진짜 칸에 되적습니다. 스택이면 그 안의 낱장에, 아니면 칸 자체에.
+     galleryLbEntries 는 폴더의 살아 있는 배열이라 이대로 저장하면 됩니다. */
+  const entry = galleryLbEntries[f.e];
+  if(isStack(entry)) entry.images[f.s] = withTitle(entry.images[f.s], text);
+  else galleryLbEntries[f.e] = withTitle(entry, text);
+  await gallerySave();
+  /* 칸의 모양이 바뀌었으니 낱장 목록을 다시 폅니다 (주소는 그대로라 번호는
+     움직이지 않습니다). 격자는 제목을 안 그리므로 다시 그릴 것이 없습니다. */
+  galleryLbFlat = flattenEntries(galleryLbEntries);
+  galleryLbImages = galleryLbFlat.map(f2=> f2.src);
+  lbTitleShown = null;
+  paintLbTitle();
+}
+document.getElementById('lbTitleEdit').addEventListener('click', (e)=>{
+  e.stopPropagation();
+  if(lbTitleEditing) commitLbTitleEdit(); else startLbTitleEdit();
+});
+document.getElementById('lbTitle').addEventListener('keydown', (e)=>{
+  if(!lbTitleEditing) return;
+  if(e.key === 'Enter'){ e.preventDefault(); commitLbTitleEdit(); }
+  else if(e.key === 'Escape'){ e.preventDefault(); cancelLbTitleEdit(); }
+});
+document.getElementById('lbTitle').addEventListener('blur', ()=>{ if(lbTitleEditing) commitLbTitleEdit(); });
+/* 띠를 눌러도 고칠 수 있게 — 편집 모드에서만. 이 누름이 크게보기를 닫는
+   바깥 누름으로 되돌아가지 않게 막습니다. */
+document.getElementById('lbTitle').addEventListener('click', (e)=>{
+  e.stopPropagation();
+  if(!lbTitleEditing && isLoggedIn && galleryLbFolder) startLbTitleEdit();
+});
 document.getElementById('lbStackEdit').addEventListener('click', (e)=>{ e.stopPropagation(); openStackEdit(); });
 document.getElementById('seClose').addEventListener('click', (e)=>{ e.stopPropagation(); closeStackEdit(); });
 document.getElementById('seUnstack').addEventListener('click', (e)=>{ e.stopPropagation(); unstackCurrent(); });

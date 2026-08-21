@@ -11,7 +11,7 @@
      css/js를 고칠 때마다 이 숫자를 함께 올려주세요.
      올리지 않으면 브라우저가 옛 파일을 계속 써서
      새 HTML과 짝이 맞지 않아 화면이 깨질 수 있습니다. -->
-<link rel="stylesheet" href="css/style.css?v=112" />
+<link rel="stylesheet" href="css/style.css?v=113" />
 </head>
 <body>
 <div class="app-window">
@@ -892,17 +892,35 @@
       <div class="lb-stack-back" id="lbStackBack"></div>
       <img id="lightboxImg" />
       <div class="lb-count" id="lbCount"></div>
-      <!-- 스택 편집 — 편집 모드에서 스택을 보고 있을 때만 확대 단추 왼쪽에 나옵니다 -->
-      <button class="lb-zoom lb-stack-edit" id="lbStackEdit" type="button" title="스택 편집" style="display:none;">
-        <svg class="lb-zoom-ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="5.5" width="9" height="9" rx="1"/><path d="M5 5.5v-3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-3"/></svg>
-      </button>
-      <!-- 확대: 누르면 아래 썸네일 줄을 감추고 사진이 화면을 꽉 채웁니다.
-           아이콘은 글자가 아니라 선 그림(SVG)입니다 — 서체마다 기호가 있거나
-           없거나 빈 칸으로 들어 있어서, 글자로 두면 안 보일 수 있습니다. -->
-      <button class="lb-zoom" id="lbZoom" type="button" title="확대">
-        <svg class="lb-zoom-ico lb-zoom-in" viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 9.5 6.5M6.5 13.5h-4v-4M2.5 13.5l4-4"/></svg>
-        <svg class="lb-zoom-ico lb-zoom-out" viewBox="0 0 16 16" aria-hidden="true"><path d="M13 3 9.5 6.5M9.5 6.5h3.5M9.5 6.5V3M3 13l3.5-3.5M6.5 9.5H3M6.5 9.5V13"/></svg>
-      </button>
+      <!-- 사진 제목. 주인이 적어 넣었을 때만 띠가 생깁니다(빈 제목이면 안 보임).
+           편집 모드에서는 이 띠가 그대로 입력칸이 됩니다. -->
+      <div class="lb-title" id="lbTitle"></div>
+      <!-- 사진 위 오른쪽 단추들. 한 줄(flex)로 두어 자리를 직접 계산하지
+           않습니다 — 스택 단추는 스택일 때만 나오는데, 자리를 px 로 박아 두면
+           단추가 하나 늘고 줄 때마다 세 값을 같이 고쳐야 합니다.
+           순서는 [스택] [제목] [크게보기] 입니다. -->
+      <div class="lb-tools">
+        <!-- 스택 편집 — 편집 모드에서 스택을 보고 있을 때만 -->
+        <button class="lb-zoom lb-stack-edit" id="lbStackEdit" type="button" title="스택 편집" style="display:none;">
+          <svg class="lb-zoom-ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="5.5" width="9" height="9" rx="1"/><path d="M5 5.5v-3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-3"/></svg>
+        </button>
+        <!-- 제목 수정 — 편집 모드에서만 -->
+        <button class="lb-zoom lb-title-edit" id="lbTitleEdit" type="button" title="제목" style="display:none;">
+          <!-- 연필. 잉크가 viewBox 정중앙(8,8)에 오고 크기도 옆의 확대 아이콘과
+               같도록(2.5~13.5) 맞춰 그렸습니다 — 처음 그린 것은 중심이 (8.33,
+               7.62) 이고 혼자 커서, 단추 세 개가 나란히 설 때 연필만 오른쪽 위로
+               밀려 보였습니다. 밑줄은 뺐습니다(그것이 잉크를 아래로 끌어내렸고,
+               옆의 두 아이콘도 선 몇 개뿐이라 이쪽이 결이 맞습니다). -->
+          <svg class="lb-zoom-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M11.46 2.61a1.4 1.4 0 0 1 1.93 1.93l-8.33 8.33-2.67.73.73-2.67z"/><path d="M9.98 4.1 11.91 6.03"/></svg>
+        </button>
+        <!-- 확대: 누르면 아래 썸네일 줄을 감추고 사진이 화면을 꽉 채웁니다.
+             아이콘은 글자가 아니라 선 그림(SVG)입니다 — 서체마다 기호가 있거나
+             없거나 빈 칸으로 들어 있어서, 글자로 두면 안 보일 수 있습니다. -->
+        <button class="lb-zoom" id="lbZoom" type="button" title="확대">
+          <svg class="lb-zoom-ico lb-zoom-in" viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 9.5 6.5M6.5 13.5h-4v-4M2.5 13.5l4-4"/></svg>
+          <svg class="lb-zoom-ico lb-zoom-out" viewBox="0 0 16 16" aria-hidden="true"><path d="M13 3 9.5 6.5M9.5 6.5h3.5M9.5 6.5V3M3 13l3.5-3.5M6.5 9.5H3M6.5 9.5V13"/></svg>
+        </button>
+      </div>
     </div>
     <button class="lb-nav" id="lbNext">›</button>
   </div>
@@ -1014,7 +1032,7 @@
      맨 끝에 두어 화면 그리기를 막지 않게 합니다. -->
 <img class="paper-grain" src="img/paper-grain.jpg" alt="" aria-hidden="true" draggable="false" />
 
-<script src="js/main.js?v=112"></script>
-<script type="module" src="js/firebase-store.js?v=112"></script>
+<script src="js/main.js?v=113"></script>
+<script type="module" src="js/firebase-store.js?v=113"></script>
 </body>
 </html>
