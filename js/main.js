@@ -2891,7 +2891,7 @@ function isLineSeparator(node){
   if(!node || node.nodeType !== 1) return false;
   if(node.tagName === 'BR' || node.tagName === 'IMG') return true;
   if(BLOCK_TAGS.includes(node.tagName)) return true;
-  return node.classList && (node.classList.contains('code-block') || node.classList.contains('code-embed'));
+  return node.classList && node.classList.contains('code-block');
 }
 /* 펜스 글자를 감싼 가장 가까운 블록 요소(el, 예: .fold-body) 안에서, 그 글자가
    속한 '줄'만 골라 경계를 찾습니다 — el 전체가 아닙니다. el 은 흔히 한 줄짜리
@@ -3150,10 +3150,10 @@ function mdBuildHeading(frag, line){
   tidyMdBlock(h);
   return h;
 }
-/* 코드 블록·코드 상자 안의 글은 적은 그대로 보여야 하므로 건드리지 않습니다 */
+/* 코드 블록 안의 글은 적은 그대로 보여야 하므로 건드리지 않습니다 */
 function mdInsideCode(point){
   const el = point.container.nodeType === 3 ? point.container.parentNode : point.container;
-  return !!(el && el.closest && el.closest('.code-block, .code-embed'));
+  return !!(el && el.closest && el.closest('.code-block'));
 }
 function applyMarkdownBlocks(root){
   const { text, marks } = flattenForFences(root);
@@ -3218,24 +3218,11 @@ function applyMarkdownBlocks(root){
   }
 }
 
-/* 예전에 넣은 코드 상자에는 복사 버튼이 없으므로 그릴 때 채워 넣습니다 */
-function ensureCodeEmbedCopy(root){
-  root.querySelectorAll('.code-embed').forEach(embed=>{
-    const bar = embed.querySelector('.code-embed-toolbar');
-    if(!bar || bar.querySelector('.code-embed-copy')) return;
-    const btn = document.createElement('button');
-    btn.type = 'button'; btn.className = 'code-embed-copy'; btn.title = '코드 복사';
-    btn.innerText = '⧉';
-    bar.insertBefore(btn, bar.querySelector('.code-embed-download') || null);
-  });
-}
-
-/* 게시글 본문 한 번에 처리 — 코드 블록 + 줄 단위 마크다운 + 코드 상자 복사 버튼.
+/* 게시글 본문 한 번에 처리 — 코드 블록 + 줄 단위 마크다운.
    코드 블록을 먼저 만들어야 그 안의 # 이나 | 를 마크다운으로 잘못 읽지 않습니다. */
 function decorateContent(el){
   applyCodeFences(el);
   applyMarkdownBlocks(el);
-  ensureCodeEmbedCopy(el);
 }
 
 /* navigator.clipboard 는 https / localhost 에서만 동작합니다.
@@ -3263,11 +3250,11 @@ function initContentBlocks(){
   document.addEventListener('click', async (e)=>{
     if(!(e.target instanceof Element)) return;
 
-    const copyBtn = e.target.closest('.code-block-copy, .code-embed-copy');
+    const copyBtn = e.target.closest('.code-block-copy');
     if(copyBtn){
       e.preventDefault(); e.stopPropagation();
-      const box = copyBtn.closest('.code-block, .code-embed');
-      const body = box && box.querySelector('.code-block-body, .code-embed-code');
+      const box = copyBtn.closest('.code-block');
+      const body = box && box.querySelector('.code-block-body');
       const label = copyBtn.innerText;
       const ok = await copyText(body ? body.textContent : '');
       copyBtn.innerText = ok ? '✓' : '✕';
@@ -7125,8 +7112,6 @@ async function openArcWriteModal(existingItem){
   }
   if(editingArcId !== (existingItem ? existingItem.id : null)) return;   // 그 사이 다른 글을 열었으면 그만
   editorEl.innerHTML = existingItem ? imgUrl(existingItem.content) : '';
-  // 예전에 넣은 코드 상자에도 복사 버튼이 생기도록
-  ensureCodeEmbedCopy(editorEl);
   arcAttachments = existingItem && existingItem.files ? existingItem.files.slice() : [];
   renderArcAttachList();
   document.getElementById('modalArcWrite')._armUnsavedGuard?.();
@@ -7495,70 +7480,6 @@ function renderArcAttachList(){
   });
 }
 
-/* 코드 삽입: 기본으로 실제 HTML/CSS 시뮬레이션(라이브 렌더링)을 보여주고, 다운로드 시점에 그 상태를 이미지로 캡처
-   버튼을 누른 시점의 커서 위치를 기억해 뒀다가 넣을 때 그대로 되돌립니다 —
-   모달이 열리는 동안 포커스가 옮겨가면서 선택이 풀리면, 그 뒤 editor.focus() 는
-   기억된 위치 없이 기본 자리에 커서를 두므로 접기 안에 있던 커서가 접기 밖으로
-   빠져나가 버립니다. */
-let arcCodeInsertRange = null;
-document.getElementById('arcInsertCodeBtn').addEventListener('click', ()=>{
-  const editor = document.getElementById('arcContentEditor');
-  const sel = window.getSelection();
-  arcCodeInsertRange = (sel.rangeCount && editor.contains(sel.getRangeAt(0).commonAncestorContainer))
-    ? sel.getRangeAt(0).cloneRange() : null;
-  document.getElementById('arcCodeInput').value='';
-  openModal('modalArcCode');
-});
-document.getElementById('arcCodeInsertBtn').addEventListener('click', ()=>{
-  const code=document.getElementById('arcCodeInput').value;
-  if(!code.trim()){ alert('코드를 입력해주세요.'); return; }
-  const uid = 'ce'+Date.now();
-  const html = `<div class="code-embed" id="${uid}" data-mode="preview" contenteditable="false">
-    <div class="code-embed-toolbar">
-      <button type="button" class="ce-tab active" data-mode="preview">미리보기</button>
-      <button type="button" class="ce-tab" data-mode="code">&lt;/&gt; 코드</button>
-      <button type="button" class="code-embed-copy" title="코드 복사">⧉</button>
-      <button type="button" class="code-embed-download" title="이미지 다운로드">⬇</button>
-    </div>
-    <div class="code-embed-preview-live">${code}</div>
-    <div class="code-embed-code" style="display:none;">${escapeHtml(code)}</div>
-  </div><br>`;
-  const editor=document.getElementById('arcContentEditor'); editor.focus();
-  if(arcCodeInsertRange){
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(arcCodeInsertRange);
-  }
-  document.execCommand('insertHTML', false, html);
-  closeModal('modalArcCode');
-});
-function setCodeEmbedMode(embed, mode){
-  embed.dataset.mode = mode;
-  embed.querySelectorAll('.ce-tab').forEach(t=> t.classList.toggle('active', t.dataset.mode===mode));
-  embed.querySelector('.code-embed-preview-live').style.display = mode==='preview' ? 'block':'none';
-  embed.querySelector('.code-embed-code').style.display = mode==='code' ? 'block':'none';
-}
-document.addEventListener('click', async (e)=>{
-  const tab = e.target.closest('.ce-tab');
-  if(tab){
-    setCodeEmbedMode(tab.closest('.code-embed'), tab.dataset.mode);
-    return;
-  }
-  const dlBtn = e.target.closest('.code-embed-download');
-  if(dlBtn){
-    const embed = dlBtn.closest('.code-embed');
-    const wasCodeMode = embed.dataset.mode === 'code';
-    if(wasCodeMode) setCodeEmbedMode(embed, 'preview');
-    const preview = embed.querySelector('.code-embed-preview-live');
-    try{
-      const canvas = await html2canvas(preview, {backgroundColor:'#ffffff', scale:2});
-      const url = canvas.toDataURL('image/png');
-      const a=document.createElement('a'); a.href=url; a.download='code-embed.png'; a.click();
-    }catch(err){ console.error('html2canvas failed', err); alert('이미지 변환에 실패했어요.'); }
-    if(wasCodeMode) setCodeEmbedMode(embed, 'code');
-    return;
-  }
-});
 
 function arcEditorHtml(){ return editorHtml('arcContentEditor').trim(); }
 
