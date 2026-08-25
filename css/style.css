@@ -125,6 +125,23 @@
      index.html 의 theme-color 와 짝입니다. 둘 다 있어야 기기마다 다르게
      새지 않으므로, 색을 바꾸려면 두 곳을 함께 고쳐야 합니다. */
   html{background:var(--page-bg);}
+  /* 위아래로 당겼을 때 화면이 통째로 딸려 움직이며 창 밖이 드러나는 것
+     (고무줄 스크롤)을 막습니다.
+
+     홈 화면 앱으로 열면 그 드러난 자리가 회색 띠로 보였습니다. 그 자리에 남는
+     것은 종이결(.paper-grain)뿐인데, 이 그림은 position:fixed 라 창이 밀려도
+     제자리에 있고 mix-blend-mode:overlay 로 **아래에 깔린 색과 섞여서** 그려
+     집니다. 창 밖에는 섞을 색이 없으니 그림 자체가 회색으로 드러납니다.
+     html 에 색을 칠해도 이 자리는 안 됩니다 — 겹치기가 보는 것은 바탕 화면색이
+     아니라 그 아래에 실제로 그려진 것입니다.
+
+     그래서 색을 채우는 대신 애초에 창 밖이 드러나지 않게 합니다. 창은 이미
+     화면 높이에 딱 맞으므로(100dvh) 스크롤할 것이 없어 잃는 것이 없습니다.
+     안쪽 스크롤(.main, 글 내용 등)은 그대로입니다.
+
+     사파리로 그냥 볼 때 당겨서 새로고침하는 동작은 같이 사라집니다.
+     iOS 는 16 부터 이 속성을 듣습니다. */
+  html,body{overscroll-behavior:none;}
   body{background:var(--page-bg);display:flex;align-items:center;justify-content:center;min-height:100vh;}
   button{font-family:inherit;cursor:pointer;}
   input,textarea,select{font-family:inherit;}
@@ -162,6 +179,20 @@
      z-index 50 은 화면 안 내용(최대 20) 위, 서랍(55~60)·창(100 이상) 아래입니다.
      세기는 --grain 하나로만 조절합니다(1 이 가장 진하고, 낮출수록 옅어집니다).
      더 은은하게 하려면 overlay 를 soft-light 로 바꾸면 됩니다. */
+  /* 종이결이 섞일 색을 실제로 깔아 둡니다.
+     겹치기(mix-blend-mode)는 '바탕 화면색'이 아니라 그 아래에 실제로 그려진
+     것과 섞입니다. 그래서 html·body 에 색을 칠해 두어도, 창이 밀려 창 밖이
+     드러나는 자리에서는 섞을 것이 없어 종이결이 회색으로 드러났습니다.
+     이 칸은 position:fixed 라 화면에 붙어 있고 창이 밀려도 같이 움직이지
+     않으므로, 드러난 자리까지 늘 오렌지로 덮여 있습니다.
+     위쪽 overscroll-behavior 와 짝입니다 — 그쪽은 애초에 밀리지 않게 하고,
+     이쪽은 그래도 밀렸을 때(iOS 15 이하 등) 색이 맞게 합니다.
+
+     z-index 는 반드시 음수여야 합니다. .app-window 는 position 을 주지 않은
+     보통 칸이라, 0 으로 두면 이 칸이 창 위로 올라가 화면 전체가 오렌지로
+     덮입니다. -1 이면 바탕 바로 위, 창 아래에 깔립니다. */
+  body::before{content:'';position:fixed;inset:0;z-index:-1;
+    background:var(--page-bg);pointer-events:none;}
   .paper-grain{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;
     pointer-events:none;user-select:none;z-index:50;
     filter:brightness(.627);
