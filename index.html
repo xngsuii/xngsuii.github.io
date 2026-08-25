@@ -6,6 +6,29 @@
      user-scalable=no 는 넣지 않습니다 — 확대는 접근성 기능이라 막지 않습니다. -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>갠홈</title>
+
+<!-- ================= 홈 화면에 추가 (iOS) =================
+     아래 넷이 없으면 아이폰이 "홈 화면에 추가"를 할 때 페이지를 캡처해서
+     쭈그러뜨린 그림을 아이콘으로 씁니다.
+
+     · apple-touch-icon — 아이콘 그림. 180x180 PNG 여야 합니다(iOS 는 SVG 를
+       받지 않습니다). 원본은 img/app-icon.svg 이고, 모양을 고치면 PNG 를
+       다시 구워야 합니다. 모서리는 굴리지 않습니다 — iOS 가 알아서 잘라냅니다.
+       ?v= 를 붙여 둡니다: iOS 는 아이콘을 아주 오래 붙들고 있어서, 그림만
+       바꾸면 이미 홈 화면에 올려 둔 사람은 옛 아이콘을 계속 봅니다.
+     · apple-mobile-web-app-capable — 홈 화면에서 열 때 사파리 주소창과
+       아래 도구줄 없이 앱처럼 띄웁니다. 대신 사파리의 뒤로 가기 단추도
+       사라지므로, 화면 안의 메뉴만으로 다닐 수 있어야 합니다(갠홈은 됩니다).
+     · apple-mobile-web-app-title — 아이콘 밑에 붙는 이름. 없으면 <title> 을
+       쓰는데, 길면 잘리므로 짧게 따로 적어 둡니다.
+     · status-bar-style: default — 맨 위 시계·배터리 줄이 제 자리를 차지하고
+       그 아래에서 화면이 시작합니다. black-translucent 로 하면 화면이 시계
+       밑으로 파고들어 위쪽 펀치 구멍 줄이 가려집니다. -->
+<link rel="apple-touch-icon" href="img/app-icon-180.png?v=1" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="갠홈" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <!-- ?v= 는 캐시 무효화용입니다.
      css/js를 고칠 때마다 이 숫자를 함께 올려주세요.

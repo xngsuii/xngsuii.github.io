@@ -330,7 +330,7 @@ Measure like this: append a zero-height `inline-block` next to the glyph (**insi
 - **`normalizeGalleryEntries()` had to learn the shape first** — it drops anything that is neither a string nor a stack, so a titled photo would have been deleted on the next load and that deletion saved. This is the same landmine stacks hit; see the warning on that function.
 - **`entryCover()` returns `photoSrc(...)`, never the entry itself.** It used to hand back a bare `v` for a non-stack, which is now sometimes an object. `attachDraggedThumbToGrid` goes through it too (it was reading `folder.images[idx]` raw, which was already wrong for a stack).
 - **Two write-guards tested `typeof v === 'string'` and would have silently refused to save.** The page-reorder guard in `initGalleryRoot` and the stack-edit `dragend` guard both ask "is this a real photo" now (`!!photoSrc(v)`), not "is this a string". A guard that quietly declines to write is the worst failure mode here, because nothing appears broken until a reload.
-- The stack-edit guard's comparison key is `a.map(photoSrc).sort().join(' ')` — sorting the raw entries would collapse every titled photo to `[object Object]`. The separator is written as an escape on purpose: it used to be a **literal NUL byte pasted into the source**, which rendered as a space, made `js/main.js` register as a binary file to `grep`, and made that one line unfindable by string search.
+- The stack-edit guard's comparison key is `a.map(photoSrc).sort().join('\u0000')` — sorting the raw entries would collapse every titled photo to `[object Object]`. The separator is written as an escape on purpose: it used to be a **literal NUL byte pasted into the source**, which rendered as a space, made `js/main.js` register as a binary file to `grep`, and made that one line unfindable by string search.
 - The storage layer needed nothing: `deflate`/`inflate`/`blobIdsIn` all recurse into plain objects, so `{src:'data:…', title:'…'}` gets its `src` extracted to a blob ref and its `title` passed through.
 
 **Gallery stacks — a folder entry is a photo *or* a bundle.** `folder.images` used to be an array of `src` strings; an entry can now also be `{images:[src, …]}`. A stack occupies **one grid slot**, so pagination, cross-page drag, folder-tab drops and delete all keep working untouched. Plain photos are still bare strings, so there is no migration.
@@ -476,6 +476,18 @@ Only the LP and Escape toggle it. An outside-click-to-close listener was removed
 The user may refer to the two UI states by their badge labels:
 - **LOCKED** = 보기 모드 (view mode) — visitor state, nothing editable
 - **UNLOCKED** = 편집 모드 (edit mode) — admin signed in, `body.logged-in` is set and `[data-editonly]` controls appear
+
+## Home-screen app icon (iOS)
+
+`index.html`'s head carries four tags that turn "홈 화면에 추가" into a real app entry. Without them iOS screenshots the page and uses that shrunken image as the icon.
+
+- `<link rel="apple-touch-icon" href="img/app-icon-180.png?v=N">` — **iOS will not accept an SVG here.** The vector source is `img/app-icon.svg`; the PNG is a 180×180 bake of it. Change the SVG and the PNG stops matching, so re-bake. The `?v=` is not the site-wide asset version and does **not** move with it — bump it only when the artwork itself changes, because iOS holds an already-installed icon for a very long time and someone who added the site to their home screen keeps seeing the old one otherwise.
+- The icon must be **square with no rounded corners and no transparency.** iOS applies its own squircle mask, so rounding it here rounds it twice; transparent pixels are filled with black. `app-icon.svg` therefore starts with a full-bleed `<rect>`.
+- `apple-mobile-web-app-capable=yes` launches it without Safari's address bar and toolbar — which also removes Safari's back button, so every route has to be reachable from the in-page nav. It is (the drawer covers everything). Two download paths exist (`code-embed.png` via html2canvas, and Archive attachment links); modern iOS routes those to the Files app, but they are the parts most likely to behave oddly in standalone mode.
+- `apple-mobile-web-app-status-bar-style=default` keeps the clock/battery strip in its own space with the page starting below it. `black-translucent` would slide the page up under the notch and hide the top punch-hole strip.
+- `apple-mobile-web-app-title` is the label under the icon; without it iOS uses `<title>` and truncates.
+
+**Re-baking the PNG.** There is no build step and no rasteriser installed. The route used was: a scratchpad page with the SVG inlined, drawn into a 180×180 `<canvas>`, then `canvas.toBlob` POSTed to a throwaway Python server that writes the bytes to disk. Reading the base64 back through the browser tool does not work — base64 payloads are blocked in tool output. Afterwards verify the file really is 180×180 and that **minimum alpha across all pixels is 255**; a stray transparent pixel turns black on the home screen.
 
 ## Cache busting
 
