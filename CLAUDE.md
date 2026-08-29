@@ -477,7 +477,23 @@ The user may refer to the two UI states by their badge labels:
 - **LOCKED** = 보기 모드 (view mode) — visitor state, nothing editable
 - **UNLOCKED** = 편집 모드 (edit mode) — admin signed in, `body.logged-in` is set and `[data-editonly]` controls appear
 
-## Home-screen app icon (iOS)
+## Icons
+
+There are **two** marks, deliberately different, both drawn from `img/postmark.png` (the airmail cancellation stamp on the login sheet):
+
+| | app icon | favicon |
+|---|---|---|
+| source | `img/app-icon.svg` | `img/favicon.svg` |
+| ships as | `app-icon-180.png` | the SVG + `favicon-16/32/48.png` |
+| ground | solid `#EF3921`, **no transparency** | **transparent** |
+| ink | white | `#EF3921` |
+| composition | stamp left, waves running off the right edge, stroke 7 | stamp centred, **no waves**, stroke 15, bigger plane |
+
+The favicon is not the app icon recoloured. It renders at **16px**, where stroke 7 becomes 0.6px and disappears; the small-size version drops the waves, centres the stamp and doubles the stroke. Keep them in sync in spirit, not geometry — changing one does not imply changing the other.
+
+The favicon has no background because tab bars are light in some browsers and dark in others; orange ink reads on both, while a filled tile looks like a sticker on one of them.
+
+### Home-screen app icon (iOS)
 
 `index.html`'s head carries four tags that turn "홈 화면에 추가" into a real app entry. Without them iOS screenshots the page and uses that shrunken image as the icon.
 
@@ -488,6 +504,18 @@ The user may refer to the two UI states by their badge labels:
 - `apple-mobile-web-app-title` is the label under the icon; without it iOS uses `<title>` and truncates.
 
 **Re-baking the PNG.** There is no build step and no rasteriser installed. The route used was: a scratchpad page with the SVG inlined, drawn into a 180×180 `<canvas>`, then `canvas.toBlob` POSTed to a throwaway Python server that writes the bytes to disk. Reading the base64 back through the browser tool does not work — base64 payloads are blocked in tool output. Afterwards verify the file really is 180×180 and that **minimum alpha across all pixels is 255**; a stray transparent pixel turns black on the home screen.
+
+### Favicon
+
+`index.html` links the SVG first and the PNGs after: browsers that understand SVG favicons use it at every size, the rest pick a PNG. 16 and 32 are baked separately because a browser halving the 32 looks visibly worse than one drawn at 16 from the start; 48 is for Chrome's shortcut tiles and Windows shortcuts. The `?v=` on these is the artwork's own, not the site asset version.
+
+**Re-baking the favicon PNGs.** The canvas route above needs a working browser connection, which is not always there. These were produced instead by a throwaway Python script using **only the standard library** (`zlib` + `struct`), and that is the more reliable path because the artwork is just two shapes:
+
+- For each output pixel, supersample 16×16 sub-points. For each sub-point, undo the transforms and test membership: undo `rotate(-8, 90, 90)`, then the ring is `62 ± 15/2` from the centre; for the plane, additionally undo `rotate(-14)` and `scale(1.95)` and run a ray-casting point-in-polygon test against the path's vertices (the nose's short bezier can be treated as a straight line — it is invisible at these sizes).
+- Coverage fraction becomes the alpha; RGB is `#EF3921` everywhere.
+- Write the PNG by hand: signature, `IHDR` (bit depth 8, colour type 6), one `IDAT` of zlib-compressed scanlines each prefixed with filter byte 0, `IEND`, each chunk followed by its CRC32.
+
+Verify without eyes: re-parse the file and check the CRCs, then print an ASCII ramp of the 16×16 alpha channel — the ring and the plane should be legible in the terminal. Corner alpha must be 0 and the centre 255.
 
 ## Cache busting
 
