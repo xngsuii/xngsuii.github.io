@@ -15,7 +15,7 @@ function applyEditMode(){
   document.body.classList.toggle('logged-in', isLoggedIn);
   /* 예전의 LOCKED/UNLOCKED 배지는 없앴습니다 — 이 글자가 그 역할을 합니다 */
   const pcBtn = document.getElementById('postcardBtn');
-  if(pcBtn) pcBtn.innerText = isLoggedIn ? 'Send a Postcard' : 'Write a Postcard';
+  if(pcBtn) pcBtn.innerText = isLoggedIn ? 'Logout' : 'Login';
   if(isLoggedIn) closeLoginSheet();
 
   document.getElementById('siteName').readOnly = !isLoggedIn;
@@ -58,10 +58,10 @@ function applyEditMode(){
    숨기므로 높이가 그대로여서 상자가 화면 가운데에 앉고 페이지가 튀지 않습니다. */
 /* 닫히는 애니메이션(테두리 되감기)에 걸리는 시간. style.css 의 .login-sheet.closing
    규칙(.37s 지연 + .55s)과 같아야 합니다. */
-const LOGIN_CLOSE_MS = 940;
+const LOGIN_CLOSE_MS = 300;
 /* 창이 사라진 뒤 가려져 있던 엽서가 다시 진해지는 데 걸리는 시간.
    style.css 의 .intro-card.login-back 규칙과 같아야 합니다. */
-const CARD_BACK_MS = 470;
+const CARD_BACK_MS = 300;
 let loginCloseTimer = null;
 let cardBackTimer = null;
 function loginSheetOpen(){
@@ -150,7 +150,7 @@ postcardBtnEl.addEventListener('click', async ()=>{
   /* 저장이 밀려 있으면 몇 초 걸릴 수 있어 버튼을 잠가 둡니다 */
   postcardBtnEl.disabled = true;
   const before = postcardBtnEl.innerText;
-  postcardBtnEl.innerText = 'Sending…';
+  postcardBtnEl.innerText = '...';
   try{
     await window.SiteStore.signOut();
   }catch(e){
@@ -158,11 +158,11 @@ postcardBtnEl.addEventListener('click', async ()=>{
     alert('로그아웃하지 못했어요. 잠시 뒤 다시 눌러주세요.');
   }finally{
     postcardBtnEl.disabled = false;
-    if(postcardBtnEl.innerText === 'Sending…') postcardBtnEl.innerText = before;
+    if(postcardBtnEl.innerText === '...') postcardBtnEl.innerText = before;
   }
 });
 /* 그만두려면 Esc 를 누르거나 상자 바깥을 누릅니다 (따로 취소 단추는 없습니다).
-   Write a Postcard 는 지금 로그인 단추이므로 바깥으로 치지 않습니다 — 안 그러면
+   LOGIN 단추는 지금 로그인 단추이므로 바깥으로 치지 않습니다 — 안 그러면
    누르는 순간 상자가 먼저 닫혀 로그인이 되지 않습니다. */
 document.getElementById('home-intro-page').addEventListener('mousedown', (e)=>{
   if(!loginSheetOpen()) return;
@@ -1401,7 +1401,10 @@ const homePagesWrap = document.getElementById('homePagesWrap');
 const homeCardsPageEl = document.getElementById('home-cards-page');
 /* 카드가 여섯 장을 넘으면 여러 장으로 나눠 담고 스크롤로 넘깁니다.
    LOVE INTEREST 줄은 그대로 있고 카드 칸만 밀려납니다. 점 표시는 두지 않습니다. */
-const CARDS_PER_PAGE = 6;
+/* 한 장에 네 칸(2열 × 2행). style.css 의 .card-grid 의 행·열 수와
+   반드시 같아야 합니다 — 어긋나면 마지막 줄이 잘리거나 빈 칸이 남습니다.
+   여섯이던 것을 넷으로 줄인 것은 사진 비율 때문입니다(.card-grid 설명 참고). */
+const CARDS_PER_PAGE = 4;
 let cardPageIdx = 0;
 function cardPageCount(){
   return Math.max(1, Math.ceil((state.cards ? state.cards.length : 0)/CARDS_PER_PAGE));
@@ -7638,6 +7641,75 @@ function filterArchiveItems(items){
   });
 })();
 
+/* ---- 검색 분류 고르개 ----
+   브라우저가 그리는 <select> 의 **펼쳐진 목록**은 CSS 로 손댈 수 없습니다.
+   파란 띠와 시스템 서체가 그대로 나와 이 화면에서만 유독 이질적이었습니다.
+   그래서 사이드바 메뉴와 같은 방식(고르면 오렌지로 변하며 굵어지는)으로
+   목록을 직접 그립니다.
+
+   진짜 <select> 는 지우지 않고 **값만 들고 있는 채로 숨깁니다**(.sf-pick-native).
+   고를 때 그 값을 바꾸고 change 를 직접 일으키므로, 값을 읽어 쓰는 쪽
+   (initArcSearch / initLogSearch)은 한 줄도 고칠 필요가 없습니다.
+
+   .log-search 안의 모든 select 를 한 번에 바꿉니다 — ARCHIVE 하나와
+   PAIR·OC 상세창의 LOG 검색 둘, 모두 셋입니다.
+
+   목록은 **위로** 펼칩니다. 검색줄이 화면 맨 아래에 있어서 아래로 펼치면
+   창 밖으로 나갑니다. */
+(function initSearchFieldDropdowns(){
+  document.querySelectorAll('.log-search select').forEach(sel=>{
+    if(sel.dataset.enhanced) return;
+    sel.dataset.enhanced = '1';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'sf-pick' + (sel.classList.contains('sf-more') ? ' sf-more' : '');
+    sel.classList.remove('sf-more');          // 접었다 펴는 일은 이제 감싼 칸이 맡습니다
+    sel.parentNode.insertBefore(wrap, sel);
+    wrap.appendChild(sel);
+    sel.classList.add('sf-pick-native');
+
+    const btn  = document.createElement('button');
+    btn.type = 'button'; btn.className = 'sf-pick-btn';
+    const name = document.createElement('span'); name.className = 'sf-pick-name';
+    const caret = document.createElement('span');
+    caret.className = 'sf-pick-caret'; caret.setAttribute('aria-hidden','true'); caret.textContent = '▾';
+    btn.append(name, caret);
+
+    const menu = document.createElement('div');
+    menu.className = 'sf-pick-menu';
+    Array.from(sel.options).forEach(op=>{
+      const it = document.createElement('button');
+      it.type = 'button'; it.className = 'sf-pick-item';
+      it.dataset.v = op.value; it.textContent = op.text;
+      menu.appendChild(it);
+    });
+    wrap.append(btn, menu);
+
+    const paint = ()=>{
+      const op = Array.from(sel.options).find(o=> o.value === sel.value);
+      name.textContent = op ? op.text : '';
+      menu.querySelectorAll('.sf-pick-item').forEach(it=>
+        it.classList.toggle('on', it.dataset.v === sel.value));
+    };
+    paint();
+
+    const close = ()=> wrap.classList.remove('open');
+    btn.addEventListener('click', (e)=>{ e.stopPropagation(); wrap.classList.toggle('open'); });
+    menu.addEventListener('click', (e)=>{
+      const it = e.target.closest('.sf-pick-item');
+      if(!it) return;
+      sel.value = it.dataset.v;
+      paint();
+      close();
+      /* 값을 코드로 바꾸면 change 가 저절로 나지 않으므로 직접 일으킵니다 —
+         이 신호를 initArcSearch / initLogSearch 가 듣고 다시 그립니다. */
+      sel.dispatchEvent(new Event('change', { bubbles:true }));
+    });
+    document.addEventListener('click', (e)=>{ if(!wrap.contains(e.target)) close(); });
+    document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') close(); });
+  });
+})();
+
 /* ARCHIVE 폴더 — OC 와 같은 상단바 드롭다운을 씁니다(renderFolderDropdown).
    세부 카테고리(OOC·PROMPT·ETC)마다 목록이 다르므로 지금 보고 있는 것을 따라갑니다. */
 const ARC_FOLDER_DD = {
@@ -7712,14 +7784,18 @@ function renderArchive(){
   if(selDelBtn) selDelBtn.style.display = arcSelectMode ? 'inline-flex' : 'none';
 
   // PROMPT 는 4열 x 2행 = 8개, 모바일은 2열 x 2행 = 4개,
-  // OOC/ETC 는 데스크톱 15줄(읽을 때는 14줄) / 모바일은 화면 높이에 맞춰 잰 값
-  // (PROMPT 의 숫자는 CSS .arc-nai-grid 의 열 x 행과 반드시 같아야 합니다.
-  //  OOC/ETC 는 표라서 줄 수만 맞추면 됩니다 — 읽을 때 한 줄을 덜 두는 것은
-  //  그 아래 검색 줄이 보기 모드에만 있기 때문입니다.
-  //  폰에서 재는 방법은 위 fitArchiveRows 참고.)
+  /* OOC/ETC 의 줄 수는 **화면 높이에 맞춰 잽니다**(fitArchiveRows).
+     예전에는 데스크톱만 상수(편집 15줄 / 보기 14줄)로 박아 두었는데,
+     글자 크기나 줄 여백을 조금만 건드려도 마지막 줄이 넘쳐 표에만 가로대가
+     생겼습니다. 재는 쪽이면 그럴 일이 없고, 창 크기가 달라져도 알아서
+     맞습니다 — 보기 모드에서 한 줄 덜 들어가는 것(아래 검색 줄이 자리를
+     차지하므로)도 따로 적어 둘 필요 없이 저절로 나옵니다.
+     아직 못 잰 동안에는 ARC_ROWS_FALLBACK(10줄)로 한 번 그리고, 그 그림을
+     재서 곧바로 다시 그립니다.
+     (PROMPT 의 숫자는 CSS .arc-nai-grid 의 열 x 행과 반드시 같아야 합니다.) */
   const perPage = isGallery
     ? (isMobileWidth() ? 4 : 8)
-    : (isMobileWidth() ? (arcRowsPerPage || ARC_ROWS_FALLBACK) : (isLoggedIn ? 15 : 14));
+    : (arcRowsPerPage || ARC_ROWS_FALLBACK);
 
   /* 세부 카테고리(OOC·PROMPT·ETC) 안에서 폴더로 한 번 더 걸러 보여줍니다.
      폴더 고르기는 목록 위 탭이 아니라 상단바 드롭다운입니다. */
@@ -7915,7 +7991,7 @@ function renderArchive(){
   /* 폰의 OOC·ETC 표만 — 다 그린 뒤에 실제 높이를 재서 줄 수를 맞춥니다.
      맨 끝에서 부르는 것이 중요합니다: 안에서 renderArchive 를 다시 부르므로
      중간에서 부르면 이 호출이 새로 그려진 화면에 단추를 한 번 더 묶습니다. */
-  if(!isGallery && isMobileWidth()) fitArchiveRows();
+  if(!isGallery) fitArchiveRows();
 }
 
 /* ---- 선택 모드 (세 카테고리 공용) ---- */
@@ -8565,35 +8641,29 @@ function openStickerModal(s){
   paintStickerPreview();
   openModal('modalSticker');
 }
-/* ---- 클립 자리 ----
-   클립은 창(.app-window) 오른쪽 펀치 줄에 끼워지고, 창 위 모서리 바깥으로
-   튀어나옵니다. 창은 화면 가운데에 놓이고 크기가 뷰포트에 따라 달라지므로
-   CSS 만으로는 그 자리를 짚을 수 없어, 창을 재서 잡아 줍니다.
-   style.css 의 .sticker-clip 크기(30x75)와 짝이 맞아야 합니다. */
-const CLIP_W = 34;
-const CLIP_ABOVE = 34;      // 종이 선이 클립 위에서 34px — 뷰박스 y=40 자리입니다(85 × 0.4)
-const PUNCH_W = 40;         // .punch-margin 의 폭
+/* ---- 서랍 자리 ----
+   서랍은 이제 사이드바 흐름 안(뮤직 위젯 바로 위)에 그냥 놓입니다. 자리를
+   잡아 줄 일이 없어 이 함수는 **폰에서 열린 서랍을 닫는 일만** 합니다.
+
+   예전에는 창(.app-window) 오른쪽 펀치 구멍 줄에 끼워진 종이집게였고,
+   창이 화면 가운데에 놓이고 크기가 뷰포트에 따라 달라져서 CSS 로는 그 자리를
+   짚을 수 없었습니다. 그래서 창을 재서 left/top 을 직접 넣어 주었습니다.
+   펀치 줄을 걷어내면서 그 장치도 함께 사라졌습니다. */
 function positionStickerDrawer(){
   const d = document.getElementById('stickerDrawer');
-  const win = document.querySelector('.app-window');
-  if(!d || !win) return;
-  /* 폰에서는 서랍을 쓰지 않습니다(CSS 에서 숨김). 창 옆에 여백이 없어 클립이
-     상단바 위에 어정쩡하게 떠 있었기 때문입니다. 화면이 좁아지는 순간
+  if(!d) return;
+  /* 폰에서는 서랍을 쓰지 않습니다(CSS 에서 숨김). 화면이 좁아지는 순간
      열려 있던 서랍은 닫아 둡니다 — 다시 넓어졌을 때 열린 채로 튀어나오지
      않게 하려는 것입니다. */
   if(isMobileWidth()){
     clearTimeout(sdCloseTimer);
     d.classList.remove('open','closing');
-    return;
   }
-  const r = win.getBoundingClientRect();
-  d.style.left = (r.right - PUNCH_W + (PUNCH_W - CLIP_W) / 2) + 'px';
-  d.style.top  = (r.top - CLIP_ABOVE) + 'px';
 }
 
-/* 서랍 닫기 — 끼워지던 움직임을 거꾸로 돌립니다.
-   style.css 의 .sticker-drawer.closing 규칙(.3s)과 같아야 합니다. */
-const SD_CLOSE_MS = 320;
+/* 서랍 닫기 — 떠오르던 움직임을 거꾸로 돌립니다.
+   style.css 의 .sticker-drawer.closing 규칙(.26s)과 같아야 합니다. */
+const SD_CLOSE_MS = 280;
 let sdCloseTimer = null;
 function openStickerDrawer(){
   const drawer = document.getElementById('stickerDrawer');
@@ -8616,10 +8686,10 @@ function closeStickerDrawer(){
 function initStickers(){
   const drawer = document.getElementById('stickerDrawer');
   if(!drawer) return;
-  /* 창은 열릴 때 아래에서 떠오르므로(window-in), 그 움직임이 끝난 뒤 다시 잽니다 */
+  /* 서랍은 사이드바 흐름 안에 있어 자리를 잡아 줄 일이 없습니다.
+     크기가 바뀔 때 부르는 것은 폰 폭으로 좁아지면 열린 서랍을 닫기
+     위해서입니다(positionStickerDrawer 설명 참고). */
   positionStickerDrawer();
-  const win = document.querySelector('.app-window');
-  if(win) win.addEventListener('animationend', positionStickerDrawer);
   window.addEventListener('resize', positionStickerDrawer);
   document.getElementById('stickerHandle').addEventListener('click', ()=>{
     if(drawer.classList.contains('open') && !drawer.classList.contains('closing')) closeStickerDrawer();

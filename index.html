@@ -51,17 +51,23 @@
      이것만으로는 부족해서 css 의 html 에도 같은 색을 칠해 두었습니다
      (거기 설명을 보세요) — 둘 중 하나만 있으면 기기에 따라 검게 남습니다.
      이 줄은 안드로이드 크롬의 주소창 색과 사파리 도구줄 색도 함께 바꿉니다. -->
-<meta name="theme-color" content="#EF3921" />
+<meta name="theme-color" content="#ffffff" />
 
 <!-- ?v= 는 캐시 무효화용입니다.
      css/js를 고칠 때마다 이 숫자를 함께 올려주세요.
      올리지 않으면 브라우저가 옛 파일을 계속 써서
      새 HTML과 짝이 맞지 않아 화면이 깨질 수 있습니다. -->
-<link rel="stylesheet" href="css/style.css?v=115" />
+<!-- 서체 — Pretendard Variable 한 벌. 굵기가 45~920 사이에서 이어져 있어
+     사이드바 메뉴가 흐르듯 굵어질 수 있습니다(style.css 의 .nav-item 참고).
+     dynamic-subset 은 92개로 잘린 조각 중 화면에 실제로 쓰인 글자가 든 것만
+     내려받습니다 — 통짜 파일은 2MB 라 첫 그림이 눈에 띄게 늦어집니다. -->
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+<link rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
+<link rel="stylesheet" href="css/style.css?v=126" />
 </head>
 <body>
 <div class="app-window">
-<div class="punch-margin left"><div class="punch-hole"></div><div class="punch-hole"></div><div class="punch-hole"></div><div class="punch-hole"></div><div class="punch-hole"></div><div class="punch-hole"></div></div>
 <div class="app-shell">
 
   <!-- 모바일(768px 이하) 전용 — PC 에서는 CSS 로 숨깁니다 -->
@@ -70,6 +76,56 @@
 
   <!-- ================= SIDEBAR ================= -->
   <aside class="sidebar" id="sidebar">
+    <!-- 메뉴가 먼저, 뮤직 위젯과 저장 용량은 사이드바 바닥에 붙습니다.
+         예전에는 뮤직 위젯이 맨 위였습니다 — 자리를 바꾼 것은 왼쪽 열의
+         맨 윗줄이 곧 메뉴의 첫 항목이어야 하기 때문입니다
+         (style.css 의 .sidebar / .music-block 설명 참고). -->
+    <nav class="nav">
+      <button class="nav-item active" data-view="home">Home</button>
+      <!-- PAIR·OC 의 세부 카테고리는 편집할 수 있어서 main.js 가 그립니다 (renderNavSub).
+           '＋' 는 창을 띄우지 않고 카테고리 목록 하단에 입력 칸을 엽니다(startAddCat). -->
+      <div class="nav-item-row">
+        <button class="nav-item" data-view="pair">Pair</button>
+        <button class="nav-cat-add" data-editonly data-nav="pair" title="카테고리 추가">＋</button>
+      </div>
+      <div class="nav-sub" id="pairSub"></div>
+      <div class="nav-item-row">
+        <button class="nav-item" data-view="oc">OC</button>
+        <button class="nav-cat-add" data-editonly data-nav="oc" title="카테고리 추가">＋</button>
+      </div>
+      <div class="nav-sub" id="ocSub"></div>
+      <button class="nav-item" data-view="archive">Archive</button>
+      <div class="nav-sub" id="archiveSub">
+        <button class="nav-sub-item active" data-archivesub="nai">PROMPT</button>
+        <button class="nav-sub-item" data-archivesub="ooc">OOC</button>
+        <button class="nav-sub-item" data-archivesub="etc">ETC</button>
+      </div>
+    </nav>
+
+    <!-- 스티커 서랍 — 사이드바 바닥, 뮤직 위젯 바로 위에 놓인 얇은 손잡이입니다.
+         누르면 스티커 판이 손잡이 위로 떠오릅니다.
+         예전에는 창 오른쪽 펀치 줄에 끼워진 종이집게 모양이었는데, 펀치 줄이
+         사라지면서 갈 곳을 잃어 이리로 옮겼습니다. 자리를 JS 로 재서 잡던
+         장치(positionStickerDrawer)도 필요 없어졌습니다 — 이제 사이드바
+         흐름 안에 그냥 놓입니다.
+         스티커가 실제로 붙는 자리(.sticker-layer)는 그대로 창 위입니다. -->
+    <div class="sticker-drawer" id="stickerDrawer">
+      <!-- 열렸을 때 손잡이 위로 떠오르는 판 -->
+      <div class="sticker-drawer-box">
+        <div class="sd-head"><span class="sd-title">Sticker</span></div>
+        <div class="sd-scroll"><div class="sd-list" id="sdList"></div></div>
+        <div class="sd-tools" id="sdTools" data-editonly>
+          <button class="sd-tool" id="sdAddBtn" type="button">＋ 추가</button>
+          <button class="sd-tool" id="sdRemoveBtn" type="button">✕ 제거</button>
+        </div>
+      </div>
+      <!-- 손잡이. 삼각형은 열림/닫힘 방향을 알려 줍니다(CSS 가 뒤집습니다). -->
+      <button class="sticker-clip" id="stickerHandle" type="button" title="스티커 서랍">
+        <span class="sc-label">Sticker</span>
+        <span class="sc-arrow" aria-hidden="true">▲</span>
+      </button>
+    </div>
+
     <!-- 뮤직 위젯 — 예전 이름/소개글 자리입니다. 상자 없이 구분선 위에 놓입니다.
          소리는 화면 밖에 숨긴 유튜브 플레이어(#ytHost)가 냅니다. -->
     <div class="music-block">
@@ -122,28 +178,6 @@
     </div>
     <div id="ytHost"></div>
 
-    <nav class="nav">
-      <button class="nav-item active" data-view="home">Home</button>
-      <!-- PAIR·OC 의 세부 카테고리는 편집할 수 있어서 main.js 가 그립니다 (renderNavSub).
-           '＋' 는 창을 띄우지 않고 카테고리 목록 하단에 입력 칸을 엽니다(startAddCat). -->
-      <div class="nav-item-row">
-        <button class="nav-item" data-view="pair">Pair</button>
-        <button class="nav-cat-add" data-editonly data-nav="pair" title="카테고리 추가">＋</button>
-      </div>
-      <div class="nav-sub" id="pairSub"></div>
-      <div class="nav-item-row">
-        <button class="nav-item" data-view="oc">OC</button>
-        <button class="nav-cat-add" data-editonly data-nav="oc" title="카테고리 추가">＋</button>
-      </div>
-      <div class="nav-sub" id="ocSub"></div>
-      <button class="nav-item" data-view="archive">Archive</button>
-      <div class="nav-sub" id="archiveSub">
-        <button class="nav-sub-item active" data-archivesub="nai">PROMPT</button>
-        <button class="nav-sub-item" data-archivesub="ooc">OOC</button>
-        <button class="nav-sub-item" data-archivesub="etc">ETC</button>
-      </div>
-    </nav>
-
     <!-- 저장 용량 — 편집 모드에서만, 사이드바 맨 아래에 얇게.
          숫자는 firebase-store.js 의 storageStats() 가 냅니다. -->
     <div class="storage-meter" id="storageMeter" data-editonly>
@@ -164,66 +198,65 @@
     <section class="view active" id="view-home">
       <div class="home-pages-wrap" id="homePagesWrap">
 
+        <!-- 첫 장 — 4열 × 4행짜리 격자.
+             맨 윗줄만 52px 로 납작하고, 배너와 소개글이 가운데 두 칸을 걸쳐
+             씁니다. 나머지 칸은 비워 둡니다 — 빈 칸이 격자를 드러내는 것이
+             이 화면의 목적이라 무언가를 채우지 마세요.
+             칸 크기와 선 규칙은 style.css 의 .home-grid 설명을 보세요. -->
         <div class="home-page" id="home-intro-page">
-          <div class="intro-card">
-            <div class="adjustable-img intro-banner" id="introBannerBox">
+          <div class="home-grid">
+
+            <!-- 1행 (52px) — 전부 빈 칸 -->
+            <div class="hg-cell"></div>
+            <div class="hg-cell"></div>
+            <div class="hg-cell"></div>
+            <div class="hg-cell hg-r"></div>
+
+            <!-- 2행 — 배너 사진이 가운데 두 칸 -->
+            <div class="hg-cell"></div>
+            <div class="hg-cell hg-span2 adjustable-img intro-banner" id="introBannerBox">
               <div class="adj-layer"></div>
               <button class="adj-empty" data-editonly>＋ 배너 이미지</button>
               <button class="adj-change" data-editonly>📷</button>
             </div>
-            <input class="intro-sitename" id="siteName" value="사이트 이름" readonly />
-            <div class="intro-divider">*</div>
-            <div class="home-intro" id="homeIntro" contenteditable="false"></div>
-            <!-- 예전 사이드바의 로그인/로그아웃 자리입니다. 글자만 바뀝니다 —
-                 보기 모드에서는 Write a Postcard(로그인), 편집 모드에서는
-                 Send a Postcard(로그아웃).
-                 자리를 차지하지 않도록 엽서 아래에 띄워 놓습니다(position:absolute) —
-                 흐름에 두면 그만큼 엽서 내용이 위로 올라갑니다.
-                 로그인 상자가 열려 있을 때는 이 버튼이 곧 '로그인' 단추입니다. -->
-            <button type="button" class="postcard-btn" id="postcardBtn">Write a Postcard</button>
+            <div class="hg-cell hg-r"></div>
 
-            <!-- 로그인 — 창(모달)이 아니라 엽서를 정확히 덮으며 그 자리에 열립니다.
-                 네 변이 왼쪽 위·오른쪽 아래 꼭짓점에서 자라 나오고, 다 그려진 뒤에
-                 안쪽 내용이 떠오릅니다. -->
-            <div class="login-sheet" id="loginSheet">
-              <div class="ls-box">
-                <span class="ls-line ls-t"></span>
-                <span class="ls-line ls-l"></span>
-                <span class="ls-line ls-b"></span>
-                <span class="ls-line ls-r"></span>
-                <!-- 엽서 뒷면처럼 놓습니다 — 왼쪽 위에 이메일, 오른쪽 아래에 비밀번호,
-                     오른쪽 위 구석에 우표, 그 사이를 세로선이 가릅니다.
-                     테두리가 자라 나오는 두 꼭짓점이 곧 두 입력칸 자리입니다. -->
-                <div class="ls-inner">
-                  <span class="ls-divider" aria-hidden="true"></span>
-                  <!-- 주소 칸처럼 줄 세 개를 긋고 맨 윗줄이 입력 칸입니다 -->
-                  <div class="ls-field ls-field-email">
-                    <label class="ls-label" for="loginId">EMAIL</label>
-                    <div class="ls-lines">
-                      <input type="email" id="loginId" class="ls-input" autocomplete="username" />
-                      <span class="ls-rule"></span>
-                      <span class="ls-rule"></span>
-                    </div>
+            <!-- 3행 — 사이트 이름과 소개글. 로그인 상자가 이 칸을 덮습니다 -->
+            <div class="hg-cell"></div>
+            <div class="hg-cell hg-span2 intro-card">
+              <input class="intro-sitename" id="siteName" value="사이트 이름" readonly />
+              <div class="home-intro" id="homeIntro" contenteditable="false"></div>
+
+              <!-- 로그인 — 창(모달)이 아니라 이 칸을 그대로 덮으며 열립니다.
+                   예전의 엽서 뒷면(우표·소인·주소줄)은 전부 걷어냈고,
+                   지금은 밑줄 두 개뿐입니다. -->
+              <div class="login-sheet" id="loginSheet">
+                <div class="ls-box">
+                  <div class="ls-field">
+                    <label class="ls-label" for="loginId">Email</label>
+                    <input type="email" id="loginId" class="ls-input" autocomplete="username" />
                   </div>
-                  <!-- 우표 — 바깥은 점선(구멍 자리), 안은 실선 인쇄 테두리. 속은 비웠습니다. -->
-                  <div class="ls-stamp" aria-hidden="true"><span class="ls-stamp-in"></span></div>
-                  <!-- 항공 우편 소인. 우표를 왼쪽에서 덮으며 물결선이 그 위를 지나갑니다
-                       (실제로 소인은 우표를 지우는 표시입니다). 살짝 기울여 찍습니다.
-                       파일이 아직 없으면 그냥 감춥니다 — 깨진 그림 아이콘이 뜨지 않게. -->
-                  <img class="ls-postmark" src="img/postmark.png" alt="" aria-hidden="true"
-                       draggable="false" onerror="this.style.display='none'" />
-                  <div class="ls-field ls-field-pw">
-                    <label class="ls-label" for="loginPw">PASSWORD</label>
-                    <div class="ls-lines">
-                      <input type="password" id="loginPw" class="ls-input" autocomplete="current-password" />
-                      <span class="ls-rule"></span>
-                      <span class="ls-rule"></span>
-                    </div>
+                  <div class="ls-field">
+                    <label class="ls-label" for="loginPw">Password</label>
+                    <input type="password" id="loginPw" class="ls-input" autocomplete="current-password" />
                   </div>
                   <div class="login-error" id="loginError"></div>
                 </div>
               </div>
             </div>
+            <div class="hg-cell hg-r"></div>
+
+            <!-- 4행 — 셋째 칸 오른쪽 위에 로그인 단추, 나머지는 빈 칸 -->
+            <div class="hg-cell hg-b"></div>
+            <div class="hg-cell hg-b"></div>
+            <div class="hg-cell hg-b hg-login">
+              <!-- 글자가 상황에 따라 바뀝니다 — 보기 모드에서는 LOGIN,
+                   편집 모드에서는 LOGOUT. 상자가 열려 있을 때는 이것이
+                   곧 '로그인' 단추입니다(main.js 를 보세요). -->
+              <button type="button" class="postcard-btn" id="postcardBtn">Login</button>
+            </div>
+            <div class="hg-cell hg-b hg-r"></div>
+
           </div>
         </div>
 
@@ -269,11 +302,13 @@
         <!-- OC 는 '전체'가 없어 실제 카테고리 이름이 와야 하므로, 데이터가
              오기 전까지는 빈 채로 둡니다(renderNavSubs 가 즉시 채웁니다). -->
         <h2 id="ocTitle">OC</h2>
-        <!-- 선택 · 글쓰기 · 폴더 순. 폴더는 보기 모드에서도 같은 자리에 있어야 하므로
-             편집 전용 묶음 바깥에 두고, 그 묶음은 보기 모드에서 자리만 비워둡니다
-             (.keep-space — 안 그러면 폴더 단추가 오른쪽으로 밀립니다). -->
+        <!-- 선택 · 글쓰기 · 폴더 순. 폴더는 보기 모드에도 있어야 하므로 편집 전용
+             묶음 바깥에 둡니다. 보기 모드에서는 '선택 · 글쓰기'가 통째로 사라지고
+             폴더 단추가 그만큼 오른쪽으로 당겨집니다 — 예전에는 .keep-space 로
+             빈 자리를 남겨 두었지만, 그 바람에 왼쪽 것들이 덩그러니 떨어져
+             보여서 자리를 남기지 않기로 했습니다. -->
         <div class="topbar-actions">
-          <div class="pair-header-actions keep-space" data-editonly>
+          <div class="pair-header-actions" data-editonly>
             <button class="btn-ghost" id="ocSelectBtn">선택</button>
             <button class="btn-primary" id="ocWriteBtn">＋ 글쓰기</button>
           </div>
@@ -299,30 +334,51 @@
         <!-- 선택/삭제는 PROMPT 에서만 씁니다 — 카테고리에 따라 JS 가 보였다 숨깁니다.
              폴더는 OC 와 같은 방식으로 편집 전용 묶음 바깥, 맨 오른쪽에 둡니다. -->
         <div class="topbar-actions">
-          <div class="pair-header-actions keep-space" data-editonly>
+          <div class="pair-header-actions" data-editonly>
             <button class="btn-ghost gf-danger" id="arcSelectDeleteBtn" style="display:none;">삭제</button>
             <button class="btn-ghost" id="arcSelectBtn" style="display:none;">선택</button>
             <button class="btn-primary" id="addArchiveBtn">＋ 글쓰기</button>
           </div>
+          <!-- 검색 — 폴더 고르개 **왼쪽**. 보기 모드에만 보입니다.
+               폴더 고르개를 오른쪽 끝에 두는 까닭 — 그 단추는 폭이 거의
+               변하지 않는데 검색은 펼칠 때 130px 이 늘어납니다. 검색을
+               왼쪽에 두면 늘어나는 만큼 왼쪽으로만 자라서 폴더 단추는
+               제자리에 있습니다(상단바가 오른쪽 정렬이라 그렇습니다).
+               평소에는 돋보기와 밑줄 하나뿐이고, 칸을 누르거나 검색어가 들어
+               있으면 좌우로 늘어나면서 .sf-more 가 붙은 것들(분류·지우기)이
+               함께 나타납니다. 여닫는 일은 CSS 가 :focus-within 과
+               :has(:not(:placeholder-shown))로 하므로 JS 는 손대지 않습니다.
+
+               예전에는 목록 아래(창 맨 밑)에 있었습니다. 그 자리에서는 분류
+               고르개의 목록을 아래로 펼칠 수 없었습니다 — 검색줄 아래에 남는
+               자리가 0px 이라 .app-window 의 overflow:hidden 이 통째로 잘라
+               냈고, 위로 펼치면 게시글 위에 겹쳤습니다. 상단바로 올리면서
+               아래로 자연스럽게 펼쳐집니다.
+
+               분류 고르개는 main.js 가 직접 그린 목록으로 바꿔 답니다
+               (initSearchFieldDropdowns) — 여기 있는 select 는 값만 들고 숨습니다. -->
+          <div class="log-search archive-search" id="arcSearchBar">
+            <!-- 돋보기는 서체 기호가 아니라 직접 그린 그림입니다 — Pretendard 에
+                 없는 기호는 기기마다 다른 서체로 넘어가 모양이 제각각이 됩니다. -->
+            <span class="sf-icon" aria-hidden="true">
+              <svg viewBox="0 0 16 16"><circle cx="6.8" cy="6.8" r="4.6"></circle><path d="M10.3 10.3 L14.4 14.4"></path></svg>
+            </span>
+            <select id="arcSearchField" class="sf-more">
+              <option value="title">제목</option>
+              <option value="content">내용</option>
+            </select>
+            <input type="text" id="arcSearchInput" placeholder="검색어를 입력하세요" />
+            <button type="button" id="arcSearchClear" class="sf-more" title="검색 초기화">✕</button>
+          </div>
+
           <div class="folder-dd" id="arcFolderDD"></div>
         </div>
       </div>
       <div class="archive-body" id="archiveBody"></div>
-      <!-- 검색은 페이지 버튼 아래 (보기 모드 전용) -->
-      <div class="log-search archive-search" id="arcSearchBar">
-        <input type="date" id="arcSearchDate" title="게시일" />
-        <select id="arcSearchField">
-          <option value="title">제목</option>
-          <option value="content">내용</option>
-        </select>
-        <input type="text" id="arcSearchInput" placeholder="검색어를 입력하세요" />
-        <button type="button" id="arcSearchClear" title="검색 초기화">✕</button>
-      </div>
     </section>
 
   </main>
 </div>
-<div class="punch-margin right"><div class="punch-hole"></div><div class="punch-hole"></div><div class="punch-hole"></div><div class="punch-hole"></div><div class="punch-hole"></div><div class="punch-hole"></div></div>
 </div>
 
 <!-- ================= MODALS ================= -->
@@ -541,8 +597,11 @@
           <div class="log-list" id="logList"></div>
           <!-- 검색은 페이지 버튼 아래에 둡니다 (보기 모드 전용) -->
           <div class="log-search" id="logSearchBar">
-            <input type="date" class="log-search-date" id="logSearchDate" title="게시일" />
-            <select class="log-search-field" id="logSearchField">
+            <!-- ARCHIVE 검색줄과 같은 돋보기입니다(style.css 의 .sf-icon) -->
+            <span class="sf-icon" aria-hidden="true">
+              <svg viewBox="0 0 16 16"><circle cx="6.8" cy="6.8" r="4.6"></circle><path d="M10.3 10.3 L14.4 14.4"></path></svg>
+            </span>
+            <select class="log-search-field sf-more" id="logSearchField">
               <option value="title">제목</option>
               <option value="content">내용</option>
             </select>
@@ -717,8 +776,11 @@
           </div>
           <div class="log-list"></div>
           <div class="log-search">
-            <input type="date" class="log-search-date" title="게시일" />
-            <select class="log-search-field">
+            <!-- ARCHIVE 검색줄과 같은 돋보기입니다(style.css 의 .sf-icon) -->
+            <span class="sf-icon" aria-hidden="true">
+              <svg viewBox="0 0 16 16"><circle cx="6.8" cy="6.8" r="4.6"></circle><path d="M10.3 10.3 L14.4 14.4"></path></svg>
+            </span>
+            <select class="log-search-field sf-more">
               <option value="title">제목</option>
               <option value="content">내용</option>
             </select>
@@ -1025,47 +1087,11 @@
      추가·제거·문구 편집만 편집 모드에서 합니다. -->
 <div class="sticker-layer" id="stickerLayer"></div>
 
-<!-- 스티커 서랍 — 창 오른쪽 펀치 줄에 끼워진 클립입니다. 창 위 모서리를 물고
-     바깥으로 튀어나와야 해서 .app-window 바깥(overflow:hidden 을 피해)에 두고,
-     자리는 positionStickerDrawer() 가 창 위치를 재서 잡아 줍니다.
-     클립이 카드 위에 오도록 카드를 먼저 적습니다(뒤에 적은 것이 위에 그려집니다). -->
-<div class="sticker-drawer" id="stickerDrawer">
-  <div class="sticker-drawer-box">
-    <!-- 닫기 단추는 두지 않습니다 — 오른쪽 위는 클립이 물고 있는 자리이고,
-         클립을 다시 누르거나 Esc 로 닫습니다. -->
-    <div class="sd-head"><span class="sd-title">Sticker</span></div>
-    <div class="sd-scroll"><div class="sd-list" id="sdList"></div></div>
-    <div class="sd-tools" id="sdTools" data-editonly>
-      <button class="sd-tool" id="sdAddBtn" type="button">＋ 추가</button>
-      <button class="sd-tool" id="sdRemoveBtn" type="button">✕ 제거</button>
-    </div>
-  </div>
-  <!-- 선으로 그린 클립.
-       · 바깥 고리는 닫힌 타원(위 곡선 → 양 옆 → 아래 곡선)으로 통째로 보입니다.
-       · 안쪽 고리는 종이 뒤로 들어가므로 종이 윗변(뷰박스 y=40) 위쪽만 그립니다
-         — 실물처럼 두 팔이 종이 선에서 사라집니다.
-       클립이 기울어져 있으므로 자르는 사각형도 같은 각도로 돌려 두어야
-       화면에서 잘리는 선이 수평이 됩니다. -->
-  <button class="sticker-clip" id="stickerHandle" type="button" title="스티커 서랍">
-    <svg viewBox="0 0 40 100" aria-hidden="true">
-      <defs>
-        <clipPath id="stickerClipPaper">
-          <rect x="-60" y="-60" width="160" height="100" transform="rotate(11 20 40)" />
-        </clipPath>
-      </defs>
-      <rect class="sc-outer" x="8" y="6" width="24" height="88" rx="12" />
-      <path class="sc-inner" clip-path="url(#stickerClipPaper)"
-            d="M15 66 V25 a5 5 0 0 1 10 0 V56" />
-    </svg>
-  </button>
-</div>
-
 <!-- 종이 질감. 화면 전체(빨간 여백까지)를 덮고, 창(모달)보다는 아래에 깝니다.
      background-image 가 아니라 <img> 로 둔 것은, 사진에 박힌 회전 정보(EXIF)를
      <img> 만 확실하게 따라 주기 때문입니다 — 배경으로 깔면 브라우저에 따라
      90도 돌아간 채로 나옵니다.
      맨 끝에 두어 화면 그리기를 막지 않게 합니다. -->
-<img class="paper-grain" src="img/paper-grain.jpg" alt="" aria-hidden="true" draggable="false" />
 
 <script src="js/main.js?v=115"></script>
 <script type="module" src="js/firebase-store.js?v=115"></script>
