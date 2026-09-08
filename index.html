@@ -64,7 +64,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
-<link rel="stylesheet" href="css/style.css?v=131" />
+<link rel="stylesheet" href="css/style.css?v=133" />
 </head>
 <body>
 <div class="app-window">
@@ -803,6 +803,45 @@
       </div>
     </section>
 
+    <!-- ================= ARCHIVE 글 =================
+         PAIR·OC 와 같이, 떠 있는 창이 아니라 본 패널 안의 한 화면입니다.
+         이 글에는 헤더 사진이 따로 없으므로 배너 없이 상단바만 씁니다. -->
+    <section class="view detail-view arc-detail-view" id="view-archive-detail">
+      <!-- 상단바는 칸 전체 폭을 씁니다. 좁히는 것은 아래 글칸뿐입니다. -->
+      <div class="topbar arc-detail-bar">
+        <div class="arcd-left">
+          <button type="button" class="dt-back arcd-back" id="arcBackBtn" title="목록으로">←</button>
+          <div class="arcd-titles">
+            <h3 id="arcViewTitle"></h3>
+            <!-- 부제목 · 날짜 한 줄. 부제목이 비면 main.js 가 가운뎃점까지 함께 숨깁니다. -->
+            <div class="arcd-meta">
+              <span id="arcViewSub"></span>
+              <span class="arcd-dot" id="arcViewMetaDot">·</span>
+              <span id="arcViewDate"></span>
+            </div>
+          </div>
+        </div>
+        <button class="arc-kebab-btn" id="arcKebabBtn" data-editonly title="더보기">⋮</button>
+        <div class="arc-kebab-menu" id="arcKebabMenu">
+          <button type="button" id="arcPinBtn">고정</button>
+          <button type="button" id="arcEditBtn">수정</button>
+          <button type="button" id="arcDeleteBtn">삭제</button>
+        </div>
+      </div>
+      <!-- 스크롤되는 것은 이 칸뿐입니다 — 위 제목줄은 그대로 서 있습니다.
+           칸은 폭 전체를 쓰고, 안의 글만 620px 로 좁혀 가운데에 둡니다.
+           (가로대가 글 옆이 아니라 칸 맨 오른쪽 끝에 서게 하려는 것이기도 합니다.) -->
+      <div class="arc-detail-body" id="arcDetailBody">
+        <div class="arc-detail-col">
+          <div class="profile-view-text arc-view-content" id="arcViewContent"></div>
+          <div class="arc-attach-section" id="arcViewAttachSection" style="display:none;">
+            <div class="arc-attach-label">첨부 파일</div>
+            <div class="arc-attach-list" id="arcViewAttachList"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </main>
 </div>
 </div>
@@ -986,29 +1025,6 @@
   </div>
 </div>
 
-<div class="modal-overlay" id="modalArcView">
-  <div class="modal wide arc-modal">
-    <button class="modal-close" data-close>✕</button>
-    <button class="arc-kebab-btn" id="arcKebabBtn" data-editonly title="더보기">⋮</button>
-    <div class="arc-kebab-menu" id="arcKebabMenu">
-      <button type="button" id="arcPinBtn">고정</button>
-      <button type="button" id="arcEditBtn">수정</button>
-      <button type="button" id="arcDeleteBtn">삭제</button>
-    </div>
-    <div class="arc-view-head">
-      <h3 id="arcViewTitle"></h3>
-    </div>
-    <!-- 부제목 — 비어 있으면 main.js 가 display:none 으로 숨깁니다 -->
-    <div class="arc-view-sub" id="arcViewSub"></div>
-    <div style="font-size:11px;color:var(--text-muted);margin-bottom:28px;" id="arcViewDate"></div>
-    <div class="profile-view-text arc-view-content" id="arcViewContent"></div>
-    <div class="arc-attach-section" id="arcViewAttachSection" style="display:none;">
-      <div class="arc-attach-label">첨부 파일</div>
-      <div class="arc-attach-list" id="arcViewAttachList"></div>
-    </div>
-  </div>
-</div>
-
 <!-- 갤러리 크게보기. 사진 줄 아래에 같은 폴더의 썸네일 줄이 붙습니다.
      칸 수(순서/전체)는 사진 위에 겹치는 칩으로 띄웁니다. -->
 <div class="lightbox" id="lightbox">
@@ -1128,7 +1144,7 @@
        (그 목록을 만드는 것도 JS인데 새 CSS 가 감싸이지 않은 select 를 폭 0 으로
        접습니다), 스티커 서랍이 엉뚱한 자리에 놓였습니다.
        **CSS 와 JS 를 함께 고쳤으면 번호도 함께 올리세요.** -->
-<script src="js/main.js?v=131"></script>
+<script src="js/main.js?v=133"></script>
 <script type="module" src="js/firebase-store.js?v=115"></script>
 </body>
 </html>

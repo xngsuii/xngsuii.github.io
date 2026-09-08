@@ -2514,7 +2514,7 @@ function setPdPage(idx, animate){
    여기서 body[data-view] 를 바꾸면 사이드바에서 PAIR 이 통째로 풀립니다.
 
    돌아갈 때 보던 쪽을 되살립니다 — 3쪽에서 글을 열었으면 3쪽으로 돌아옵니다. */
-let pairListPage = 1, ocListPage = 1;
+let pairListPage = 1, ocListPage = 1, arcListPage = 1;
 function openDetailView(name){
   activateView(name);
   /* 창일 때는 바깥을 눌러 닫았습니다. 화면이 된 지금은 Escape 만 남깁니다. */
@@ -2535,8 +2535,17 @@ function backToOcList(){
   renderOcPosts();
   activateView('oc');
 }
+/* ARCHIVE 는 폴더까지 함께 돌아옵니다 — 폴더는 화면을 옮겨도 그대로 기억되므로
+   (currentArcFolderIds) 여기서는 쪽만 되돌리면 됩니다. */
+function backToArchiveList(){
+  closeDetailView();
+  arcPage = arcListPage;
+  renderArchive();
+  activateView('archive');
+}
 document.getElementById('pdBackBtn')?.addEventListener('click', backToPairList);
 document.getElementById('ocBackBtn')?.addEventListener('click', backToOcList);
+document.getElementById('arcBackBtn')?.addEventListener('click', backToArchiveList);
 /* Escape 로도 목록으로. 글을 쓰는 중(입력칸에 커서)에는 가로채지 않습니다 —
    그때 Escape 는 그 칸의 것이고, 창(모달)이 떠 있으면 그쪽이 먼저입니다. */
 document.addEventListener('keydown', (e)=>{
@@ -2546,13 +2555,16 @@ document.addEventListener('keydown', (e)=>{
   if(document.querySelector('.modal-overlay.open, .lightbox.open')) return;
   const t = e.target;
   if(t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
-  if(d === 'pair-detail') backToPairList(); else backToOcList();
+  if(d === 'pair-detail') backToPairList();
+  else if(d === 'oc-detail') backToOcList();
+  else backToArchiveList();
 });
 
 /* 상세 화면을 지금 보고 있는지. 예전에는 '창이 열려 있나'를
    .modal-overlay.open 으로 물었는데, 창이 아니라 화면이 된 지금은
    .view.active 로 묻습니다. 여러 곳에서 쓰므로 한 군데로 모읍니다. */
 function pairDetailOpen(){ return document.getElementById('view-pair-detail')?.classList.contains('active'); }
+function archiveDetailOpen(){ return document.getElementById('view-archive-detail')?.classList.contains('active'); }
 function ocDetailOpen(){ return document.getElementById('view-oc-detail')?.classList.contains('active'); }
 
 /* persist 를 넘기지 않으면 PAIR 글로 저장합니다 (OC 창은 자기 저장 함수를 넘깁니다) */
@@ -5160,6 +5172,11 @@ function animateGalleryPageChange(direction, applyChange){
   ghost.className = 'gallery-grid gallery-grid-ghost';
   ghost.style.left  = (gridRect.left - wrapRect.left) + 'px';
   ghost.style.top   = (gridRect.top  - wrapRect.top)  + 'px';
+  /* **높이도 함께 못박아야 합니다.** 상세 화면의 격자는 줄을 1fr 세 개로
+     나누고 남는 높이를 flex 로 받는데, 복제본은 position:absolute 라
+     flex 도 1fr 도 기댈 곳이 없습니다. 폭만 주면 줄 높이가 내용까지
+     쪼그라들어, 넘어가는 동안 나가는 쪽이 납작하게 눌려 보였습니다. */
+  ghost.style.height = gridRect.height + 'px';
   ghost.style.width = gridRect.width + 'px';
   wrap.appendChild(ghost);
 
@@ -7618,7 +7635,8 @@ document.getElementById('arcEditBtn').addEventListener('click', ()=>{
   if(!isLoggedIn || !currentArcViewId) return;
   const item = state.archive.find(x=>x.id===currentArcViewId);
   if(!item) return;
-  closeModal('modalArcView');
+  /* 글쓰기/수정은 창 그대로입니다. 뒤에 상세 화면을 띄워 둔 채 그 위에
+     열리므로, 저장하고 닫으면 방금 고친 글이 그대로 보입니다. */
   openArcWriteModal(item);
 });
 document.getElementById('arcPinBtn').addEventListener('click', async ()=>{
@@ -7656,8 +7674,7 @@ document.getElementById('arcDeleteBtn').addEventListener('click', async ()=>{
   if(!await siteConfirm('이 게시글을 삭제할까요?')) return;
   state.archive = state.archive.filter(x=>x.id!==currentArcViewId);
   await storageSet('archive', state.archive);
-  closeModal('modalArcView');
-  renderArchive();
+  backToArchiveList();
 });
 
 let arcPage=1;
@@ -7682,6 +7699,10 @@ function openArcView(item){
   const subTx = (item.subtitle||'').trim();
   subEl.innerText = subTx;
   subEl.style.display = subTx ? '' : 'none';
+  /* 부제목이 없으면 가운뎃점도 함께 숨깁니다 — 안 그러면 날짜 앞에
+     점 하나가 덩그러니 남습니다. */
+  const dot = document.getElementById('arcViewMetaDot');
+  if(dot) dot.style.display = subTx ? '' : 'none';
   document.getElementById('arcViewDate').innerText=item.date||'';
   const viewEl = document.getElementById('arcViewContent');
   const paintBody = ()=>{ viewEl.innerHTML = imgUrl(item.content); decorateContent(viewEl); };
@@ -7703,7 +7724,11 @@ function openArcView(item){
   }else{
     attachSection.style.display='none';
   }
-  openModal('modalArcView');
+  arcListPage = arcPage;
+  openDetailView('archive-detail');
+  /* 긴 글을 읽다 나갔다 다른 글로 들어오면 스크롤이 그대로 남아 있습니다 */
+  const body = document.getElementById('arcDetailBody');
+  if(body) body.scrollTop = 0;
 }
 function extractFirstImage(html){
   const m = (html||'').match(/<img[^>]+src="([^"]*)"/i);
@@ -8100,6 +8125,7 @@ function renderArchive(){
         ${folderBlur?'<button type="button" class="an-eye" title="흐림 해제">👁︎</button>':''}
         ${arcSelectMode?`<div class="gallery-check${checked?' checked':''}">${checked?'✓':''}</div>`:''}
         <div class="arc-nai-overlay ${thumb?'':'arc-nai-overlay-static'}"><div class="arc-nai-cap">
+          <div class="arc-nai-no">${displayNo.get(item)||''}</div>
           <div class="arc-nai-title">${escapeHtml(item.title)}</div>
           ${(item.subtitle||'').trim()?`<div class="arc-nai-sub">${escapeHtml(item.subtitle)}</div>`:''}
           ${item.date?`<div class="arc-nai-date">${escapeHtml(item.date)}</div>`:''}
