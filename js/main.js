@@ -46,6 +46,15 @@ function applyEditMode(){
     const p = getCurrentPost();
     if(p) fillPairDetail(p);
   });
+  safely('ARCHIVE 수정', ()=>{
+    /* 보기 모드로 돌아가면 고칠 수 없습니다 — 열려 있던 수정 자리를 접습니다 */
+    if(!isLoggedIn && arcEditing()){
+      exitArcEdit();
+      const item = editingArcId ? state.archive.find(x=>x.id===editingArcId) : null;
+      editingArcId = null;
+      if(item) openArcView(item); else backToArchiveList();
+    }
+  });
   safely('OC 상세', ()=>{
     if(!(currentOcId && ocDetailOpen())) return;
     const o = getCurrentOc();
@@ -1525,12 +1534,6 @@ function guardUnsavedClose(overlayId, getSnapshot){
   overlay.querySelectorAll('.modal-close').forEach(btn=> btn.addEventListener('click', attempt, true));
   overlay.addEventListener('click', (e)=>{ if(e.target===overlay) attempt(e); }, true);
 }
-guardUnsavedClose('modalArcWrite', ()=> JSON.stringify([
-  document.getElementById('arcTitleInput').value,
-  document.getElementById('arcCategoryInput').value,
-  document.getElementById('arcContentEditor').innerHTML,
-  arcAttachments
-]));
 guardUnsavedClose('modalLogWrite', ()=> JSON.stringify([
   document.getElementById('logTitle').value,
   document.getElementById('logContent').innerHTML,
@@ -2537,7 +2540,9 @@ function backToOcList(){
 }
 /* ARCHIVE 는 폴더까지 함께 돌아옵니다 — 폴더는 화면을 옮겨도 그대로 기억되므로
    (currentArcFolderIds) 여기서는 쪽만 되돌리면 됩니다. */
-function backToArchiveList(){
+async function backToArchiveList(){
+  if(arcEditing() && !(await leaveArcEdit())) return;
+  editingArcId = null;
   closeDetailView();
   arcPage = arcListPage;
   renderArchive();
@@ -2964,9 +2969,15 @@ function flattenForFences(root){
     if(node.nodeType === 3){ walkText(node); return; }
     if(node.nodeType !== 1) return;
     if(node.tagName === 'BR'){ text += '\n'; mark(node.parentNode, childIndex(node)+1); return; }
-    const isBlock = BLOCK_TAGS.includes(node.tagName);
+    /* 복사 칸 안은 들여다보지 않습니다. 안에 적힌 글자는 '적은 그대로'가
+       전부라, 펼친 글에 넣지 않으면 백틱(applyCodeFences)도 마크다운
+       (applyMarkdownBlocks)도 별표 서식(applyAutoFormat)도 그 안을 찾지
+       못합니다 — 세 곳을 따로 막지 않고 여기 한 곳만 막는 까닭입니다.
+       바깥에서 보면 글자 없는 블록 하나로 보입니다. */
+    const opaque = node.classList && node.classList.contains('copy-box');
+    const isBlock = BLOCK_TAGS.includes(node.tagName) || opaque;
     if(isBlock) addBoundary(node.parentNode, childIndex(node));
-    Array.from(node.childNodes).forEach(walk);
+    if(!opaque) Array.from(node.childNodes).forEach(walk);
     if(isBlock) addBoundary(node.parentNode, childIndex(node) + 1);
   }
   Array.from(root.childNodes).forEach(walk);
@@ -2990,7 +3001,7 @@ function isLineSeparator(node){
   if(!node || node.nodeType !== 1) return false;
   if(node.tagName === 'BR' || node.tagName === 'IMG') return true;
   if(BLOCK_TAGS.includes(node.tagName)) return true;
-  return node.classList && node.classList.contains('code-block');
+  return node.classList && (node.classList.contains('code-block') || node.classList.contains('copy-box'));
 }
 /* 펜스 글자를 감싼 가장 가까운 블록 요소(el, 예: .fold-body) 안에서, 그 글자가
    속한 '줄'만 골라 경계를 찾습니다 — el 전체가 아닙니다. el 은 흔히 한 줄짜리
@@ -3252,7 +3263,7 @@ function mdBuildHeading(frag, line){
 /* 코드 블록 안의 글은 적은 그대로 보여야 하므로 건드리지 않습니다 */
 function mdInsideCode(point){
   const el = point.container.nodeType === 3 ? point.container.parentNode : point.container;
-  return !!(el && el.closest && el.closest('.code-block'));
+  return !!(el && el.closest && el.closest('.code-block, .copy-box'));
 }
 function applyMarkdownBlocks(root){
   const { text, marks } = flattenForFences(root);
@@ -3348,6 +3359,20 @@ async function copyText(text){
 function initContentBlocks(){
   document.addEventListener('click', async (e)=>{
     if(!(e.target instanceof Element)) return;
+
+    /* 복사 칸의 복사 단추 — 내용 칸의 글자만 가져갑니다(제목은 무엇인지
+       알려주는 이름표라, 붙여넣을 곳에는 필요 없는 경우가 많습니다). */
+    const cbBtn = e.target.closest('.cb-copy');
+    if(cbBtn){
+      e.preventDefault(); e.stopPropagation();
+      const box = cbBtn.closest('.copy-box');
+      const body = box && box.querySelector('.cb-body');
+      const label = cbBtn.innerText;
+      const ok = await copyText(body ? body.innerText : '');
+      cbBtn.innerText = ok ? '복사됨' : '실패';
+      setTimeout(()=>{ cbBtn.innerText = label; }, 1200);
+      return;
+    }
 
     const copyBtn = e.target.closest('.code-block-copy');
     if(copyBtn){
@@ -3459,6 +3484,101 @@ function placeCursorAfterBr(sel, br){
   sel.removeAllRanges();
   sel.addRange(r);
 }
+/* ---- 복사 칸을 지우는 키 ----
+   상자 바로 뒤에서 백스페이스를 치면 **상자 하나를 통째로** 지웁니다.
+   그냥 두면 브라우저가 상자 안으로 들어가 마지막 자식(복사 단추)만 지우고
+   커서를 안에 놓아 버립니다 — 단추만 사라지고 상자는 남아, 밖에서는 지울
+   방법이 없어집니다(실제로 그렇게 됐습니다).
+   앞뒤 양쪽에서 같은 일이 일어나므로 Delete 도 함께 받습니다.
+
+   상자 **안쪽** 끝에서 누르는 것도 막습니다. 제목 맨 앞에서 백스페이스를
+   치면 브라우저가 상자를 앞 문단에 합치려 들고, 내용 맨 끝에서 Delete 를
+   치면 복사 단추를 지웁니다. 둘 다 상자를 깨뜨리는 길이라 아무 일도 하지
+   않게 두고, 지우는 것은 바깥에서 하게 합니다. */
+function cbSkipEmptyText(node, back){
+  while(node && node.nodeType === 3 && !node.data) node = back ? node.previousSibling : node.nextSibling;
+  return node;
+}
+/* 커서 바로 앞(back=true) 또는 바로 뒤에 있는 마디를 찾습니다.
+   글자 한가운데면 null — 그때는 브라우저가 알아서 글자를 지웁니다. */
+function cbAdjacentNode(range, root, back){
+  const c = range.startContainer, o = range.startOffset;
+  if(c.nodeType === 3){
+    if(back ? o > 0 : o < c.data.length) return null;
+  }else{
+    const kids = c.childNodes;
+    if(back){ if(o > 0) return cbSkipEmptyText(kids[o-1], true); }
+    else    { if(o < kids.length) return cbSkipEmptyText(kids[o], false); }
+  }
+  /* 그릇의 끝이면 조상을 타고 올라가며 이웃을 찾습니다 */
+  let n = c;
+  while(n && n !== root){
+    const sib = back ? n.previousSibling : n.nextSibling;
+    if(sib) return cbSkipEmptyText(sib, back);
+    n = n.parentNode;
+  }
+  return null;
+}
+function cbIsBox(node){
+  return !!(node && node.nodeType === 1 && node.classList && node.classList.contains('copy-box'));
+}
+/* 커서 옆의 복사 칸을 찾되, **빈 줄은 건너뜁니다.**
+   상자 앞에 줄을 하나 열어 둔 뒤(제목 맨 앞 엔터) 그 줄에서 지우려고 하면
+   커서와 상자 사이에 <br> 이 끼어 있어서, 그냥 이웃만 보면 상자를 못 찾고
+   빈 줄만 지워집니다 — 지우려던 것은 줄이 아니라 상자인데도요.
+   건너뛴 끝에 상자가 없으면 null 을 돌려주므로, 평범한 <br> 지우기는
+   예전 그대로 브라우저가 맡습니다. 상자를 지운 뒤 빈 줄은 남겨 둡니다 —
+   커서가 지금 서 있는 줄이라 같이 없애면 커서가 튑니다. */
+function cbBoxNear(range, root, back){
+  let n = cbAdjacentNode(range, root, back);
+  for(let hop = 0; n && hop <= 2; hop++){
+    if(cbIsBox(n)) return n;
+    const skippable = (n.nodeType === 1 && n.tagName === 'BR')
+                   || (n.nodeType === 3 && !n.data.trim());
+    if(!skippable) return null;
+    n = back ? n.previousSibling : n.nextSibling;
+  }
+  return null;
+}
+/* 칸 안에서 그 끝에 닿아 있는지 — 제목 맨 앞 / 내용 맨 끝 */
+function cbAtEdgeInside(range, back){
+  const el = range.startContainer.nodeType === 3 ? range.startContainer.parentElement : range.startContainer;
+  const field = el && el.closest && el.closest(back ? '.cb-title' : '.cb-body');
+  if(!field) return false;
+  const probe = document.createRange();
+  probe.selectNodeContents(field);
+  if(back) probe.setEnd(range.startContainer, range.startOffset);
+  else     probe.setStart(range.startContainer, range.startOffset);
+  return probe.toString().length === 0 && !probe.cloneContents().querySelector('img,hr,br');
+}
+function initCopyBoxKeys(editorId){
+  const editor = document.getElementById(editorId);
+  if(!editor) return;
+  editor.addEventListener('keydown', (e)=>{
+    if(e.key !== 'Backspace' && e.key !== 'Delete') return;
+    const sel = window.getSelection();
+    if(!sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    if(!range.collapsed) return;              // 골라 놓고 지우는 것은 그대로 둡니다
+    if(!editor.contains(range.startContainer)) return;
+    const back = e.key === 'Backspace';
+
+    if(cbAtEdgeInside(range, back)){ e.preventDefault(); return; }
+
+    const node = cbBoxNear(range, editor, back);
+    if(!node) return;
+    e.preventDefault();
+    /* 지운 자리에 커서를 둡니다 */
+    const parent = node.parentNode;
+    const idx = Array.prototype.indexOf.call(parent.childNodes, node);
+    node.remove();
+    const r2 = document.createRange();
+    r2.setStart(parent, Math.min(idx, parent.childNodes.length));
+    r2.collapse(true);
+    sel.removeAllRanges(); sel.addRange(r2);
+  });
+}
+
 function initFoldEnter(editorId){
   const editor = document.getElementById(editorId);
   if(!editor) return;
@@ -3474,6 +3594,43 @@ function initFoldEnter(editorId){
        막지 못합니다). 안쪽인 인용구가 임자입니다. */
     const inQuote = startEl && startEl.closest('blockquote');
     if(inQuote && editor.contains(inQuote)) return;
+
+    /* 복사 칸 — 제목에서 엔터를 치면 내용 칸으로 내려가고, 내용 칸에서는
+       <br> 만 넣습니다. 그냥 두면 크롬이 칸을 쪼개면서 같은 class 를 물려받은
+       형제를 만들어(.fold-body 가 겪은 그 문제) 상자가 둘로 갈라집니다. */
+    const cbTitle = startEl && startEl.closest('.cb-title');
+    if(cbTitle && editor.contains(cbTitle)){
+      e.preventDefault();
+      const box = cbTitle.closest('.copy-box');
+      /* 제목 **맨 앞**에서 친 엔터는 상자 앞에 줄을 하나 엽니다.
+         상자가 글의 맨 처음에 있으면 그 앞에 커서를 둘 자리가 아예 없어서,
+         앞에 글을 적을 방법이 없었습니다(상자를 지웠다 다시 넣는 수밖에).
+         커서는 새 <br> **앞**에 둡니다 — 거기서 글자를 치면 새 첫 줄이 되고
+         상자는 아래로 내려갑니다. ('마지막 마디 뒤'가 아니라 '어떤 마디 앞'이
+         브라우저가 확실하게 다루는 자리입니다 — placeCursorAfterBr 주석 참고.) */
+      if(cbAtEdgeInside(range, true)){
+        const br = document.createElement('br');
+        box.parentNode.insertBefore(br, box);
+        const r0 = document.createRange();
+        r0.setStartBefore(br); r0.collapse(true);
+        sel.removeAllRanges(); sel.addRange(r0);
+        return;
+      }
+      const body = box.querySelector('.cb-body');
+      const r2 = document.createRange();
+      r2.selectNodeContents(body); r2.collapse(true);
+      sel.removeAllRanges(); sel.addRange(r2);
+      return;
+    }
+    const cbBody = startEl && startEl.closest('.cb-body');
+    if(cbBody && editor.contains(cbBody)){
+      e.preventDefault();
+      range.deleteContents();
+      const br = document.createElement('br');
+      range.insertNode(br);
+      placeCursorAfterBr(sel, br);
+      return;
+    }
 
     const title = startEl && startEl.closest('.fold-title');
     if(title && editor.contains(title)){
@@ -3499,6 +3656,49 @@ function initFoldEnter(editorId){
       placeCursorAfterBr(sel, br);
     }
   });
+}
+
+/* ---- 복사 칸 ----
+   프롬프트처럼 '적은 그대로 가져다 쓰는 글'을 담는 상자입니다.
+   백틱 코드블록과 겹쳐 보이지만 하는 일이 다릅니다 — 코드블록은 글을 쓰고
+   나서 ``` 로 감싸면 **그릴 때** 상자로 바뀌는 것이고, 이 칸은 단추로 넣는
+   **진짜 마크업**이라 제목 줄을 따로 가질 수 있고 안에 무엇을 적든(백틱을
+   포함해서) 손대지 않습니다.
+
+   구조는 접기(.fold-block)와 같습니다 — 껍데기는 그대로 편집 가능하게 두고
+   복사 단추만 contenteditable="false" 로 막습니다. 껍데기까지 막으면 제목과
+   내용에 커서가 들어가지 못합니다.
+
+   저장되는 것은 이 마크업 그대로입니다(코드블록처럼 그릴 때 만들어내는 것이
+   아닙니다). 그래서 editorHtml 이 따로 손볼 것이 없습니다. */
+function insertCopyBox(editorId){
+  const editor = document.getElementById(editorId);
+  if(!editor) return;
+  editor.focus();
+  const sel = window.getSelection();
+  let range = (sel.rangeCount && editor.contains(sel.getRangeAt(0).commonAncestorContainer))
+    ? sel.getRangeAt(0) : null;
+  if(!range){
+    range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(false);
+  }
+  range.deleteContents();
+
+  const box = document.createElement('div');
+  box.className = 'copy-box';
+  box.innerHTML = '<div class="cb-title"></div><div class="cb-body"></div>'
+    + '<button type="button" class="cb-copy" contenteditable="false">복사하기</button>';
+  const frag = document.createDocumentFragment();
+  frag.appendChild(box);
+  frag.appendChild(document.createElement('br'));
+  range.insertNode(frag);
+
+  /* 넣자마자 제목에 커서를 둡니다 */
+  const t = box.querySelector('.cb-title');
+  const r2 = document.createRange();
+  r2.selectNodeContents(t); r2.collapse(true);
+  sel.removeAllRanges(); sel.addRange(r2);
 }
 
 /* 인용구 삽입 (ARCHIVE·OC 자유 텍스트가 함께 씁니다).
@@ -4046,9 +4246,12 @@ let currentLogViewId = null;
     document.execCommand('foreColor', false, e.target.value);
   });
   /* 접기 — ARCHIVE 편집기와 같은 블록을 넣습니다 */
+  const cbBtn2 = document.getElementById('logCopyBoxBtn');
+  if(cbBtn2) cbBtn2.addEventListener('click', ()=> insertCopyBox('logContent'));
   const foldBtn = document.getElementById('logFoldBtn');
   if(foldBtn) foldBtn.addEventListener('click', ()=> insertFoldBlock('logContent'));
   initFoldEnter('logContent');
+  initCopyBoxKeys('logContent');
   /* 사진 삽입 — ARCHIVE 편집기와 같은 방식(본문 안에 data URL 로 넣습니다) */
   const imgBtn = document.getElementById('logInsertImageBtn');
   if(imgBtn) imgBtn.addEventListener('click', ()=>{
@@ -6923,6 +7126,7 @@ function bindFreeToolbar(toolbar, editorId, save){
   on('fold',     ()=> insertFoldBlock(editorId));
   on('divider',  ()=>{ editor.focus(); document.execCommand('insertHTML', false, '<hr><br>'); });
   initFoldEnter(editorId);
+  initCopyBoxKeys(editorId);
   initBlockquoteKeys(editorId);
 }
 
@@ -7198,10 +7402,42 @@ if(ocSelectDeleteBtnEl) ocSelectDeleteBtnEl.addEventListener('click', async ()=>
 let editingArcId = null;
 let arcAttachments = [];
 
+/* ---- 수정 모드 ----
+   창을 띄우지 않고 지금 보고 있는 화면을 그대로 고치는 자리로 바꿉니다.
+   갈리는 것은 <section> 에 붙는 .arcd-editing 하나뿐입니다 — 제목·부제목이
+   입력칸으로, 본문이 편집기로, ⋮ 가 취소·게시로 바뀝니다.
+   자리는 그대로이므로 무엇이 달라졌는지 눈으로 좇을 수 있습니다. */
+function arcDetailEl(){ return document.getElementById('view-archive-detail'); }
+function arcEditing(){ return !!arcDetailEl()?.classList.contains('arcd-editing'); }
+
+/* 저장하지 않고 나가려 할 때 물어보기 위한 기준선.
+   예전에는 guardUnsavedClose 가 창의 ✕ 와 바깥 클릭만 지켰는데, 화면에는
+   그 둘이 없으므로 취소·뒤로·Escape 세 곳이 이 함수를 지나가게 했습니다. */
+let arcEditBaseline = null;
+function arcEditSnapshot(){
+  return JSON.stringify([
+    document.getElementById('arcTitleInput').value,
+    document.getElementById('arcSubtitleInput').value,
+    document.getElementById('arcCategoryInput').value,
+    document.getElementById('arcContentEditor').innerHTML,
+    arcAttachments
+  ]);
+}
+function arcEditDirty(){ return arcEditBaseline !== null && arcEditSnapshot() !== arcEditBaseline; }
+function exitArcEdit(){
+  arcEditBaseline = null;
+  arcDetailEl()?.classList.remove('arcd-editing');
+}
+/* 나가도 되는지 묻고, 되면 수정 모드를 끕니다. 취소·뒤로·Escape 공용. */
+async function leaveArcEdit(){
+  if(arcEditDirty() && !(await siteConfirm('저장하지 않은 내용이 있어요. 그래도 나갈까요?', '나가기'))) return false;
+  exitArcEdit();
+  return true;
+}
+
 /* fillLogEditor 과 같은 이유로, 사진·첨부가 다 온 뒤에 채웁니다 */
-async function openArcWriteModal(existingItem){
+async function enterArcEdit(existingItem){
   editingArcId = existingItem ? existingItem.id : null;
-  document.getElementById('arcWriteHeading').innerText = existingItem ? '게시글 수정' : '글쓰기';
   document.getElementById('arcCategoryInput').value = existingItem ? (existingItem.category||'ooc') : currentArchiveCategory;
   document.getElementById('arcTitleInput').value = existingItem ? existingItem.title : '';
   /* 부제목은 없어도 되는 칸입니다. 예전에 쓴 글에는 이 값 자체가 없으므로
@@ -7211,23 +7447,43 @@ async function openArcWriteModal(existingItem){
   editorEl.innerHTML = '';
   arcAttachments = [];
   renderArcAttachList();
-  openModal('modalArcWrite');
+  arcDetailEl().classList.add('arcd-editing');
+  arcEditBaseline = null;
+  document.getElementById('arcDetailBody').scrollTop = 0;
   if(existingItem && !(await window.SiteStore.ensure([existingItem.content, existingItem.files || []]))){
     /* fillLogEditor 과 같은 이유 — 빈 자리로 채운 뒤 저장하면 사진이 사라집니다 */
-    closeModal('modalArcWrite');
-    alert('사진을 다 불러오지 못했어요. 이대로 수정하면 사진이 사라질 수 있어서 창을 닫았습니다.\n인터넷 연결을 확인하고 다시 열어주세요.');
+    exitArcEdit();
+    alert('사진을 다 불러오지 못했어요. 이대로 수정하면 사진이 사라질 수 있어서 수정을 그만둡니다.\n인터넷 연결을 확인하고 다시 열어주세요.');
     return;
   }
   if(editingArcId !== (existingItem ? existingItem.id : null)) return;   // 그 사이 다른 글을 열었으면 그만
   editorEl.innerHTML = existingItem ? imgUrl(existingItem.content) : '';
   arcAttachments = existingItem && existingItem.files ? existingItem.files.slice() : [];
   renderArcAttachList();
-  document.getElementById('modalArcWrite')._armUnsavedGuard?.();
+  arcEditBaseline = arcEditSnapshot();
 }
 
+/* 새 글도 같은 화면에서 씁니다. 빈 글 화면이 수정 모드로 열리고, 게시를
+   눌러야 실제로 만들어집니다 — 취소하면 아무것도 남지 않습니다. */
 document.getElementById('addArchiveBtn').addEventListener('click', ()=>{
   if(!isLoggedIn) return;
-  openArcWriteModal(null);
+  arcListPage = arcPage;
+  openDetailView('archive-detail');
+  document.getElementById('arcViewTitle').innerText = '';
+  document.getElementById('arcViewSub').innerText = '';
+  document.getElementById('arcViewDate').innerText = '';
+  document.getElementById('arcViewContent').innerHTML = '';
+  document.getElementById('arcViewAttachSection').style.display = 'none';
+  enterArcEdit(null);
+});
+
+/* 취소 — 고치던 글이 있으면 그 글을 읽는 자리로, 새 글이었으면 목록으로 */
+document.getElementById('arcCancelBtn').addEventListener('click', async ()=>{
+  const id = editingArcId;
+  if(!(await leaveArcEdit())) return;
+  editingArcId = null;
+  const item = id ? state.archive.find(x=>x.id===id) : null;
+  if(item) openArcView(item); else backToArchiveList();
 });
 
 document.querySelectorAll('.rt-toolbar-arc button[data-cmd]').forEach(btn=>{
@@ -7250,6 +7506,7 @@ document.getElementById('arcColorInput').addEventListener('input', (e)=>{
 
 initBlockquoteKeys('arcContentEditor');
 /* 구분선 삽입 (LOG 편집기와 같은 방식) */
+document.getElementById('arcCopyBoxBtn')?.addEventListener('click', ()=> insertCopyBox('arcContentEditor'));
 const arcDividerBtn = document.getElementById('arcDividerBtn');
 if(arcDividerBtn){
   arcDividerBtn.addEventListener('mousedown', e=> e.preventDefault());
@@ -7266,6 +7523,7 @@ if(arcFoldBtn){
   arcFoldBtn.addEventListener('click', ()=> insertFoldBlock('arcContentEditor'));
 }
 initFoldEnter('arcContentEditor');
+initCopyBoxKeys('arcContentEditor');
 
 /* 이미지 삽입 + 삽입 후 삭제/이동 툴바 */
 document.getElementById('arcInsertImageBtn').addEventListener('click', ()=>{
@@ -7615,9 +7873,16 @@ bindOnce(document.getElementById('saveArcBtn'), async ()=>{
     await storageSet('archiveSeqCounter', state.archiveSeqCounter);
   }
   await storageSet('archive', state.archive);
-  arcPage=1;
+  /* 새 글은 목록 첫 쪽으로 (맨 앞에 옵니다). 고친 글은 보던 쪽 그대로 둡니다. */
+  if(!editingArcId) arcPage = 1;
+  const savedId = editingArcId || state.archive[state.archive.length-1].id;
+  exitArcEdit();
+  editingArcId = null;
   renderArchive();
-  closeModal('modalArcWrite');
+  /* 고친 결과를 바로 읽는 자리로 — 창을 닫고 목록으로 튕겨 나가던 예전과
+     달리, 방금 무엇이 달라졌는지 그 자리에서 보입니다. */
+  const saved = state.archive.find(x=>x.id===savedId);
+  if(saved) openArcView(saved); else backToArchiveList();
 });
 
 const arcKebabBtn = document.getElementById('arcKebabBtn');
@@ -7635,9 +7900,7 @@ document.getElementById('arcEditBtn').addEventListener('click', ()=>{
   if(!isLoggedIn || !currentArcViewId) return;
   const item = state.archive.find(x=>x.id===currentArcViewId);
   if(!item) return;
-  /* 글쓰기/수정은 창 그대로입니다. 뒤에 상세 화면을 띄워 둔 채 그 위에
-     열리므로, 저장하고 닫으면 방금 고친 글이 그대로 보입니다. */
-  openArcWriteModal(item);
+  enterArcEdit(item);
 });
 document.getElementById('arcPinBtn').addEventListener('click', async ()=>{
   arcKebabMenu.classList.remove('open');

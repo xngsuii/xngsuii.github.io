@@ -64,7 +64,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
-<link rel="stylesheet" href="css/style.css?v=133" />
+<link rel="stylesheet" href="css/style.css?v=140" />
 </head>
 <body>
 <div class="app-window">
@@ -206,14 +206,18 @@
         <div class="home-page" id="home-intro-page">
           <div class="home-grid">
 
-            <!-- 1행 (52px) — 전부 빈 칸 -->
-            <div class="hg-cell"></div>
+            <!-- 1행 (52px) — 전부 빈 칸.
+                 셋째 칸은 오른쪽 선을 긋지 않습니다(hg-r) — 배너 바로 위에서
+                 짧은 세로 토막 하나만 남아 어디에도 이어지지 않았습니다. -->
             <div class="hg-cell"></div>
             <div class="hg-cell"></div>
             <div class="hg-cell hg-r"></div>
+            <div class="hg-cell hg-r"></div>
 
-            <!-- 2행 — 배너 사진이 가운데 두 칸 -->
-            <div class="hg-cell"></div>
+            <!-- 2행 — 배너 사진이 가운데 두 칸.
+                 맨 왼쪽 좁은 칸은 아래 선을 긋지 않습니다(hg-b) — 배너 왼쪽으로
+                 삐져나온 짧은 가로 토막이 되어 격자를 어지럽혔습니다. -->
+            <div class="hg-cell hg-b"></div>
             <div class="hg-cell hg-span2 adjustable-img intro-banner" id="introBannerBox">
               <div class="adj-layer"></div>
               <button class="adj-empty" data-editonly>＋ 배너 이미지</button>
@@ -244,7 +248,9 @@
                 </div>
               </div>
             </div>
-            <div class="hg-cell hg-r"></div>
+            <!-- 오른쪽 넓은 칸은 아래 선도 긋지 않습니다(hg-b) — 소개글 오른쪽으로
+                 길게 뻗어 나가 아래 빈 칸들과 이어지지 않는 선이었습니다. -->
+            <div class="hg-cell hg-r hg-b"></div>
 
             <!-- 4행 — 셋째 칸 오른쪽 위에 로그인 단추, 나머지는 빈 칸 -->
             <div class="hg-cell hg-b"></div>
@@ -804,21 +810,27 @@
     </section>
 
     <!-- ================= ARCHIVE 글 =================
-         PAIR·OC 와 같이, 떠 있는 창이 아니라 본 패널 안의 한 화면입니다.
-         이 글에는 헤더 사진이 따로 없으므로 배너 없이 상단바만 씁니다. -->
+         읽기와 수정이 같은 화면입니다. 예전에는 읽기도 창, 수정도 또 다른 창이라
+         같은 글을 두 가지
+         모양으로 보는 셈이라, 고치고 나면 방금 무엇이 달라졌는지 알기
+         어려웠습니다. 지금은 자리가 그대로이고 글자만 고쳐집니다.
+         수정 모드는 이 <section> 에 붙는 .arcd-editing 하나로 갈립니다. -->
     <section class="view detail-view arc-detail-view" id="view-archive-detail">
-      <!-- 상단바는 칸 전체 폭을 씁니다. 좁히는 것은 아래 글칸뿐입니다. -->
       <div class="topbar arc-detail-bar">
         <div class="arcd-left">
           <button type="button" class="dt-back arcd-back" id="arcBackBtn" title="목록으로">←</button>
           <div class="arcd-titles">
+            <!-- 읽을 때 -->
             <h3 id="arcViewTitle"></h3>
-            <!-- 부제목 · 날짜 한 줄. 부제목이 비면 main.js 가 가운뎃점까지 함께 숨깁니다. -->
             <div class="arcd-meta">
               <span id="arcViewSub"></span>
               <span class="arcd-dot" id="arcViewMetaDot">·</span>
               <span id="arcViewDate"></span>
             </div>
+            <!-- 고칠 때. 읽을 때의 제목·부제목과 같은 크기·같은 자리라
+                 모드가 바뀌어도 글자가 튀지 않습니다. -->
+            <input type="text" class="arcd-title-input" id="arcTitleInput" placeholder="제목" />
+            <input type="text" class="arcd-sub-input" id="arcSubtitleInput" placeholder="부제목 (없으면 비워두세요)" />
           </div>
         </div>
         <button class="arc-kebab-btn" id="arcKebabBtn" data-editonly title="더보기">⋮</button>
@@ -827,16 +839,60 @@
           <button type="button" id="arcEditBtn">수정</button>
           <button type="button" id="arcDeleteBtn">삭제</button>
         </div>
+        <!-- 취소·게시는 ⋮ 가 있던 자리에 들어섭니다 -->
+        <div class="arcd-actions">
+          <button type="button" class="btn-ghost" id="arcCancelBtn">취소</button>
+          <button type="button" class="btn-primary" id="saveArcBtn">게시</button>
+        </div>
       </div>
-      <!-- 스크롤되는 것은 이 칸뿐입니다 — 위 제목줄은 그대로 서 있습니다.
-           칸은 폭 전체를 쓰고, 안의 글만 620px 로 좁혀 가운데에 둡니다.
-           (가로대가 글 옆이 아니라 칸 맨 오른쪽 끝에 서게 하려는 것이기도 합니다.) -->
+
+      <!-- 글쓰기 단추줄 — 수정 모드에만 나옵니다. 줄은 칸 전체 폭을 쓰되
+           단추는 늘리지 않고 왼쪽에 그대로 모읍니다. 카테고리 고르개만
+           오른쪽 끝에 따로 섭니다. -->
+      <div class="arcd-toolbar">
+        <div class="rt-toolbar rt-toolbar-arc">
+          <button type="button" data-cmd="bold"><b>B</b></button>
+          <button type="button" data-cmd="italic"><i>I</i></button>
+          <button type="button" data-cmd="underline"><u>U</u></button>
+          <button type="button" data-cmd="strikeThrough"><s>S</s></button>
+          <input type="color" class="rt-color" id="arcColorInput" value="#1a1a1a" title="글자색" />
+          <span class="rt-sep"></span>
+          <!-- 정렬 아이콘: 맞는 기호가 없어 얇은 선 네 줄로 직접 그립니다.
+               긴 줄/짧은 줄이 번갈아 나오고, 짧은 줄이 붙는 쪽이 정렬 방향입니다. -->
+          <button type="button" data-cmd="justifyLeft" title="왼쪽 정렬"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3h13M1.5 6.5h8M1.5 10h13M1.5 13.5h8"/></svg></button>
+          <button type="button" data-cmd="justifyCenter" title="가운데 정렬"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3h13M4 6.5h8M1.5 10h13M4 13.5h8"/></svg></button>
+          <button type="button" data-cmd="justifyRight" title="오른쪽 정렬"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3h13M6.5 6.5h8M1.5 10h13M6.5 13.5h8"/></svg></button>
+          <button type="button" id="arcFoldBtn" title="접기">▾</button>
+          <button type="button" data-cmd="blockquote" title="인용구">❝</button>
+          <button type="button" id="arcDividerBtn" title="구분선">―</button>
+        <button type="button" id="arcCopyBoxBtn" title="복사 칸"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.2 5.4V2.2h3.2M10.6 2.2h3.2v3.2M13.8 10.6v3.2h-3.2M5.4 13.8H2.2v-3.2M5.2 6.6h5.6M5.2 9.4h3.6"/></svg></button>
+          <span class="rt-sep"></span>
+          <button type="button" id="arcInsertImageBtn" title="사진 삽입">🖼</button>
+          <button type="button" id="arcInsertFileBtn" title="파일 삽입">📎</button>
+        </div>
+        <label class="arcd-cat">
+          <span>카테고리</span>
+          <select id="arcCategoryInput">
+            <option value="ooc">OOC</option>
+            <option value="nai">PROMPT</option>
+            <option value="etc">ETC</option>
+          </select>
+        </label>
+      </div>
+
+      <!-- 스크롤되는 것은 이 칸뿐입니다 — 위 제목줄과 단추줄은 그대로 서 있습니다.
+           칸은 폭 전체를 쓰고, 안의 글만 620px 로 좁혀 가운데에 둡니다. -->
       <div class="arc-detail-body" id="arcDetailBody">
         <div class="arc-detail-col">
           <div class="profile-view-text arc-view-content" id="arcViewContent"></div>
+          <div class="profile-view-text arc-editor" id="arcContentEditor" contenteditable="true"></div>
           <div class="arc-attach-section" id="arcViewAttachSection" style="display:none;">
             <div class="arc-attach-label">첨부 파일</div>
             <div class="arc-attach-list" id="arcViewAttachList"></div>
+          </div>
+          <div class="arc-attach-section" id="arcEditAttachSection">
+            <div class="arc-attach-label">첨부 파일</div>
+            <div class="arc-attach-list" id="arcAttachList"></div>
           </div>
         </div>
       </div>
@@ -873,6 +929,7 @@
         <button type="button" id="logSubColorBtn" title="보조색 적용">A</button>
         <button type="button" id="logHighlightBtn" title="형광펜">✎</button>
         <button type="button" id="logDividerBtn" title="구분선">―</button>
+        <button type="button" id="logCopyBoxBtn" title="복사 칸"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.2 5.4V2.2h3.2M10.6 2.2h3.2v3.2M13.8 10.6v3.2h-3.2M5.4 13.8H2.2v-3.2M5.2 6.6h5.6M5.2 9.4h3.6"/></svg></button>
         <button type="button" id="logFoldBtn" title="접기">▾</button>
         <button type="button" id="logInsertImageBtn" title="사진 삽입">🖼</button>
         <span class="rt-sep"></span>
@@ -906,50 +963,6 @@
 </div>
 
 <!-- Archive write / view modals -->
-<div class="modal-overlay" id="modalArcWrite">
-  <div class="modal wide arc-modal">
-    <button class="modal-close" data-close>✕</button>
-    <h3 id="arcWriteHeading">글쓰기</h3>
-    <div class="form-row"><label>카테고리</label>
-      <select id="arcCategoryInput">
-        <option value="ooc">OOC</option>
-        <option value="nai">PROMPT</option>
-        <option value="etc">ETC</option>
-      </select>
-    </div>
-    <div class="form-row"><input type="text" id="arcTitleInput" placeholder="제목" /></div>
-    <!-- 부제목은 없어도 되는 칸입니다. 비워두면 상세 창에서 줄 자체가 사라지고,
-         목록(표·격자)에는 원래부터 나오지 않습니다 — 예외로 PROMPT 격자에서
-         썸네일에 마우스를 올렸을 때만 제목 아래에 함께 뜹니다. -->
-    <div class="form-row"><input type="text" id="arcSubtitleInput" placeholder="부제목 (없으면 비워두세요)" /></div>
-    <div class="rt-toolbar rt-toolbar-arc">
-      <button type="button" data-cmd="bold"><b>B</b></button>
-      <button type="button" data-cmd="italic"><i>I</i></button>
-      <button type="button" data-cmd="underline"><u>U</u></button>
-      <button type="button" data-cmd="strikeThrough"><s>S</s></button>
-      <input type="color" class="rt-color" id="arcColorInput" value="#1a1a1a" title="글자색" />
-      <span class="rt-sep"></span>
-      <!-- 정렬 아이콘: 맞는 기호가 없어 얇은 선 네 줄로 직접 그립니다.
-           긴 줄/짧은 줄이 번갈아 나오고, 짧은 줄이 붙는 쪽이 정렬 방향입니다. -->
-      <button type="button" data-cmd="justifyLeft" title="왼쪽 정렬"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3h13M1.5 6.5h8M1.5 10h13M1.5 13.5h8"/></svg></button>
-      <button type="button" data-cmd="justifyCenter" title="가운데 정렬"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3h13M4 6.5h8M1.5 10h13M4 13.5h8"/></svg></button>
-      <button type="button" data-cmd="justifyRight" title="오른쪽 정렬"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3h13M6.5 6.5h8M1.5 10h13M6.5 13.5h8"/></svg></button>
-      <button type="button" id="arcFoldBtn" title="접기">▾</button>
-      <button type="button" data-cmd="blockquote" title="인용구">❝</button>
-      <button type="button" id="arcDividerBtn" title="구분선">―</button>
-      <span class="rt-sep"></span>
-      <button type="button" id="arcInsertImageBtn" title="사진 삽입">🖼</button>
-      <button type="button" id="arcInsertFileBtn" title="파일 삽입">📎</button>
-    </div>
-    <div class="profile-view-text arc-editor" id="arcContentEditor" contenteditable="true"></div>
-    <div class="arc-attach-section">
-      <div class="arc-attach-label">첨부 파일</div>
-      <div class="arc-attach-list" id="arcAttachList"></div>
-    </div>
-    <div class="form-actions"><button class="btn-ghost" data-close>취소</button><button class="btn-primary" id="saveArcBtn">게시</button></div>
-  </div>
-</div>
-
 <!-- 노래 관리 (편집 모드에서 사이드바 위젯의 ＋) -->
 <div class="modal-overlay" id="modalMusic">
   <div class="modal">
@@ -1144,7 +1157,7 @@
        (그 목록을 만드는 것도 JS인데 새 CSS 가 감싸이지 않은 select 를 폭 0 으로
        접습니다), 스티커 서랍이 엉뚱한 자리에 놓였습니다.
        **CSS 와 JS 를 함께 고쳤으면 번호도 함께 올리세요.** -->
-<script src="js/main.js?v=133"></script>
+<script src="js/main.js?v=140"></script>
 <script type="module" src="js/firebase-store.js?v=115"></script>
 </body>
 </html>

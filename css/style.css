@@ -1274,16 +1274,10 @@
   .confirm-modal .form-actions{margin-top:18px;}
   /* 로그인 창은 입력 항목이 두 개뿐이라 좁게 */
   .modal.login-modal{max-width:416px;}
+  /* .arc-modal 은 ARCHIVE 의 두 창이 함께 쓰던 이름입니다. 읽기도 쓰기도
+     화면으로 옮겨 가 지금은 아무도 쓰지 않지만, 폭 규칙만 남겨 둡니다 —
+     같은 이름으로 창을 다시 만들 일이 있으면 그때 기준이 됩니다. */
   .modal.wide.arc-modal{max-width:580px;}
-  /* 세로로 꽉 채우는 배치 — .arc-editor 가 남는 높이를 전부 가져가서(flex:1),
-     본문이 짧을 때도 길 때도 모달 전체 높이가 항상 (거의) 88vh 에 맞춰집니다.
-     그래야 글 보기 창과 글 수정 창의 높이가 비슷해집니다 — 예전에는 .arc-editor
-     에만 고정 max-height(320px)를 줘서 수정 창이 보기 창보다 훨씬 짧았습니다.
-     반드시 '글쓰기/수정' 창에만 걸어야 합니다 — 보기 창(#modalArcView)도 같은
-     .arc-modal 클래스를 쓰는데, 거기에 flex 를 걸면 본문(.arc-view-content)이
-     flex 아이템이 되어 눌려버리고, 창 전체가 스크롤되던 것이 본문 안쪽 스크롤로
-     바뀝니다. 보기 창은 예전처럼 .modal 기본값(창 전체 스크롤)을 그대로 씁니다. */
-  #modalArcWrite .modal.wide.arc-modal{display:flex;flex-direction:column;}
   .modal h3{margin:0 0 16px;font-family:var(--mono);font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
   .modal-close{position:absolute;top:14px;right:14px;background:rgba(255,255,255,.9);border:1px solid var(--border);width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text);z-index:10;}
   .form-row{margin-bottom:12px;}
@@ -1748,6 +1742,98 @@
      (아래 .arc-view-content 등의 규칙). 문단 안에서 저절로 넘어간 줄은
      줄 높이 그대로 20px 입니다. */
   .fold-body ~ .fold-body{margin-top:4px;}
+
+  /* ============================================================
+     복사 칸 (.copy-box)
+     ============================================================
+     프롬프트처럼 '적은 그대로 가져다 쓰는 글'을 담습니다.
+     백틱 코드블록과는 다른 것입니다 — 저건 ``` 로 감싼 글을 그릴 때 상자로
+     바꿔 주는 것이고, 이건 단추로 넣는 진짜 마크업이라 제목 줄을 따로
+     가지며 안에 무엇을 적든(백틱을 포함해서) 서식이 걸리지 않습니다.
+     그 '걸리지 않음'은 CSS 가 아니라 main.js 의 flattenForFences 가
+     이 상자 안을 아예 들여다보지 않는 것으로 만듭니다.
+
+     서체는 갈무리11 고정입니다. 11px 로 그리도록 만들어진 비트맵 계열이라
+     **글자 크기를 11px 에서 바꾸면 흐려집니다**(배수인 22px 은 괜찮습니다).
+     내려받기는 jsDelivr 에서 하고, @font-face 만 적어 두면 실제로 이 상자가
+     화면에 나오기 전까지는 한 바이트도 받지 않습니다 — 브라우저가 쓰이는
+     순간에만 가져오기 때문입니다(둘 합쳐 654KB 라 이 게으름이 중요합니다). */
+  @font-face{
+    font-family:'Galmuri11';
+    src:url('https://cdn.jsdelivr.net/npm/galmuri@2.40.3/dist/Galmuri11.woff2') format('woff2');
+    font-weight:400;font-style:normal;font-display:swap;
+  }
+  @font-face{
+    font-family:'Galmuri11';
+    src:url('https://cdn.jsdelivr.net/npm/galmuri@2.40.3/dist/Galmuri11-Bold.woff2') format('woff2');
+    font-weight:700;font-style:normal;font-display:swap;
+  }
+
+  /* 네 모서리의 검은 「 」 는 지면의 재단선과 같은 방법으로 그립니다 —
+     짧은 획 여덟 개를 배경으로 얹고 자리는 background-position 이 잡습니다.
+     테두리를 두르지 않는 까닭: 연한 회색 면과 검은 선이 함께 있으면 상자가
+     본문보다 먼저 읽힙니다. 모서리 표시만으로도 '여기까지'가 충분히 보입니다. */
+  /* 바탕은 --surface-2(#f1f0ee)보다 한 단 연한 #f6f5f2 입니다. 이 상자는
+     본문 안에 여러 번 나오므로, 회색이 조금만 진해도 글보다 상자가 먼저
+     읽힙니다. 색 이름을 쓰지 않고 값을 직접 적은 까닭 — --surface-2 는
+     사이드바·빈 썸네일과 함께 쓰는 색이라 여기 때문에 옮기면 안 됩니다.
+     아래 여백 34px 은 상자 **바깥** 아래에 놓인 복사 단추의 자리입니다. */
+  .copy-box{position:relative;margin:12px 0 34px;padding:13px 15px;
+    background-color:#f6f5f2;
+    background-repeat:no-repeat;
+    background-image:
+      linear-gradient(var(--border),var(--border)),
+      linear-gradient(var(--border),var(--border)),
+      linear-gradient(var(--border),var(--border)),
+      linear-gradient(var(--border),var(--border)),
+      linear-gradient(var(--border),var(--border)),
+      linear-gradient(var(--border),var(--border)),
+      linear-gradient(var(--border),var(--border)),
+      linear-gradient(var(--border),var(--border));
+    background-position:0 0, 0 0, 100% 0, 100% 0, 0 100%, 0 100%, 100% 100%, 100% 100%;
+    background-size:1px 12px, 12px 1px, 1px 12px, 12px 1px, 1px 12px, 12px 1px, 1px 12px, 12px 1px;
+    font-family:'Galmuri11','Pretendard Variable',monospace;}
+  /* 접기 안에 들어갔을 때는 코드블록과 같은 만큼 들여씁니다 */
+  .fold-block > .copy-box{margin-left:20px;}
+
+  /* 제목 앞의 ▪ 은 글자가 아니라 그린 네모입니다 — 글자로 넣으면 지워지거나
+     복사될 수 있고, 서체마다 크기가 달라집니다. */
+  .cb-title{font-family:inherit;font-size:11px;font-weight:700;line-height:1.7;
+    color:var(--text);outline:none;margin-bottom:7px;word-break:break-word;}
+  .cb-title::before{content:'';display:inline-block;width:5px;height:5px;
+    background:var(--text);margin-right:6px;vertical-align:middle;position:relative;top:-1px;}
+  /* 제목이 비면 줄 자체가 사라집니다 — 이름표가 필요 없는 상자도 있습니다.
+     자리를 알려 주는 글자는 **편집기 안에서만** 띄웁니다. body.logged-in 만으로
+     가르면 글을 읽는 중에도(글쓴이는 대개 로그인해 있으므로) 빈 제목 자리에
+     '제목'이 회색으로 떠 있게 됩니다. */
+  .cb-title:empty{display:none;}
+  body.logged-in .arc-editor .cb-title:empty,
+  body.logged-in .log-editor .cb-title:empty{display:block;}
+  /* ::before 는 네모가 쓰므로 자리표시 글자는 ::after 로 답니다 —
+     '▪ 제목' 으로 나란히 보입니다. */
+  body.logged-in .arc-editor .cb-title:empty::after,
+  body.logged-in .log-editor .cb-title:empty::after{content:'제목';color:var(--text-muted);opacity:.7;font-weight:400;}
+  .cb-body{font-family:inherit;font-size:11px;font-weight:400;line-height:1.75;
+    color:var(--text);outline:none;white-space:pre-wrap;word-break:break-word;min-height:1.75em;}
+  body.logged-in .arc-editor .cb-body:empty:before,
+  body.logged-in .log-editor .cb-body:empty:before{content:'여기에 붙여넣을 글을 적어보세요';
+    color:var(--text-muted);opacity:.7;}
+
+  /* 복사 단추는 상자의 내용이 아니라 손잡이라, 갈무리가 아니라 이 사이트의
+     서체를 씁니다(다른 단추들과 같은 몸).
+     자리는 상자 **바깥** 아래 가운데입니다. 그런데 마크업으로는 여전히 상자의
+     자식입니다 — 형제로 빼내면 편집기 안에서 상자와 따로 지워지거나 딸려
+     들어갈 수 있어서, 한 덩어리로 두고 자리만 밖으로 내보냅니다
+     (top:100% 가 상자 아래쪽 바깥을 가리킵니다).
+     테두리는 검정이 아니라 연한 회색입니다 — 상자 밖에 홀로 서 있어서
+     검정이면 상자보다 단추가 먼저 읽힙니다. */
+  .cb-copy{position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:9px;
+    font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.06em;
+    line-height:1;padding:6px 12px;border:1px solid var(--rule-soft);border-radius:0;
+    background:var(--bg);color:var(--text-muted);cursor:pointer;white-space:nowrap;
+    transition:background .16s ease,color .16s ease,border-color .16s ease;}
+  .cb-copy:hover{background:var(--text);border-color:var(--text);color:#fff;}
+
   /* 백틱 코드블록은 접기 안에서도 .fold-body 밖(접기의 직계 자식)에 놓일 수
      있습니다 — 펜스가 있던 줄 그릇을 통째로 갈아끼우는 자리라서요(applyCodeFences
      의 localLineBoundary 참고). 그때도 .fold-body 와 같은 만큼 들여써야 사진·글과
@@ -1780,7 +1866,9 @@
   .arcd-left{display:flex;align-items:flex-start;gap:12px;min-width:0;flex:1;}
   /* ← 는 제목의 첫 줄과 눈높이를 맞춥니다(제목이 17px 이라 2px 내립니다) */
   .arcd-back{color:var(--text);margin-top:2px;}
-  .arcd-titles{min-width:0;}
+  /* flex:1 이라야 제목칸이 남는 폭을 다 씁니다. 없으면 입력칸이 브라우저
+     기본 크기(20글자)로 쪼그라들어, 긴 제목을 고칠 때 앞부분만 보입니다. */
+  .arcd-titles{flex:1;min-width:0;}
   /* 목록 상단바의 화면 이름(10px 라벨)과 달리, 여기 제목은 글의 제목입니다 —
      큰 활자가 내용을 가져간다는 이 디자인의 규칙 그대로 굵고 큽니다. */
   .arc-detail-bar h3{margin:0;font-family:var(--mono);font-size:17px;font-weight:800;
@@ -1790,6 +1878,72 @@
     margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
     font-variant-numeric:tabular-nums;}
   .arcd-dot{color:var(--rule-soft);margin:0 6px;}
+
+  /* ---- 읽기 / 수정 두 얼굴 ----
+     같은 화면에서 고칩니다. 갈리는 것은 .arcd-editing 하나뿐이고, 제목과
+     부제목은 읽을 때와 **같은 크기·같은 자리**의 입력칸으로 바뀝니다 —
+     자리가 움직이지 않아야 무엇이 달라졌는지 눈으로 좇을 수 있습니다. */
+  .arcd-title-input,.arcd-sub-input,.arcd-toolbar,.arcd-actions{display:none;}
+  .arcd-editing .arc-detail-bar h3,
+  .arcd-editing .arcd-meta,
+  .arcd-editing .arc-kebab-btn,
+  .arcd-editing .arc-kebab-menu{display:none !important;}
+  .arcd-editing .arcd-title-input{display:block;}
+  .arcd-editing .arcd-sub-input{display:block;}
+  .arcd-editing .arcd-toolbar{display:flex;}
+  .arcd-editing .arcd-actions{display:flex;}
+  /* 읽을 때는 본문, 고칠 때는 편집기 — 둘은 같은 자리에 번갈아 섭니다 */
+  .arc-detail-col > .arc-editor{display:none;}
+  .arcd-editing .arc-detail-col > .arc-view-content{display:none;}
+  .arcd-editing .arc-detail-col > .arc-editor{display:block;}
+  /* 첨부는 읽을 때(목록만)와 고칠 때(삭제 단추 딸린 목록)가 다른 칸입니다 */
+  #arcEditAttachSection{display:none;}
+  .arcd-editing #arcEditAttachSection{display:block;}
+  .arcd-editing #arcViewAttachSection{display:none !important;}
+
+  /* 제목·부제목 입력칸 — 상자도 밑줄도 없이 글자만. 읽을 때의 h3/.arcd-meta 와
+     크기·굵기·자간이 같아야 모드가 바뀌어도 글자가 튀지 않습니다. */
+  .arcd-title-input{font-family:var(--mono);font-size:17px;font-weight:800;
+    letter-spacing:-.02em;line-height:1.25;color:var(--text);
+    width:100%;border:0;outline:none;background:transparent;padding:0;margin:0;}
+  .arcd-sub-input{font-family:var(--mono);font-size:11px;font-weight:300;
+    letter-spacing:0;line-height:1.35;color:var(--text-muted);
+    width:100%;border:0;outline:none;background:transparent;padding:0;margin:2px 0 0;}
+  .arcd-title-input::placeholder,.arcd-sub-input::placeholder{color:var(--rule-soft);}
+  /* 편집 모드의 입력칸 테두리 규칙(body.logged-in .pd-input 등)이 이 둘에
+     닿지 않도록, 여기서 한 번 더 눌러 둡니다 */
+  body.logged-in .arcd-title-input,
+  body.logged-in .arcd-sub-input{border:0;padding:0;}
+
+  /* 취소 · 게시 — ⋮ 가 있던 자리입니다 */
+  .arcd-actions{align-items:center;gap:8px;flex:none;margin-right:6px;}
+
+  /* ---- 글쓰기 단추줄 ----
+     줄은 칸 전체 폭을 쓰지만 단추는 **늘리지 않고 왼쪽에 그대로 모읍니다**.
+     카테고리 고르개만 오른쪽 끝에 따로 섭니다. */
+  .arcd-toolbar{flex:none;align-items:center;gap:14px;
+    padding:0 0 10px;border-bottom:1px solid var(--rule-soft);margin-bottom:2px;}
+  .arcd-toolbar .rt-toolbar{margin:0;flex:0 1 auto;}
+  .arcd-toolbar .rt-toolbar[data-editonly]{display:flex;}
+  .arcd-cat{margin-left:auto;flex:none;display:flex;align-items:center;gap:7px;}
+  .arcd-cat span{font-family:var(--mono);font-size:9.5px;font-weight:700;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);}
+  .arcd-cat select{border:0;border-bottom:1px solid var(--rule-soft);border-radius:0;
+    background:transparent;color:var(--text);font-family:var(--mono);font-size:11.5px;
+    padding:0 2px 3px;outline:none;}
+
+  /* 편집기는 이 칸 안에서 따로 스크롤하지 않습니다 — 글이 길어지면 아래
+     본문 칸이 통째로 굴러갑니다(읽을 때와 같은 움직임).
+     빈 글에서도 화면을 꽉 채우도록, 글칸을 세로 기둥으로 세우고 편집기가
+     남는 높이를 전부 가져갑니다(flex:1). 고정 높이(340px)를 주면 창 크기에
+     따라 아래가 휑하게 남거나 첨부 칸이 화면 밖으로 밀려납니다 —
+     기둥의 키를 본문 칸 높이에 묶어(min-height:100%) 첨부 칸이 언제나
+     화면 맨 아래에 걸리게 합니다. */
+  .arcd-editing .arc-detail-col{display:flex;flex-direction:column;min-height:100%;}
+  .arc-detail-col > .arc-editor{flex:1;height:auto;min-height:340px;
+    max-height:none;overflow:visible;margin-bottom:0;}
+  /* 첨부 칸은 편집기 아래에 붙되 늘어나지 않습니다 */
+  .arcd-editing #arcEditAttachSection{flex:none;margin-top:16px;}
 
   /* 스크롤되는 것은 이 칸뿐입니다. 칸은 폭 전체라 가로대가 글 옆이 아니라
      지면 오른쪽 끝에 섭니다 — 글은 그 안에서 620 으로 좁혀 가운데에 둡니다. */
@@ -1956,6 +2110,10 @@
   .meta-container{margin-bottom:14px;}
   .meta-container:empty{margin-bottom:0;}
   body.logged-in .pd-desc-box .profile-view-text{border:none;padding:0;}
+  /* 편집 모드의 이 테두리는 '여기에 쓸 수 있다'는 표시입니다. 읽기만 하는 칸
+     (ARCHIVE 글 화면과 LOG 글 보기 창의 본문)에는 쓸 수 없으므로 선을 긋지
+     않습니다 — 글을 감싸는 검은 상자가 되어 지면에서 가장 먼저 읽혔습니다. */
+  body.logged-in .arc-view-content{border:none;padding:0;}
   .rt-add-row{font-weight:700;color:var(--accent);border-color:var(--accent);}
 
   /* 관계성 칸(.pd-relationship / .rel-box / .rel-label / .rel-text / .rel-icon)은
@@ -2543,8 +2701,11 @@
   /* 목록의 No 와 같은 번호입니다(표의 첫 칸과 같은 값). 제목보다 크게 두어
      사진 위에서 먼저 읽히게 합니다 - 사진만 보고 몇 번 글인지 알기 위한
      표시라, 이 칸에서는 제목보다 이쪽이 먼저 필요합니다. */
-  .arc-nai-no{color:#fff;font-size:20px;font-weight:300;letter-spacing:-.02em;
-    line-height:1;margin-bottom:6px;font-variant-numeric:tabular-nums;}
+  /* Pretendard Variable 은 굵기가 45~920 사이에서 이어져 있어 Light(300)보다
+     더 얇게 갈 수 있습니다. 200(ExtraLight)으로 두었습니다 — 더 얇게 하려면
+     'wght' 100 까지 내려가지만, 20px 사진 위에서는 획이 끊어져 보입니다. */
+  .arc-nai-no{color:#fff;font-size:20px;font-weight:200;font-variation-settings:'wght' 200;
+    letter-spacing:-.02em;line-height:1;margin-bottom:6px;font-variant-numeric:tabular-nums;}
   .arc-nai-title{color:#fff;font-size:12px;font-weight:500;letter-spacing:-.01em;font-family:var(--mono);line-height:1.35;}
   /* 부제목과 날짜는 제목보다 한 단씩 물러섭니다 — 크기와 밝기 둘 다로 */
   .arc-nai-sub{color:rgba(255,255,255,.82);font-size:11px;font-weight:300;letter-spacing:-.01em;line-height:1.35;margin-top:3px;}
