@@ -47,7 +47,7 @@ function applyEditMode(){
     if(p) fillPairDetail(p);
   });
   safely('OC 상세', ()=>{
-    if(!(currentOcId && document.getElementById('modalOcDetail').classList.contains('open'))) return;
+    if(!(currentOcId && ocDetailOpen())) return;
     const o = getCurrentOc();
     if(o) fillOcDetail(o);
   });
@@ -680,6 +680,15 @@ function renderAll(){
 const thumbCache = new Map();   // src(원본 문자열 참조) -> Map(bucket -> 축소본)
 const THUMB_BUCKET = 64;        // 캐시 항목이 무한정 늘지 않도록 목표 크기를 64px 단위로 묶는다
 
+/* ---- 갤러리 단추의 두 얼굴 ----
+   선택 단추는 평소 ✓, 선택 중에는 ✕ 입니다. 글자로 두었더니 넷(＋ ✓ ✕ 🗑)이
+   서로 다른 서체에서 나와 — ＋ 만 Pretendard 에 있고 나머지는 기호 서체로
+   넘어갑니다 — 크기도 높이도 제각각이었습니다. 같은 16x16 격자에 그린
+   그림으로 바꾸면 넷이 저절로 같은 크기, 같은 자리에 앉습니다.
+   (마크업 쪽 ＋ 와 🗑 도 같은 격자로 그려 두었습니다.) */
+const GF_ICON_CHECK = '<svg class="gf-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.4 8.5 6.6 11.7 12.6 4.7"/></svg>';
+const GF_ICON_CLOSE = '<svg class="gf-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.6 4.6 11.4 11.4M11.4 4.6 4.6 11.4"/></svg>';
+
 function thumbRemember(src, bucket, val){
   if(thumbCache.size > 300) thumbCache.clear();   // 오래 보다가 무한정 쌓이는 것 방지
   let slot = thumbCache.get(src);
@@ -1017,6 +1026,9 @@ let viewEnterTimer = null;
 function activateView(view){
   const el = document.getElementById('view-' + view);
   if(!el) return;
+  /* 상세 화면에서 다른 곳으로 옮기면 '상세를 보고 있다' 표시를 지웁니다 —
+     사이드바에서 PAIR 을 다시 누르는 것도 이 길로 들어옵니다. */
+  if(view !== 'pair-detail' && view !== 'oc-detail') delete document.body.dataset.detail;
   const changed = !el.classList.contains('active');
   document.querySelectorAll('.view').forEach(v=> v.classList.remove('active', 'view-enter'));
   el.classList.add('active');
@@ -2365,11 +2377,15 @@ function openPairDetail(id){
   currentPairPostId=id;
   const p=getCurrentPost();
   prefetchDetailImgs(p);   // 갤러리를 뺀 첫 화면 사진만
-  /* 창을 먼저 열고 나서 그립니다 — 숨은 상태에서는 사진 칸의 폭·높이가 0 이라
+  /* 화면을 먼저 켜고 나서 그립니다 — 숨은 상태에서는 사진 칸의 폭·높이가 0 이라
      '꽉 채우는 배율'을 계산할 수 없어 확대가 안 된 크기로 한 번 그렸다가
      곧바로 확대되는 것이 눈에 보입니다. 같은 작업 안에서 이어 하므로
      화면이 중간 상태로 그려지지는 않습니다. */
-  openModal('modalPairDetail');
+  /* 창이 아니라 화면입니다 — HOME·PAIR·OC·ARCHIVE 를 오가는 그 통로를
+     그대로 씁니다. 목록으로 돌아올 때 보던 쪽을 되살리려고 지금 쪽을
+     적어 둡니다(뒤로 단추와 사이드바 메뉴 둘 다 여기서 읽습니다). */
+  pairListPage = pairPage;
+  openDetailView('pair-detail');
   fillPairDetail(p);
   // 혹시 폭이 아직 안 잡혔을 때를 대비한 한 번 더 (rAF는 백그라운드 탭에서 실행되지 않아 setTimeout)
   setTimeout(()=>{
@@ -2418,10 +2434,10 @@ function fillPairDetail(p){
   bindMetaContainer('pdPersonaMeta', p.persona);
   bindBodyText('pdPersonaIntro', p.persona);
 
-  bindRelText('relCharToPersona','relCharToPersona',p);
-  bindRelText('relPersonaToChar','relPersonaToChar',p);
-  bindRelText('relLabelCharToPersona','relLabelCharToPersona',p);
-  bindRelText('relLabelPersonaToChar','relLabelPersonaToChar',p);
+  /* 관계성 칸(.pd-relationship)은 없앴습니다 — 그 자리를 프로필 세 칸이
+     나눠 가져 사진과 소개 칸이 커졌습니다. 저장돼 있던 값
+     (relCharToPersona 등)은 지우지 않고 그냥 두었습니다. 읽지도 쓰지도
+     않으므로 남아 있어도 아무 일도 하지 않습니다. */
 
   pdCharImgAdj.paint();
   pdPersonaImgAdj.paint();
@@ -2449,7 +2465,7 @@ function fillPairDetail(p){
   gq('.gallery-select-info').style.display='none';
   gq('.gallery-select-delete').style.display='none';
   if(gq('.gallery-select-stack')) gq('.gallery-select-stack').style.display='none';
-  gq('.gallery-select-toggle').innerText='✓';
+  gq('.gallery-select-toggle').innerHTML=GF_ICON_CHECK;
   gq('.gallery-select-toggle').classList.remove('active');
   setPdPage(0, false);
   renderLogList(p); renderGallery(p); renderTimeline(p);
@@ -2487,6 +2503,57 @@ function setPdPage(idx, animate){
   }
   relayoutLogCards();   // LOG 장이 이제 막 보이게 됐을 수 있습니다
 }
+
+/* ---- 상세 화면 열고 닫기 ----
+   예전에는 떠 있는 창이었습니다(openModal/closeModal). 지금은 본 패널 안의
+   한 화면이라, 다른 화면과 똑같이 activateView 로 켭니다 — 아래에서 올라오며
+   나타나는 전환 효과도 그대로 물려받습니다.
+
+   사이드바의 굵은 표시는 **목록 쪽에 그대로 둡니다**(markCurrentView 를 부르지
+   않습니다). 상세는 그 목록에서 한 겹 들어간 자리이지 다른 메뉴가 아니고,
+   여기서 body[data-view] 를 바꾸면 사이드바에서 PAIR 이 통째로 풀립니다.
+
+   돌아갈 때 보던 쪽을 되살립니다 — 3쪽에서 글을 열었으면 3쪽으로 돌아옵니다. */
+let pairListPage = 1, ocListPage = 1;
+function openDetailView(name){
+  activateView(name);
+  /* 창일 때는 바깥을 눌러 닫았습니다. 화면이 된 지금은 Escape 만 남깁니다. */
+  document.body.dataset.detail = name;
+}
+function closeDetailView(){
+  delete document.body.dataset.detail;
+}
+function backToPairList(){
+  closeDetailView();
+  pairPage = pairListPage;
+  renderPairPosts();
+  activateView('pair');
+}
+function backToOcList(){
+  closeDetailView();
+  ocPage = ocListPage;
+  renderOcPosts();
+  activateView('oc');
+}
+document.getElementById('pdBackBtn')?.addEventListener('click', backToPairList);
+document.getElementById('ocBackBtn')?.addEventListener('click', backToOcList);
+/* Escape 로도 목록으로. 글을 쓰는 중(입력칸에 커서)에는 가로채지 않습니다 —
+   그때 Escape 는 그 칸의 것이고, 창(모달)이 떠 있으면 그쪽이 먼저입니다. */
+document.addEventListener('keydown', (e)=>{
+  if(e.key !== 'Escape') return;
+  const d = document.body.dataset.detail;
+  if(!d) return;
+  if(document.querySelector('.modal-overlay.open, .lightbox.open')) return;
+  const t = e.target;
+  if(t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+  if(d === 'pair-detail') backToPairList(); else backToOcList();
+});
+
+/* 상세 화면을 지금 보고 있는지. 예전에는 '창이 열려 있나'를
+   .modal-overlay.open 으로 물었는데, 창이 아니라 화면이 된 지금은
+   .view.active 로 묻습니다. 여러 곳에서 쓰므로 한 군데로 모읍니다. */
+function pairDetailOpen(){ return document.getElementById('view-pair-detail')?.classList.contains('active'); }
+function ocDetailOpen(){ return document.getElementById('view-oc-detail')?.classList.contains('active'); }
 
 /* persist 를 넘기지 않으면 PAIR 글로 저장합니다 (OC 창은 자기 저장 함수를 넘깁니다) */
 function bindMeta(elId, field, obj, persist){
@@ -5505,7 +5572,7 @@ function initGalleryRoot(host){
     use();
     gallerySelectMode = !gallerySelectMode;
     gallerySelectedIdx.clear();
-    selBtn.innerText = gallerySelectMode ? '✕' : '✓';
+    selBtn.innerHTML = gallerySelectMode ? GF_ICON_CLOSE : GF_ICON_CHECK;
     selBtn.classList.toggle('active', gallerySelectMode);
     const on = (gallerySelectMode && isLoggedIn) ? 'flex' : 'none';
     if(delBtn) delBtn.style.display = on;
@@ -6943,7 +7010,7 @@ function fillOcDetail(o){
     g.querySelector('.gallery-select-info').style.display='none';
     g.querySelector('.gallery-select-delete').style.display='none';
     const st=g.querySelector('.gallery-select-toggle');
-    st.innerText='✓'; st.classList.remove('active');
+    st.innerHTML=GF_ICON_CHECK; st.classList.remove('active');
   }
   setOcPage(0, false);
   renderLogList(o);
@@ -6955,8 +7022,9 @@ function openOcDetail(id){
   const o = getCurrentOc();
   if(!o) return;
   prefetchDetailImgs(o);   // 갤러리를 뺀 첫 화면 사진만
-  /* 창을 먼저 열고 나서 그립니다 (PAIR 과 같은 이유 — 위 주석 참고) */
-  openModal('modalOcDetail');
+  /* 화면을 먼저 켜고 나서 그립니다 (PAIR 과 같은 이유 — 위 주석 참고) */
+  ocListPage = ocPage;
+  openDetailView('oc-detail');
   fillOcDetail(o);
   // 혹시 폭이 아직 안 잡혔을 때를 대비한 한 번 더
   setTimeout(()=>{
@@ -8435,9 +8503,9 @@ function initResponsiveWatch(){
     /* LOG 는 폰에서 줄 목록, PC 에서 카드로 아예 다르게 그리므로 함께 다시 그립니다.
        (host 는 지금 열려 있는 창 기준으로 이미 맞춰져 있습니다 — 창은 한 번에 하나뿐) */
     const p = getCurrentPost();
-    if(p && document.getElementById('modalPairDetail').classList.contains('open')){ renderGallery(p); renderLogList(p); }
+    if(p && pairDetailOpen()){ renderGallery(p); renderLogList(p); }
     const o = getCurrentOc();
-    if(o && document.getElementById('modalOcDetail').classList.contains('open')){ renderGallery(o); renderLogList(o); }
+    if(o && ocDetailOpen()){ renderGallery(o); renderLogList(o); }
     /* ARCHIVE 도 PROMPT 가 8 ↔ 4 로 달라지므로 첫 페이지로 되돌립니다.
        OOC·ETC 줄 수는 화면 높이에 맞춰 잰 값이라 다시 재게 지워 둡니다. */
     arcPage = 1;
@@ -8936,7 +9004,7 @@ async function boot(){
   initLogRoot(OC_LOG_HOST);
   initOcDetail();
   /* PAIR 상세도 OC 와 같은 방식으로 장을 넘깁니다 */
-  bindPageGestures(document.querySelector('#modalPairDetail .pd-tab-content'),
+  bindPageGestures(document.querySelector('#view-pair-detail .pd-tab-content'),
     (d)=> setPdPage(pdPageIdx + d), '.pd-tab-pane');
   initSidePagers();
   initMobileDrawer();
@@ -8954,9 +9022,9 @@ async function boot(){
     unlockedFolders.clear();
     applyEditMode();
     const post = getCurrentPost();
-    if(post && document.getElementById('modalPairDetail').classList.contains('open')) renderGallery(post);
+    if(post && pairDetailOpen()) renderGallery(post);
     const oc = getCurrentOc();
-    if(oc && document.getElementById('modalOcDetail').classList.contains('open')) renderGallery(oc);
+    if(oc && ocDetailOpen()) renderGallery(oc);
   });
 
   /* 사진이 도착할 때마다 그 자리만 다시 칠합니다 */

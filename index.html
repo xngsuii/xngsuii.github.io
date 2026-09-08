@@ -64,7 +64,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
-<link rel="stylesheet" href="css/style.css?v=129" />
+<link rel="stylesheet" href="css/style.css?v=131" />
 </head>
 <body>
 <div class="app-window">
@@ -377,42 +377,39 @@
       <div class="archive-body" id="archiveBody"></div>
     </section>
 
-  </main>
-</div>
-</div>
+    <!-- ================= PAIR 상세 =================
+         예전에는 떠 있는 창(#modalPairDetail)이었습니다. 본 패널 안의
+         한 화면으로 옮겨, HOME·PAIR·OC·ARCHIVE 와 같은 방식으로
+         activateView('pair-detail') 이 켭니다. -->
+    <section class="view detail-view" id="view-pair-detail">
+      <!-- 배너 머리 — 사진 위에 뒤로 · 장 표시 점 · 제목을 얹습니다.
+           예전 창의 헤더 배너(3.25:1, 221px)를 132px 로 눕힌 것입니다. 본 패널은
+           창보다 세로가 166px 짧아서, 그 차이를 여기서 거의 다 덜어냅니다.
+           사진 칸(.adjustable-img)은 끌어서 위치를 맞추는 위젯이라, 그 위에
+           글자를 넣지 않고 **형제로** 겹쳐 둡니다 — 안에 넣으면 끌기와 부딪힙니다. -->
+      <div class="dt-banner">
+        <div class="adjustable-img dt-banner-img" id="pdHeaderImgBox">
+          <div class="adj-layer"></div>
+          <button class="adj-empty" data-editonly>＋ 헤더 이미지</button>
+          <button class="adj-change" data-editonly>📷</button>
+        </div>
+        <!-- 글자가 읽히도록 위아래로만 어둡게. 가운데는 사진 그대로입니다. -->
+        <div class="dt-scrim"></div>
+        <div class="dt-head">
+          <div class="dt-head-top">
+            <button type="button" class="dt-back" id="pdBackBtn" title="목록으로">←</button>
+            <!-- 몇 번째 장인지 — 예전에는 창 바깥 왼쪽에 세로로 있었습니다.
+                 패널 안에는 바깥이 없어서 배너 오른쪽 위에 가로로 눕혔습니다. -->
+            <div class="pd-page-dots" id="pdPageDots"></div>
+          </div>
+          <div class="dt-titles">
+            <input class="pd-title-input" id="pdTitleInput" placeholder="새 페어" readonly />
+            <input class="pd-subtitle-input" id="pdSubtitleInput" placeholder="타이틀" readonly />
+          </div>
+        </div>
+      </div>
 
-<!-- ================= MODALS ================= -->
 
-<!-- 확인 창 — 브라우저 기본 창 대신 사이트 모양에 맞춘 것.
-     다른 창 위에서도 열리므로 z-index 를 한 단계 위로 둡니다. -->
-<div class="modal-overlay" id="modalConfirm">
-  <div class="modal confirm-modal">
-    <div class="confirm-text" id="confirmText"></div>
-    <div class="form-actions">
-      <button type="button" class="btn-ghost" id="confirmCancel">취소</button>
-      <button type="button" class="btn-ghost gf-danger" id="confirmOk">삭제</button>
-    </div>
-  </div>
-</div>
-
-<!-- Pair detail / edit popup — OC 창처럼 INFO/GALLERY/LOG 세 장이 위아래로 넘어갑니다 -->
-<div class="modal-overlay" id="modalPairDetail">
-  <div class="pd-modal-wrap">
-  <!-- 몇 번째 장인지 알려주는 점. 창 바깥 왼쪽에 세로로 놓입니다 -->
-  <div class="pd-page-dots" id="pdPageDots"></div>
-  <div class="modal wide pd-modal">
-    <button class="modal-close" data-close>✕</button>
-
-    <div class="adjustable-img pd-header-banner" id="pdHeaderImgBox">
-      <div class="adj-layer"></div>
-      <button class="adj-empty" data-editonly>＋ 헤더 이미지</button>
-      <button class="adj-change" data-editonly>📷</button>
-    </div>
-    <div class="pd-header-fade"></div>
-
-    <div class="pd-modal-body">
-    <input class="pd-title-input" id="pdTitleInput" placeholder="새 페어" readonly />
-    <input class="pd-subtitle-input" id="pdSubtitleInput" placeholder="타이틀" readonly />
 
     <div class="pd-tab-content">
 
@@ -543,18 +540,6 @@
               </div>
             </div>
 
-            <!-- 세 칸 아래, 가로 전체를 씁니다 -->
-            <div class="pd-relationship">
-              <div class="rel-box">
-                <div class="rel-label" id="relLabelCharToPersona" contenteditable="false"></div>
-                <div class="rel-text" id="relCharToPersona" contenteditable="false"></div>
-              </div>
-              <div class="rel-icon">⇄</div>
-              <div class="rel-box">
-                <div class="rel-label" id="relLabelPersonaToChar" contenteditable="false"></div>
-                <div class="rel-text" id="relPersonaToChar" contenteditable="false"></div>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -562,7 +547,6 @@
           <div class="gallery-folder-bar" id="galleryFolderBar"></div>
           <!-- .horiz: 이미지 페이지를 가로로 넘깁니다 (세로 스크롤은 창 페이지 넘김에 씁니다) -->
           <div class="gallery-grid-wrap horiz" id="galleryGridWrap">
-            <div class="gallery-scroll-hint up" id="galleryScrollHintUp" style="display:none;">《</div>
             <div class="gallery-grid" id="galleryGrid"></div>
             <div class="gallery-empty-msg" id="galleryEmptyMsg" style="display:none;">등록된 이미지가 없어요.</div>
             <div class="gallery-locked" id="galleryLocked" style="display:none;">
@@ -570,16 +554,24 @@
               <div class="gl-text">비밀 폴더입니다.</div>
               <button type="button" class="btn-ghost gallery-unlock-btn" id="galleryUnlockBtn">비밀번호 입력</button>
             </div>
-            <div class="gallery-scroll-hint" id="galleryScrollHint" style="display:none;">》</div>
           </div>
           <!-- 왼쪽 아래, ＋ ✓ 순서. 휴지통은 선택 모드에서만 ✓ 오른쪽에 나옵니다 -->
+          <!-- 사진 쪽 넘김 — 격자 밖, ＋ ✓ 와 같은 줄의 오른쪽 끝입니다.
+               예전에는 격자 좌우 가장자리에 하나씩 떨어져 있었는데(《 왼쪽 위,
+               》 오른쪽 아래), 둘을 붙여 '넘기는 단추'로 읽히게 했습니다.
+               생김새는 쪽 번호 단추(.log-pg-btn)와 같습니다 — 넘길 쪽이 없으면
+               .disabled 가 붙어 흐려집니다(JS 가 붙입니다). -->
+          <div class="gallery-page-nav">
+            <div class="gallery-scroll-hint up" id="galleryScrollHintUp" style="display:none;" style="display:none;">&lt;</div>
+            <div class="gallery-scroll-hint" id="galleryScrollHint" style="display:none;" style="display:none;">&gt;</div>
+          </div>
           <div class="gallery-fab-row">
-            <button class="gallery-fab gallery-add" id="addGalleryBtn" data-editonly title="이미지 추가">＋</button>
-            <button class="gallery-fab gallery-select-toggle" id="gallerySelectBtn" data-editonly title="선택">✓</button>
+            <button class="gallery-fab gallery-add" id="addGalleryBtn" data-editonly title="이미지 추가"><svg class="gf-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.2V12.8M3.2 8H12.8"/></svg></button>
+            <button class="gallery-fab gallery-select-toggle" id="gallerySelectBtn" data-editonly title="선택"><svg class="gf-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.4 8.5 6.6 11.7 12.6 4.7"/></svg></button>
             <button class="gallery-fab gallery-select-stack" id="gallerySelectStackBtn" data-editonly title="선택한 사진 묶기" style="display:none;">
               <svg class="gf-ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="5.5" width="9" height="9" rx="1"/><path d="M5 5.5v-3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-3"/></svg>
             </button>
-            <button class="gallery-fab gallery-select-delete" id="gallerySelectDeleteBtn" data-editonly title="선택 삭제" style="display:none;">🗑</button>
+            <button class="gallery-fab gallery-select-delete" id="gallerySelectDeleteBtn" data-editonly title="선택 삭제" style="display:none;"><svg class="gf-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.4 5h9.2M6.3 5V3.4h3.4V5M4.9 5l.55 7.6h5.1L11.1 5"/></svg></button>
             <div class="gallery-select-info" id="gallerySelectInfo" style="display:none;"></div>
           </div>
         </div>
@@ -593,47 +585,57 @@
               <button class="add-mini-btn log-select-btn" data-editonly>선택</button>
               <button class="add-mini-btn log-add-btn" id="addLogBtn" data-editonly>＋ 게시글 추가</button>
             </div>
+            <!-- 검색줄 — 보기 모드에만 나오므로, 편집 모드에만 나오는 위 단추들과
+                 같은 자리를 나눠 씁니다(ARCHIVE 상단바와 같은 수법입니다). -->
+            <div class="log-search" id="logSearchBar">
+              <!-- ARCHIVE 검색줄과 같은 돋보기입니다(style.css 의 .sf-icon) -->
+              <span class="sf-icon" aria-hidden="true">
+                <svg viewBox="0 0 16 16"><circle cx="6.8" cy="6.8" r="4.6"></circle><path d="M10.3 10.3 L14.4 14.4"></path></svg>
+              </span>
+              <select class="log-search-field sf-more" id="logSearchField">
+                <option value="title">제목</option>
+                <option value="content">내용</option>
+              </select>
+              <input type="text" class="log-search-input" id="logSearchInput" placeholder="검색어를 입력하세요" />
+              <button type="button" class="log-search-clear" id="logSearchClear" title="검색 초기화">✕</button>
+            </div>
           </div>
           <div class="log-list" id="logList"></div>
-          <!-- 검색은 페이지 버튼 아래에 둡니다 (보기 모드 전용) -->
-          <div class="log-search" id="logSearchBar">
-            <!-- ARCHIVE 검색줄과 같은 돋보기입니다(style.css 의 .sf-icon) -->
-            <span class="sf-icon" aria-hidden="true">
-              <svg viewBox="0 0 16 16"><circle cx="6.8" cy="6.8" r="4.6"></circle><path d="M10.3 10.3 L14.4 14.4"></path></svg>
-            </span>
-            <select class="log-search-field sf-more" id="logSearchField">
-              <option value="title">제목</option>
-              <option value="content">내용</option>
-            </select>
-            <input type="text" class="log-search-input" id="logSearchInput" placeholder="검색어를 입력하세요" />
-            <button type="button" class="log-search-clear" id="logSearchClear" title="검색 초기화">✕</button>
-          </div>
         </div>
 
       </div>
-    </div>
-  </div>
-  </div>
-</div>
+    </section>
 
-<!-- OC 상세 — 인덱스 탭 없이 세로로 세 장(프로필/갤러리/로그)이 넘어갑니다 -->
-<div class="modal-overlay" id="modalOcDetail">
-  <div class="oc-modal-wrap">
-  <!-- 몇 번째 장인지 알려주는 점. 창 바깥 왼쪽에 세로로 놓입니다 -->
-  <div class="oc-page-dots" id="ocPageDots"></div>
-  <div class="modal wide oc-modal">
-    <button class="modal-close" data-close>✕</button>
+    <!-- ================= OC 상세 ================= -->
+    <section class="view detail-view" id="view-oc-detail">
+      <!-- 배너 머리 — 사진 위에 뒤로 · 장 표시 점 · 제목을 얹습니다.
+           예전 창의 헤더 배너(3.25:1, 221px)를 132px 로 눕힌 것입니다. 본 패널은
+           창보다 세로가 166px 짧아서, 그 차이를 여기서 거의 다 덜어냅니다.
+           사진 칸(.adjustable-img)은 끌어서 위치를 맞추는 위젯이라, 그 위에
+           글자를 넣지 않고 **형제로** 겹쳐 둡니다 — 안에 넣으면 끌기와 부딪힙니다. -->
+      <div class="dt-banner">
+        <div class="adjustable-img dt-banner-img" id="ocHeaderImgBox">
+          <div class="adj-layer"></div>
+          <button class="adj-empty" data-editonly>＋ 헤더 이미지</button>
+          <button class="adj-change" data-editonly>📷</button>
+        </div>
+        <!-- 글자가 읽히도록 위아래로만 어둡게. 가운데는 사진 그대로입니다. -->
+        <div class="dt-scrim"></div>
+        <div class="dt-head">
+          <div class="dt-head-top">
+            <button type="button" class="dt-back" id="ocBackBtn" title="목록으로">←</button>
+            <!-- 몇 번째 장인지 — 예전에는 창 바깥 왼쪽에 세로로 있었습니다.
+                 패널 안에는 바깥이 없어서 배너 오른쪽 위에 가로로 눕혔습니다. -->
+            <div class="oc-page-dots" id="ocPageDots"></div>
+          </div>
+          <div class="dt-titles">
+            <input class="pd-title-input" id="ocTitleInput" placeholder="새 캐릭터" readonly />
+            <input class="pd-subtitle-input" id="ocSubtitleInput" placeholder="타이틀" readonly />
+          </div>
+        </div>
+      </div>
 
-    <div class="adjustable-img pd-header-banner" id="ocHeaderImgBox">
-      <div class="adj-layer"></div>
-      <button class="adj-empty" data-editonly>＋ 헤더 이미지</button>
-      <button class="adj-change" data-editonly>📷</button>
-    </div>
-    <div class="pd-header-fade"></div>
 
-    <div class="pd-modal-body">
-      <input class="pd-title-input" id="ocTitleInput" placeholder="새 캐릭터" readonly />
-      <input class="pd-subtitle-input" id="ocSubtitleInput" placeholder="타이틀" readonly />
 
       <div class="oc-pages" id="ocPages">
 
@@ -744,7 +746,6 @@
           <div class="gallery-folder-bar" id="ocGalleryFolderBar"></div>
           <!-- .horiz: 이미지 페이지를 가로로 넘깁니다 (세로 스크롤은 창 페이지 넘김에 씁니다) -->
           <div class="gallery-grid-wrap horiz">
-            <div class="gallery-scroll-hint up" style="display:none;">《</div>
             <div class="gallery-grid"></div>
             <div class="gallery-empty-msg" style="display:none;">등록된 이미지가 없어요.</div>
             <div class="gallery-locked" style="display:none;">
@@ -752,15 +753,23 @@
               <div class="gl-text">비밀 폴더입니다.</div>
               <button type="button" class="btn-ghost gallery-unlock-btn">비밀번호 입력</button>
             </div>
-            <div class="gallery-scroll-hint" style="display:none;">》</div>
+          </div>
+          <!-- 사진 쪽 넘김 — 격자 밖, ＋ ✓ 와 같은 줄의 오른쪽 끝입니다.
+               예전에는 격자 좌우 가장자리에 하나씩 떨어져 있었는데(《 왼쪽 위,
+               》 오른쪽 아래), 둘을 붙여 '넘기는 단추'로 읽히게 했습니다.
+               생김새는 쪽 번호 단추(.log-pg-btn)와 같습니다 — 넘길 쪽이 없으면
+               .disabled 가 붙어 흐려집니다(JS 가 붙입니다). -->
+          <div class="gallery-page-nav">
+            <div class="gallery-scroll-hint up" style="display:none;" style="display:none;">&lt;</div>
+            <div class="gallery-scroll-hint" style="display:none;" style="display:none;">&gt;</div>
           </div>
           <div class="gallery-fab-row">
-            <button class="gallery-fab gallery-add" data-editonly title="이미지 추가">＋</button>
-            <button class="gallery-fab gallery-select-toggle" data-editonly title="선택">✓</button>
+            <button class="gallery-fab gallery-add" data-editonly title="이미지 추가"><svg class="gf-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.2V12.8M3.2 8H12.8"/></svg></button>
+            <button class="gallery-fab gallery-select-toggle" data-editonly title="선택"><svg class="gf-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.4 8.5 6.6 11.7 12.6 4.7"/></svg></button>
             <button class="gallery-fab gallery-select-stack" data-editonly title="선택한 사진 묶기" style="display:none;">
               <svg class="gf-ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="5.5" width="9" height="9" rx="1"/><path d="M5 5.5v-3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-3"/></svg>
             </button>
-            <button class="gallery-fab gallery-select-delete" data-editonly title="선택 삭제" style="display:none;">🗑</button>
+            <button class="gallery-fab gallery-select-delete" data-editonly title="선택 삭제" style="display:none;"><svg class="gf-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.4 5h9.2M6.3 5V3.4h3.4V5M4.9 5l.55 7.6h5.1L11.1 5"/></svg></button>
             <div class="gallery-select-info" style="display:none;"></div>
           </div>
         </div>
@@ -773,26 +782,42 @@
               <button class="add-mini-btn log-select-btn" data-editonly>선택</button>
               <button class="add-mini-btn log-add-btn" data-editonly>＋ 게시글 추가</button>
             </div>
+            <!-- 검색줄 — 보기 모드에만 나오므로, 편집 모드에만 나오는 위 단추들과
+                 같은 자리를 나눠 씁니다(PAIR 쪽과 같습니다). -->
+            <div class="log-search">
+              <!-- ARCHIVE 검색줄과 같은 돋보기입니다(style.css 의 .sf-icon) -->
+              <span class="sf-icon" aria-hidden="true">
+                <svg viewBox="0 0 16 16"><circle cx="6.8" cy="6.8" r="4.6"></circle><path d="M10.3 10.3 L14.4 14.4"></path></svg>
+              </span>
+              <select class="log-search-field sf-more">
+                <option value="title">제목</option>
+                <option value="content">내용</option>
+              </select>
+              <input type="text" class="log-search-input" placeholder="검색어를 입력하세요" />
+              <button type="button" class="log-search-clear" title="검색 초기화">✕</button>
+            </div>
           </div>
           <div class="log-list"></div>
-          <div class="log-search">
-            <!-- ARCHIVE 검색줄과 같은 돋보기입니다(style.css 의 .sf-icon) -->
-            <span class="sf-icon" aria-hidden="true">
-              <svg viewBox="0 0 16 16"><circle cx="6.8" cy="6.8" r="4.6"></circle><path d="M10.3 10.3 L14.4 14.4"></path></svg>
-            </span>
-            <select class="log-search-field sf-more">
-              <option value="title">제목</option>
-              <option value="content">내용</option>
-            </select>
-            <input type="text" class="log-search-input" placeholder="검색어를 입력하세요" />
-            <button type="button" class="log-search-clear" title="검색 초기화">✕</button>
-          </div>
         </div>
 
       </div>
+    </section>
 
+  </main>
+</div>
+</div>
+
+<!-- ================= MODALS ================= -->
+
+<!-- 확인 창 — 브라우저 기본 창 대신 사이트 모양에 맞춘 것.
+     다른 창 위에서도 열리므로 z-index 를 한 단계 위로 둡니다. -->
+<div class="modal-overlay" id="modalConfirm">
+  <div class="modal confirm-modal">
+    <div class="confirm-text" id="confirmText"></div>
+    <div class="form-actions">
+      <button type="button" class="btn-ghost" id="confirmCancel">취소</button>
+      <button type="button" class="btn-ghost gf-danger" id="confirmOk">삭제</button>
     </div>
-  </div>
   </div>
 </div>
 
@@ -1103,7 +1128,7 @@
        (그 목록을 만드는 것도 JS인데 새 CSS 가 감싸이지 않은 select 를 폭 0 으로
        접습니다), 스티커 서랍이 엉뚱한 자리에 놓였습니다.
        **CSS 와 JS 를 함께 고쳤으면 번호도 함께 올리세요.** -->
-<script src="js/main.js?v=129"></script>
+<script src="js/main.js?v=131"></script>
 <script type="module" src="js/firebase-store.js?v=115"></script>
 </body>
 </html>
