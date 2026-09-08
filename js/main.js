@@ -731,7 +731,14 @@ function applyThumbBg(el, src, boxPx){
   /* 아직 안 받은 사진이면 자리만 두고, 도착하면 그때 칠한다 */
   const full = imgUrl(src);
   if(!full){ whenImgArrives(src, el, ()=> applyThumbBg(el, src, boxPx)); return; }
-  const px = boxPx || el.clientWidth;
+  /* 상자의 **긴 쪽**을 기준으로 재야 합니다. 배경이 background-size:cover 라
+     서, 그림은 상자의 가로·세로 중 모자란 쪽을 채울 때까지 확대됩니다 —
+     즉 실제로 필요한 픽셀은 폭이 아니라 '긴 변'만큼입니다.
+     예전에는 폭(clientWidth)만 봤습니다. 칸이 가로로 길던 시절에는 그게 곧
+     긴 변이라 문제가 없었는데, PROMPT 격자가 세로로 긴 칸(195x293)이 되면서
+     195px 짜리 축소본을 293px 자리에 늘려 깔게 됐습니다. 정사각형·가로형
+     원본만 흐릿하고 세로형은 멀쩡해 보이던 것이 이 때문입니다. */
+  const px = boxPx || Math.max(el.clientWidth, el.clientHeight);
   if(!px){
     el._thumbTries = (el._thumbTries||0) + 1;
     if(el._thumbTries <= 20) setTimeout(()=>{ if(el.isConnected) applyThumbBg(el, src); }, 32);
@@ -2629,7 +2636,17 @@ function looksLikeHtml(s){ return /<[a-z][\s\S]*>/i.test(s||''); }
    같은 색을 다시 넣어도 그대로 남습니다. 이미 그 색이 걸려 있으면
    기본값으로 되돌려서 한 번 더 누르면 풀리게 합니다.
    ------------------------------------------------------------ */
-const LOG_TEXT_DEFAULT = '#1a1a1a';   // 본문 기본 글자색 (--text)
+/* 본문 기본 글자색. 예전에는 '#1a1a1a' 를 그대로 적어 두었는데, 디자인을
+   갈아엎으며 --text 가 순검정으로 바뀌자 이 값만 옛 색으로 남아 '색 지우기'가
+   본문과 미묘하게 다른 검정을 칠했습니다. CSS 에서 직접 읽어 두 곳이 어긋날
+   수 없게 합니다. 스타일이 아직 안 붙은 순간을 대비해 한 번 읽고 기억합니다. */
+let logTextDefaultCache = '';
+function logTextDefault(){
+  if(logTextDefaultCache) return logTextDefaultCache;
+  const v = getComputedStyle(document.documentElement).getPropertyValue('--text').trim();
+  logTextDefaultCache = v || '#000000';
+  return logTextDefaultCache;
+}
 
 /* '#c1440e' / 'rgb(193,68,14)' 처럼 표기가 달라도 비교할 수 있게
    브라우저가 계산한 값으로 통일합니다. */
@@ -2650,7 +2667,7 @@ function queryColor(cmd){
 }
 function toggleForeColor(color){
   const on = toRgb(queryColor('foreColor')) === toRgb(color);
-  document.execCommand('foreColor', false, on ? LOG_TEXT_DEFAULT : color);
+  document.execCommand('foreColor', false, on ? logTextDefault() : color);
 }
 /* 형광펜은 queryCommandValue 로 판단할 수 없습니다 —
    크롬은 hiliteColor 에 빈 문자열을, backColor 에는 물려받은 페이지 배경색을
@@ -7102,6 +7119,9 @@ async function openArcWriteModal(existingItem){
   document.getElementById('arcWriteHeading').innerText = existingItem ? '게시글 수정' : '글쓰기';
   document.getElementById('arcCategoryInput').value = existingItem ? (existingItem.category||'ooc') : currentArchiveCategory;
   document.getElementById('arcTitleInput').value = existingItem ? existingItem.title : '';
+  /* 부제목은 없어도 되는 칸입니다. 예전에 쓴 글에는 이 값 자체가 없으므로
+     항상 || '' 로 받습니다. */
+  document.getElementById('arcSubtitleInput').value = (existingItem && existingItem.subtitle) || '';
   const editorEl = document.getElementById('arcContentEditor');
   editorEl.innerHTML = '';
   arcAttachments = [];
@@ -7488,6 +7508,7 @@ function arcEditorHtml(){ return editorHtml('arcContentEditor').trim(); }
 
 bindOnce(document.getElementById('saveArcBtn'), async ()=>{
   const title=document.getElementById('arcTitleInput').value.trim();
+  const subtitle=document.getElementById('arcSubtitleInput').value.trim();
   const category=document.getElementById('arcCategoryInput').value;
   const content=arcEditorHtml();
   if(!title){ alert('제목을 입력해주세요.'); return; }
@@ -7500,12 +7521,12 @@ bindOnce(document.getElementById('saveArcBtn'), async ()=>{
   if(editingArcId){
     const item = state.archive.find(x=>x.id===editingArcId);
     if(item){
-      item.title=title; item.category=category; item.content=content; item.files=arcAttachments.slice();
+      item.title=title; item.subtitle=subtitle; item.category=category; item.content=content; item.files=arcAttachments.slice();
       if(!item.folderId) item.folderId = folderId;
     }
   }else{
     state.archiveSeqCounter = (state.archiveSeqCounter||0) + 1;
-    state.archive.push({ id:Date.now(), seq:state.archiveSeqCounter, category, title, content, date:nowStamp(), files:arcAttachments.slice(), pinned:false, folderId });
+    state.archive.push({ id:Date.now(), seq:state.archiveSeqCounter, category, title, subtitle, content, date:nowStamp(), files:arcAttachments.slice(), pinned:false, folderId });
     await storageSet('archiveSeqCounter', state.archiveSeqCounter);
   }
   await storageSet('archive', state.archive);
@@ -7538,8 +7559,17 @@ document.getElementById('arcPinBtn').addEventListener('click', async ()=>{
   const item = state.archive.find(x=>x.id===currentArcViewId);
   if(!item) return;
   if(!item.pinned){
-    const pinnedCount = state.archive.filter(x=>x.pinned).length;
-    if(pinnedCount>=3){ alert('고정은 최대 3개까지 가능해요.'); return; }
+    /* 세는 범위는 **지금 이 글이 들어 있는 폴더 하나**입니다.
+       예전에는 state.archive 전체를 셌습니다 — 그러면 OOC 의 어느 폴더에서
+       세 개를 고정한 순간 PROMPT 에서도 더는 고정할 수 없었습니다.
+       목록을 그릴 때(renderArchive)도 폴더로 걸러낸 뒤에 고정 글을 앞으로
+       빼내므로, 세는 쪽도 폴더로 맞춰야 둘이 어긋나지 않습니다.
+       PAIR·OC 의 고정(logPinBtn)은 게시글 한 묶음 안에서 세고 있어 그대로 둡니다. */
+    const cat = item.category || 'ooc';
+    const fid = arcFolderIdOf(item);
+    const pinnedCount = state.archive.filter(x=>
+      x.pinned && (x.category||'ooc')===cat && arcFolderIdOf(x)===fid).length;
+    if(pinnedCount>=3){ alert('이 폴더에는 이미 3개를 고정해두었어요.'); return; }
     item.pinned = true;
   }else{
     item.pinned = false;
@@ -7578,6 +7608,12 @@ let draggedArcId = null;
 function openArcView(item){
   currentArcViewId = item.id;
   document.getElementById('arcViewTitle').innerText=item.title;
+  /* 부제목은 비어 있으면 줄 자체를 없앱니다 — 빈 칸으로 두면 제목과 날짜
+     사이가 이유 없이 벌어집니다. */
+  const subEl = document.getElementById('arcViewSub');
+  const subTx = (item.subtitle||'').trim();
+  subEl.innerText = subTx;
+  subEl.style.display = subTx ? '' : 'none';
   document.getElementById('arcViewDate').innerText=item.date||'';
   const viewEl = document.getElementById('arcViewContent');
   const paintBody = ()=>{ viewEl.innerHTML = imgUrl(item.content); decorateContent(viewEl); };
@@ -7704,6 +7740,127 @@ function filterArchiveItems(items){
       /* 값을 코드로 바꾸면 change 가 저절로 나지 않으므로 직접 일으킵니다 —
          이 신호를 initArcSearch / initLogSearch 가 듣고 다시 그립니다. */
       sel.dispatchEvent(new Event('change', { bubbles:true }));
+    });
+    document.addEventListener('click', (e)=>{ if(!wrap.contains(e.target)) close(); });
+    document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') close(); });
+  });
+})();
+
+/* ---- 글자색 고르개 ----
+   <input type=color> 는 누르는 순간 운영체제 색 고르개가 열립니다. 그 창은
+   CSS 로도 JS 로도 손댈 수 없어서, 한 번 쓴 색을 다시 쓰려면 색값을 외워
+   매번 새로 찍어 넣어야 했습니다("기본값으로 돌리는 기능이 필요하다").
+
+   그래서 검색 분류 고르개와 같은 수를 씁니다 — 진짜 input 은 지우지 않고
+   자리만 지킨 채 투명하게 두고(.rt-cpick-native), 그 위에 같은 크기의 네모
+   단추를 세웁니다. 누르면 최근에 쓴 색 · 기본값 · 직접 고르기가 담긴 작은
+   목록이 열립니다. 툴바에 단추를 하나도 더 늘리지 않았습니다.
+
+   **색을 실제로 칠하는 코드는 한 줄도 고치지 않습니다.** 네 군데
+   (bindRichTextToolbars · bindFreeToolbar · LOG 편집기 · ARCHIVE 편집기)가
+   저마다 input 의 'input' 을 듣고 execCommand('foreColor') 를 부르고 있는데,
+   여기서는 숨은 input 의 value 를 바꾸고 input 을 직접 일으켜 줄 뿐입니다.
+
+   최근 색은 이 브라우저에만 남깁니다(localStorage). 사이트 데이터가 아니라
+   손버릇이라 Firestore 에 적어 읽기 몫을 쓸 이유가 없습니다. */
+const RT_RECENT_KEY = 'rt-recent-colors';
+const RT_RECENT_MAX = 8;
+function rtRecentColors(){
+  try{
+    const v = JSON.parse(localStorage.getItem(RT_RECENT_KEY) || '[]');
+    if(!Array.isArray(v)) return [];
+    return v.filter(c=> typeof c==='string' && /^#[0-9a-f]{6}$/i.test(c))
+            .map(c=>c.toLowerCase()).slice(0, RT_RECENT_MAX);
+  }catch(e){ return []; }   // 사생활 보호 모드 등에서 막힐 수 있습니다
+}
+function rtRememberColor(hex){
+  const h = String(hex||'').toLowerCase();
+  if(!/^#[0-9a-f]{6}$/.test(h)) return;
+  if(h === String(logTextDefault()||'').toLowerCase()) return;   // 기본값은 '최근'이 아닙니다
+  const list = rtRecentColors().filter(c=> c !== h);
+  list.unshift(h);
+  try{ localStorage.setItem(RT_RECENT_KEY, JSON.stringify(list.slice(0, RT_RECENT_MAX))); }catch(e){}
+}
+(function initTextColorPickers(){
+  document.querySelectorAll('input.rt-color').forEach(input=>{
+    if(input.dataset.cpick) return;
+    input.dataset.cpick = '1';
+
+    const wrap = document.createElement('span');
+    wrap.className = 'rt-cpick';
+    input.parentNode.insertBefore(wrap, input);
+    wrap.appendChild(input);
+    input.classList.add('rt-cpick-native');
+    input.tabIndex = -1;
+
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'rt-cpick-btn';
+    btn.title = input.title || '글자색';
+    const dot = document.createElement('span');
+    dot.className = 'rt-cpick-dot';
+    btn.appendChild(dot);
+
+    const menu = document.createElement('div');
+    menu.className = 'rt-cpick-menu';
+    wrap.append(btn, menu);
+
+    const paintDot = ()=>{ dot.style.background = input.value; };
+    paintDot();
+
+    const close = ()=> wrap.classList.remove('open');
+    const draw = ()=>{
+      const recent = rtRecentColors();
+      menu.innerHTML =
+        (recent.length
+          ? '<div class="rt-cpick-label">최근 사용한 글자색</div>'
+            + '<div class="rt-cpick-swatches">'
+            + recent.map(c=> `<button type="button" class="rt-cpick-sw" data-hex="${c}" title="${c}" style="background:${c}"></button>`).join('')
+            + '</div>'
+          : '')
+        + '<button type="button" class="rt-cpick-item" data-act="default">기본값</button>'
+        + '<button type="button" class="rt-cpick-item" data-act="pick">직접 고르기…</button>';
+    };
+
+    /* 고른 색을 숨은 input 에 넣고, 사람이 고른 것처럼 input 을 일으킵니다.
+       기본값은 '최근'에 쌓지 않으므로 그때만 기억을 꺼 둡니다. */
+    let skipRemember = false;
+    const apply = (hex, isDefault)=>{
+      skipRemember = !!isDefault;
+      input.value = hex;
+      input.dispatchEvent(new Event('input', { bubbles:true }));
+      skipRemember = false;
+      paintDot();
+      close();
+    };
+
+    /* 운영체제 고르개로 고른 경우에도 여기로 들어옵니다 — 그때 기억해 둡니다 */
+    input.addEventListener('input', ()=>{
+      paintDot();
+      if(!skipRemember) rtRememberColor(input.value);
+    });
+
+    /* mousedown 을 막아야 글에서 골라 둔 자리가 풀리지 않습니다 —
+       execCommand 는 '지금 골라진 글'에 칠하므로, 단추를 누르며 커서가
+       옮겨 가면 아무 데도 칠하지 못합니다(툴바의 다른 단추들과 같은 이유). */
+    btn.addEventListener('mousedown', e=> e.preventDefault());
+    menu.addEventListener('mousedown', e=> e.preventDefault());
+
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      if(wrap.classList.contains('open')){ close(); return; }
+      draw();
+      wrap.classList.add('open');
+    });
+    menu.addEventListener('click', (e)=>{
+      const sw = e.target.closest('.rt-cpick-sw');
+      if(sw){ apply(sw.dataset.hex, false); return; }
+      const it = e.target.closest('.rt-cpick-item');
+      if(!it) return;
+      if(it.dataset.act === 'default'){ apply(logTextDefault(), true); return; }
+      /* 직접 고르기 — 숨겨 둔 진짜 input 의 고르개를 엽니다.
+         showPicker 를 모르는 브라우저에서는 click 으로 대신합니다. */
+      close();
+      try{ input.showPicker(); }catch(e2){ input.click(); }
     });
     document.addEventListener('click', (e)=>{ if(!wrap.contains(e.target)) close(); });
     document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') close(); });
@@ -7871,10 +8028,14 @@ function renderArchive(){
       /* 이미지는 안쪽 레이어에 깝니다 — 흐림 효과가 제목/버튼까지 번지지 않게 */
       cells += `<div class="arc-nai-thumb${blurred?' blurred':''}" data-abs="${start+i}">
         <div class="an-img"${thumb?` style="background-image:url('${imgUrl(thumb)}')"`:''}></div>
-        ${(item.pinned && !arcSelectMode)?'<span class="arc-nai-pin">📌</span>':''}
+        ${(item.pinned && !arcSelectMode)?'<span class="arc-nai-pin">📌︎</span>':''}
         ${folderBlur?'<button type="button" class="an-eye" title="흐림 해제">👁︎</button>':''}
         ${arcSelectMode?`<div class="gallery-check${checked?' checked':''}">${checked?'✓':''}</div>`:''}
-        <div class="arc-nai-overlay ${thumb?'':'arc-nai-overlay-static'}"><div class="arc-nai-title">${escapeHtml(item.title)}</div></div>
+        <div class="arc-nai-overlay ${thumb?'':'arc-nai-overlay-static'}"><div class="arc-nai-cap">
+          <div class="arc-nai-title">${escapeHtml(item.title)}</div>
+          ${(item.subtitle||'').trim()?`<div class="arc-nai-sub">${escapeHtml(item.subtitle)}</div>`:''}
+          ${item.date?`<div class="arc-nai-date">${escapeHtml(item.date)}</div>`:''}
+        </div></div>
       </div>`;
     });
     /* 페이지 버튼 자리는 항상 비워두고(하단 중앙 고정),
