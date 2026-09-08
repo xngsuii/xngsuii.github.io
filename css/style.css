@@ -157,8 +157,8 @@
      아래 재단선(body::before)이 이 두 값을 그대로 받아 쓰므로, 값을 바꾸면
      재단선도 알아서 따라옵니다.
 
-     .paper-grain 과 .punch-margin 은 markup 에서 지웠습니다. 규칙도 남기지
-     않았으니, 되살리려면 git 기록에서 꺼내 오세요.
+     .paper-grain 과 .punch-margin 은 markup 에서도 규칙에서도 지웠습니다.
+     되살리려면 git 기록에서 꺼내 오세요.
      --grain 은 0 으로 두어 이름만 남아 있습니다. */
   :root{
     /* 패널의 **모양(5 : 3)은 고정이고 크기만 자랍니다.**
@@ -366,7 +366,7 @@
   #modalMusic h3{letter-spacing:0;}
   /* '게시글 작성 / 게시글 수정' 도 같은 이유입니다 — 한글 제목에 .04em 이 붙어
      사이트의 다른 한글보다 자간이 넓어 보였습니다. */
-  #logWriteHeading,#stickerModalHeading{letter-spacing:0;}
+  #stickerModalHeading{letter-spacing:0;}
   .mm-file-row{display:flex;align-items:center;gap:10px;min-width:0;}
   .mm-file-name{flex:1;min-width:0;font-family:var(--mono);font-size:10.5px;color:var(--text-muted);
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -1227,6 +1227,40 @@
   .oc-page-gallery .gallery-fab-row,
   .pd-tab-pane-gallery .gallery-fab-row{bottom:14px;}
 
+  /* ---- LOG 글 화면 ----
+     ARCHIVE 글 화면(.arc-detail-view)과 같은 구성입니다 — 상단바(← 제목 ⋮),
+     단추줄, 620px 글칸. 다른 점은 **덮는 넓이**뿐입니다.
+     ARCHIVE 는 패널 전체를 쓰지만 LOG 글은 PAIR·OC 상세 안에 있으므로,
+     위의 배너(누구의 LOG 인지)는 남겨 두고 그 아래 장 칸만 덮습니다.
+     그래서 .view 가 아니라 장 칸 안에 inset:0 으로 얹히는 조각입니다
+     (자리 옮기기는 main.js 의 openLogDetail 이 합니다).
+
+     읽기/쓰기가 .arcd-editing 하나로 갈리는 것도 ARCHIVE 와 같습니다 —
+     제목이 입력칸으로, ⋮ 가 취소·게시로 바뀌는 규칙은 그쪽 것을 그대로
+     물려받고, 여기서는 LOG 에만 있는 두 칸(편집기·자동서식 안내)만 더합니다. */
+  .log-detail{display:none;}
+  .log-detail.open{position:absolute;inset:0;z-index:6;background:var(--bg);
+    display:flex;flex-direction:column;min-height:0;}
+  /* 장 칸 안이라 위 여백은 ARCHIVE(14px)보다 조금 좁게 */
+  .log-detail .arc-detail-bar{padding-top:10px;}
+  .log-detail .arc-detail-body{padding-top:6px;}
+  /* 읽을 때는 본문, 고칠 때는 편집기 — 같은 자리에 번갈아 섭니다 */
+  .log-detail .arc-detail-col > .log-editor,
+  .log-detail .arc-detail-col > .log-autofmt-hint{display:none;}
+  .log-detail.arcd-editing .arc-detail-col > .log-editor{display:block;}
+  .log-detail.arcd-editing .arc-detail-col > .log-autofmt-hint{display:block;}
+  /* 편집기는 창에 있을 때처럼 제 안에서 스크롤하지 않습니다 — 글이 길어지면
+     아래 글칸이 통째로 굴러갑니다(읽을 때와 같은 움직임).
+     테두리도 지웁니다: ARCHIVE 화면과 같이, 고치는 중이라고 검은 상자를
+     두르면 글보다 상자가 먼저 읽힙니다. */
+  .log-detail.arcd-editing .arc-detail-col{display:flex;flex-direction:column;min-height:100%;}
+  .log-detail .arc-detail-col > .log-editor{flex:1;height:auto;min-height:320px;
+    max-height:none;overflow:visible;margin-bottom:0;border:0;padding:0;}
+  body.logged-in .log-detail .arc-detail-col > .log-editor{border:0;padding:0;}
+  .log-detail .log-autofmt-hint{flex:none;margin-top:14px;}
+  /* 단추줄은 ARCHIVE 와 달리 카테고리 고르개가 없어 왼쪽에 그대로 모입니다 */
+  .logd-toolbar .rt-toolbar-log{border:0;background:transparent;padding:0;}
+
   /* ---- Archive ---- */
   .archive-toolbar{display:flex;gap:8px;padding:16px 28px 0;}
   /* ARCHIVE 는 남은 높이를 격자/표가 나눠 쓰고 페이지 버튼이 하단에 고정되도록
@@ -1526,6 +1560,10 @@
      세 칸에 돌아와, 프로필 사진이 191x255 에서 212x283 으로 커졌습니다.
      가운데 칸은 244 -> 297 로 넓혔습니다(메모 툴바가 한 줄에 들어가는 최소
      폭이 233px 이고, 세로 이미지의 비율도 예전과 비슷하게 유지됩니다). */
+  /* PC 에서는 이 상자가 없는 셈 칩니다 — 안의 프로필 두 장이 격자의 칸으로
+     그대로 올라와 [캐릭터][넘김칸][페르소나] 세 칸이 됩니다.
+     폰에서만 진짜 상자가 되어 한 '장'이 됩니다(아래 모바일 규칙). */
+  .pd-info-main{display:contents;}
   .pd-info-grid{display:grid;grid-template-columns:1fr 297px 1fr;
     grid-template-rows:1fr;
     grid-template-areas:"char center persona";
@@ -1953,22 +1991,11 @@
   /* 본문 속 사진도 글과 같은 폭까지만 — 왼쪽 끝이 글과 한 세로줄에 섭니다 */
   .arc-detail-col .arc-view-content img{max-width:100%;}
 
-  .arc-view-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:2px;padding-right:36px;}
-  /* LOG 크게보기 창(#modalLogView h3)과 같은 이유로 서체를 다시 씁니다 —
-     .modal h3 의 기본값은 KoPub 돋움 + 대문자 변환이라 영문 제목이 목록에서는
-     소문자, 창에서는 대문자로 보였습니다. */
-  .arc-view-head h3{margin:0;font-family:var(--font-free);text-transform:none;letter-spacing:0;}
   /* 부제목은 이제 상단바에서 날짜와 한 줄로 붙습니다(.arcd-meta).
      비어 있으면 JS 가 가운뎃점까지 함께 숨깁니다. */
-  /* LOG 게시글 보기: 제목과 게시일 간격을 ARCHIVE 와 동일하게(2px) */
-  /* 미리보기 카드 제목(.lc-title)과 같은 서체로 맞춥니다 — .modal h3 의 기본값은
-     KoPub 돋움 + 대문자 변환이라, 같은 제목이 카드에서는 소문자로 카드 밖에서는
-     대문자로 보였습니다. 대문자 변환과 글자 간격을 함께 꺼야 모양이 같아집니다. */
-  #modalLogView h3{margin:0 0 2px;padding-right:36px;
-    font-family:var(--font-free);text-transform:none;letter-spacing:0;}
-  /* LOG 글 보기 창(#logKebabBtn)이 같은 이름을 씁니다 — 그쪽은 창으로 남으므로
-     이 기본값(창 오른쪽 위에 겹치는 상자)은 건드리지 않습니다.
-     ARCHIVE 화면 쪽만 아래에서 따로 다시 그립니다. */
+  /* ⋮ 는 이제 ARCHIVE·LOG 두 글 화면의 상단바 안에만 있습니다.
+     여기 남은 것은 '보기 모드에서는 안 보인다'는 기본값뿐이고, 생김새는
+     아래 .arc-detail-bar .arc-kebab-btn 이 전부 다시 그립니다. */
   .arc-kebab-btn{position:absolute;top:14px;right:48px;background:var(--bg);border:1px solid var(--border);width:26px;height:26px;display:none;align-items:center;justify-content:center;font-size:15px;color:var(--text);z-index:10;}
   body.logged-in .arc-kebab-btn{display:flex;}
   /* 항목 앞 기호를 없앤 만큼 폭도 줄였습니다 (120 -> 60px).
@@ -2902,31 +2929,39 @@
      사이드바 구조는 그대로 두고 창 비율만 풀어 화면을 꽉 쓰게 합니다. */
   @media (min-width:769px) and (max-width:1100px){
     .app-window{width:100%;max-width:100%;aspect-ratio:auto;height:100vh;height:100dvh;max-height:none;}
-    .punch-margin{width:26px;}
   }
 
   /* ================= 모바일 (768px 이하) ================= */
   @media (max-width:768px){
 
-    /* 모바일에서는 사이드바가 옆으로 밀려나는 서랍이라, 사이드바와 본문
-       사이라는 자리가 아예 없습니다. 왼쪽 재단선을 지면 왼쪽 끝으로
-       되돌립니다(데스크톱에서만 안쪽으로 들어갑니다). */
-    :root{ --trim-left-x:0px; }
+    /* 재단선은 폰에서 아예 그리지 않습니다.
+       이 표시는 '여기까지가 지면'을 알려 주는 것인데, 폰에서는 지면이 곧
+       화면 전체라 알려 줄 경계가 없습니다. 게다가 자리를 --panel-w/--panel-h
+       (데스크톱 창 크기)로 잡고 있어서, 화면이 그보다 작은 폰에서는 네 모서리가
+       아니라 화면 한가운데에 떠 있었습니다. */
+    body::before{display:none;}
 
-    /* ---------- 프레임: 좌우 펀치 구멍을 상하 가로줄로 ----------
-       .app-window 은 [좌 펀치][app-shell][우 펀치] 순서의 flex row 라서
-       column 으로 뒤집으면 그대로 [상][본문][하] 가 됩니다. */
+    /* ---------- 지면 ----------
+       폰에서는 여백 없이 화면을 통째로 씁니다. */
     body{align-items:stretch;justify-content:stretch;min-height:0;}
     .app-window{flex-direction:column;width:100%;max-width:100%;aspect-ratio:auto;
       height:100vh;height:100dvh;max-height:none;border:none;box-shadow:none;}
-    .punch-margin{flex-direction:row;width:auto;height:33px;flex:none;padding:0 18px;}
-    .punch-margin.left{border-right:none;border-bottom:1px solid var(--border);}
-    .punch-margin.right{border-left:none;border-top:1px solid var(--border);
-      height:calc(33px + env(safe-area-inset-bottom));
+    /* 머리줄이 화면 맨 위에 딱 붙어 있어서 답답했습니다. 이 여백은 화면
+       **바깥**(스크롤 칸 밖)에 둡니다 — .main 에 안쪽 여백으로 주면 sticky 인
+       머리줄이 스크롤할 때 그 여백 위로 올라가 결국 다시 붙습니다.
+
+       안전 영역을 여기서 함께 받습니다. 예전에는 위아래 펀치 줄이 그 몫을
+       가지고 있었는데 그 줄을 마크업에서 지우면서 함께 사라졌고, 그 뒤로
+       아이폰에서 아래 홈 막대 자리가 비워지지 않고 있었습니다. */
+    .app-shell{flex-direction:column;min-height:0;position:relative;
+      padding-top:calc(10px + env(safe-area-inset-top));
       padding-bottom:env(safe-area-inset-bottom);}
-    .punch-hole{width:14px;height:14px;}
-    .app-shell{flex-direction:column;min-height:0;position:relative;}
-    .main{min-height:0;overscroll-behavior:contain;}
+    /* 좌우 여백은 데스크톱과 같이 .main 한 군데가 갖습니다.
+       데스크톱 값(왼쪽 46px)은 사이드바와의 사이를 벌리려고 준 것이라
+       사이드바가 서랍이 되는 폰에서는 의미가 없습니다 — 게다가 화면마다
+       14px 를 또 주고 있어서 왼쪽만 60px 를 버리고 있었습니다.
+       여기서 14px 로 통일하고, 아래 화면들에서는 그 14px 를 걷어냅니다. */
+    .main{min-height:0;overscroll-behavior:contain;padding:0 14px;}
     /* 가로 스크롤은 어떤 경우에도 생기지 않게 */
     html,body{overflow-x:hidden;max-width:100%;}
     img,video,canvas{max-width:100%;}
@@ -2938,9 +2973,17 @@
        그래야 평소엔 눌리고, 서랍이 열리면 서랍에 가려집니다. */
     /* ❣ 칸(59px) 안에 들어가도록 왼쪽 4px — 기호만 덮고 글씨는 덮지 않습니다.
        위 9px 은 40px 버튼을 59px 칸 가운데에 놓는 값입니다. */
+    /* ☰ 는 .app-shell 기준으로 자리를 잡는데, 절대 위치는 안쪽 여백 위에
+       놓이므로 위에서 준 10px 만큼 직접 내려 줘야 머리줄과 같은 높이에 섭니다. */
     .mobile-menu-btn{display:flex;align-items:center;justify-content:center;
-      position:absolute;top:9px;left:4px;width:40px;height:40px;z-index:56;
+      position:absolute;top:calc(19px + env(safe-area-inset-top));left:4px;width:40px;height:40px;z-index:56;
       border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:17px;line-height:1;}
+    /* 상세 화면에서는 ☰ 를 감춥니다. ← 가 같은 모서리에 있어서 두 단추가
+       겹쳐 있었습니다(PAIR/OC 는 ☰ 가 ← 위에 올라앉고, ARCHIVE 는 상단바가
+       ☰ 자리를 비우느라 ← 만 안쪽으로 밀려 있었습니다).
+       메뉴는 ← 로 목록에 돌아간 다음에 엽니다 — 한 모서리에 '뒤로'와 '메뉴'를
+       같이 두는 것보다 낫습니다. */
+    body[data-detail] .mobile-menu-btn{display:none;}
     .drawer-backdrop{position:fixed;inset:0;background:rgba(20,20,25,.45);z-index:55;}
     .drawer-backdrop.open{display:block;}
     .sidebar{position:fixed;left:0;top:0;width:270px;max-width:84vw;height:100vh;height:100dvh;
@@ -2948,14 +2991,20 @@
       border-right:1px solid var(--border);box-shadow:6px 0 24px rgba(0,0,0,.25);
       padding:22px 16px calc(20px + env(safe-area-inset-bottom));overscroll-behavior:contain;}
     .sidebar.open{transform:none;}
+    /* 뮤직 위젯과 저장 용량은 서랍 바닥에 붙습니다.
+       데스크톱에서는 이 둘 위에 있는 스티커 서랍이 margin-top:auto 를 갖고
+       셋을 한꺼번에 내려놓는데, 폰에서는 스티커 서랍을 숨기므로(아래 참고)
+       그 닻이 사라져 둘이 메뉴 바로 밑에 딸려 올라와 있었습니다.
+       닻을 뮤직 위젯으로 옮겨 다시 바닥에 붙입니다. */
+    .music-block{margin-top:auto;}
     /* ☰ 자리를 비워둡니다. 높이는 데스크톱과 같은 60px 를 쓰되, 손가락용으로
        커진 버튼(min-height:40px)이 들어가도록 위아래 여백을 9px 로 줄입니다
        (60 - 보더 1 - 여백 18 = 41px). */
-    .topbar{padding:9px 14px 9px 56px;}
+    .topbar{padding:9px 0 9px 32px;}
     /* 다른 화면의 머리줄과 똑같이 둡니다 — 왼쪽 56px 은 ☰ 자리입니다.
        예전에는 왼쪽 끝에 ❣ 정사각형 칸이 있어서 왼쪽 여백을 비워 두었는데,
        그 칸을 없앤 뒤로는 ☰ 가 제목 위를 덮고 있었습니다. */
-    .cards-topbar{padding:9px 14px 9px 56px;}
+    .cards-topbar{padding:9px 0 9px 32px;}
     /* 위아래 여백은 주지 않습니다 — 줄 높이가 못 박혀 있어서(.nav-item 32 /
        .nav-sub-item 25), 여백을 주면 그보다 커지려 들어 두 줄의 간격이 서로
        어긋납니다. 좁은 화면에서는 글자만 키웁니다. */
@@ -2989,9 +3038,67 @@
     .ls-input{font-size:16px;height:34px;padding:0 2px;}
 
     /* ---------- Home ---------- */
-    #home-intro-page{padding:20px 16px 56px;}
-    .intro-card{padding:0 16px;}
-    .intro-sitename{font-size:16px;}
+    #home-intro-page{padding:20px 2px 56px;}
+    /* ---- HOME 격자: 네 열을 두 열로 ----
+       데스크톱 격자(4열 × 4행)를 그대로 두면 소개글 칸이 361px 안에서 188px
+       밖에 못 써서 한 줄에 몇 글자 들어가지 않습니다.
+       두 열로 접고, 배너와 소개글은 .hg-span2 덕분에 저절로 폭 전체를 씁니다.
+       빈 칸은 여섯 개만 남깁니다 — 빈 칸이 격자를 드러내는 것이 이 화면의
+       목적이라 다 없애면 격자가 사라지고, 다 남기면 줄이 늘어져 화면 하나를
+       더 먹습니다. 남기는 칸은 맨 윗줄 둘(납작한 박자 줄)과 맨 아랫줄 둘
+       (하나는 로그인 단추 칸)입니다.
+
+       칸을 nth-child 로 고르는 까닭: 빈 칸에는 이름표(class)가 없고, 있는
+       것은 선을 지우는 표시(.hg-r/.hg-b)뿐입니다. **index.html 의 칸 순서를
+       바꾸면 이 번호도 함께 고쳐야 합니다.**
+       남는 칸 순서: 1,2(윗줄) · 6(배너) · 9(소개글) · 11,13(아랫줄) */
+    /* 열은 넷 그대로 두되(선이 1/4·3/4 에 서야 합니다) 배너·소개글은 폭
+       전체를 쓰고, 빈 칸은 다섯 개만 남겨 자리를 직접 지정합니다.
+
+           ┌────────────┬──┐  40px   윗줄 — 선은 3/4 에 하나뿐
+           ├────────────┴──┤
+           │     배너      │  150px
+           ├───────────────┤
+           │   이름 / 소개  │  auto
+           ├──┬────────────┤
+           │  │  LOGIN     │  1fr
+           │  ├────────────┤
+           │  │            │  1fr
+           └──┴────────────┘
+
+       칸을 nth-child 로 고르고 자리를 grid-area 로 직접 주는 까닭: 빈 칸에는
+       이름표(class)가 없고 있는 것은 선을 지우는 표시(.hg-r/.hg-b)뿐이라,
+       흐름에 맡기면 어느 칸이 어디로 갈지 고를 수가 없습니다.
+       **index.html 의 칸 순서를 바꾸면 이 번호도 함께 고쳐야 합니다.** */
+    .home-grid{grid-template-columns:repeat(4,1fr);
+      grid-template-rows:40px 150px auto 1fr 1fr;
+      padding:38px 0 22px;}
+    /* 폰에서 쓰지 않는 빈 칸 */
+    .home-grid > .hg-cell:nth-child(3),.home-grid > .hg-cell:nth-child(4),
+    .home-grid > .hg-cell:nth-child(5),.home-grid > .hg-cell:nth-child(7),
+    .home-grid > .hg-cell:nth-child(8),.home-grid > .hg-cell:nth-child(10),
+    .home-grid > .hg-cell:nth-child(14){display:none;}
+    /* 자리 (행시작 / 열시작 / 행끝 / 열끝) */
+    .home-grid > .hg-cell:nth-child(1){grid-area:1 / 1 / 2 / 4;}   /* 윗줄 왼쪽 3칸 */
+    .home-grid > .hg-cell:nth-child(2){grid-area:1 / 4 / 2 / 5;}   /* 윗줄 오른쪽 1칸 */
+    .home-grid > .hg-cell:nth-child(6){grid-area:2 / 1 / 3 / 5;}   /* 배너 */
+    .home-grid > .hg-cell:nth-child(9){grid-area:3 / 1 / 4 / 5;}   /* 이름·소개 */
+    .home-grid > .hg-cell:nth-child(11){grid-area:4 / 1 / 6 / 2;}  /* 왼쪽 세로 칸 */
+    .home-grid > .hg-cell:nth-child(13){grid-area:4 / 2 / 5 / 5;}  /* LOGIN */
+    .home-grid > .hg-cell:nth-child(12){grid-area:5 / 2 / 6 / 5;}  /* 맨 아래 빈 칸 */
+    /* 선은 이 배치 기준으로 다시 긋습니다 — .hg-r/.hg-b 가 붙은 자리는
+       네 열 네 줄일 때의 오른쪽 끝·아랫줄이라 그대로 두면 엉뚱한 곳이
+       뚫립니다. 먼저 전부 되살리고 필요한 곳만 다시 지웁니다. */
+    .home-grid > .hg-cell{border-right:1px solid var(--border);
+      border-bottom:1px solid var(--border);}
+    .home-grid > .hg-cell:nth-child(2),.home-grid > .hg-cell:nth-child(6),
+    .home-grid > .hg-cell:nth-child(9),.home-grid > .hg-cell:nth-child(13),
+    .home-grid > .hg-cell:nth-child(12){border-right:0;}
+    .home-grid > .hg-cell:nth-child(11),
+    .home-grid > .hg-cell:nth-child(12){border-bottom:0;}
+    /* 칸이 폭 전체를 쓰게 됐으므로 글자도 데스크톱 비율(46px)에 맞춰 키웁니다 */
+    .intro-card{padding:18px 16px;}
+    .intro-sitename{font-size:32px;margin-bottom:10px;}
     .home-intro{font-size:14px;line-height:1.8;}
     /* 한 열이 되면 여섯 장을 한 화면에 우겨넣을 수 없으므로
        데스크톱의 '남은 높이 나눠 쓰기'를 풀고 원래대로 비율만 유지합니다 */
@@ -3001,11 +3108,17 @@
     .card-pages{position:static;display:block;overflow:visible;flex:none;}
     .card-page{position:static;transform:none !important;transition:none;display:block;}
     .card-grid{grid-template-columns:1fr;grid-template-rows:none;flex:none;}
-    .dream-card{aspect-ratio:2.5/1;}
-    .dream-card .dc-content{max-width:88%;padding:12px 14px;}
-    /* 1열이 되면 카드가 넓어져 왼쪽 그라데이션만으로는 글자가 안 읽힙니다 */
-    .dream-card .dc-grad{background:linear-gradient(90deg, rgba(0,0,0,.85) 0%, rgba(0,0,0,.6) 34%, rgba(0,0,0,0) 74%);}
-    .dream-card .dc-name{font-size:15px;}
+    /* 아래 네 줄은 **글이 사진 위에 얹혀 있던 시절**의 값이었습니다.
+       카드 전체를 2.5:1 로 묶어 두었는데 글이 사진 아래로 내려온 뒤로는
+       사진이 그 상자를 거의 다 차지해, 남은 자리에 네 줄이 들어가지 못하고
+       장르·이름만 보이고 캐치프레이즈와 설명이 잘려 있었습니다
+       (.dream-card 에 overflow:hidden 이 걸려 있어 조용히 잘렸습니다).
+       비율은 **사진에만** 주고, 카드 높이는 글이 정하게 합니다. */
+    .dream-card{aspect-ratio:auto;}
+    .dream-card .dc-adjustable{flex:none;aspect-ratio:2.5/1;min-height:0;}
+    /* 한 열이라 옆 카드와 벌릴 오른쪽 여백(26px)도 필요 없습니다 */
+    .dream-card .dc-content{max-width:none;padding:10px 0 0;}
+    .dream-card .dc-name{font-size:17px;}
     /* 손가락으로 누를 수 있게 키웁니다. body.logged-in 으로 묶는 것이 핵심입니다 —
        이 규칙이 display 를 다시 정하는데, 묶지 않으면 [data-editonly]{display:none}
        보다 선택자가 세서 보기 모드에서도 ✕ 가 보였습니다(폰에서만 나던 증상.
@@ -3013,11 +3126,13 @@
     body.logged-in .dream-card .dc-del,
     body.logged-in .dream-card .dc-drag{width:30px;height:30px;display:flex;
       align-items:center;justify-content:center;padding:0;}
-    /* 편집 모드에서 어디를 눌러야 고칠 수 있는지 hover 없이 알 수 있게 상시 표시 */
-    body.logged-in .dream-card [contenteditable="true"]{outline:1px dashed rgba(255,255,255,.35);}
+    /* 편집 모드에서 어디를 눌러야 고칠 수 있는지 hover 없이 알 수 있게 상시 표시.
+       흰색이던 것을 바꿉니다 — 글이 사진 위에 있을 때의 색이라, 글이 흰 바탕으로
+       내려온 뒤로는 아무것도 보이지 않았습니다. */
+    body.logged-in .dream-card [contenteditable="true"]{outline:1px dashed var(--rule-soft);}
 
     /* ---------- Pair 목록 ---------- */
-    .pair-body{padding:16px 14px 10px;}
+    .pair-body{padding:16px 0 10px;}
     /* 모바일은 한 페이지 4개(2x2) — pairPerPage()/ocPerPage() 와 짝을 맞춰야 합니다.
        칸이 8개에서 4개로 줄어든 만큼 카드 하나가 커져 사진이 잘 보입니다. */
     .post-grid{grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(2,1fr);gap:10px;}
@@ -3035,27 +3150,20 @@
     .post-check{width:24px;height:24px;font-size:13px;}
 
     /* ---------- OC ---------- */
-    .oc-body{padding:16px 14px 10px;}
+    .oc-body{padding:16px 0 10px;}
     /* 세 장의 높이를 화면에 맞춥니다 (배너 + 제목 + 넘김 줄을 뺀 나머지).
        데스크톱에서 .oc-pages 의 margin-top 10px 을 걷어낸 만큼 여기서도 줄입니다. */
     /* 좁은 화면에서는 좌우 여백까지 아까우므로 안쪽 여백을 줄입니다 */
     .oc-page,.oc-page[data-ocpage="profile"]{padding:8px 2px 8px 0;}
-    .oc-page-gallery .gallery-fab-row{bottom:8px;}
-    /* 좁은 화면에서는 격자가 위아래로 꽉 차서, 데스크톱에서 PAIR 에 맞춰 안으로
-       들여놓은 만큼이면 화살표가 첫/마지막 줄 썸네일을 덮습니다. 가장자리로 되돌립니다. */
 
     /* 한 칸으로 세우면 사진 높이에 맞출 이유가 없습니다 */
     .oc-info-main .pd-profile{height:auto;min-height:0;}
     /* 라벨만 담는 칸이라 잘라내지 않습니다 (스크롤 없이 7줄까지) */
     .oc-info-main .pd-desc-box{max-height:none;}
-    /* 좁은 화면에서도 넘김 칸은 장 수를 줄이지 않고, 대신 폭에 맞춰 높이를
-       크게 줍니다. 3:4 인 까닭은 세로 이미지 장이 딱 맞아떨어지는 비율이기
-       때문입니다 — 이 비율이면 사진이 칸을 가로세로 모두 꽉 채우고, 다른 장들과
-       가로폭도 같아집니다. 280px 로는 사진도 타임라인도 너무 납작했습니다.
-       높이는 바깥 칸이 갖고 .side-pages 는 그 안을 채웁니다 — 장들이
-       position:absolute 라 스스로는 높이를 만들지 못합니다. */
-    .oc-info-side,.pd-info-side{aspect-ratio:3/4;}
-    .side-pages{min-height:0;}
+    /* 넘김 칸은 이제 제 장을 통째로 씁니다 — 예전에는 프로필 아래에 놓느라
+       3:4 로 높이를 정해 줬는데, 옆으로 넘기게 된 뒤로는 화면 높이가 곧 이
+       칸의 높이입니다(위의 inset:0). */
+    .side-pages{min-height:0;height:100%;}
     /* OC 프로필만은 좁은 화면에서도 [사진 | 글] 로 나란히 둡니다.
        위의 PAIR 규칙(절을 2열로 쪼개고 프로필을 한 줄로 세우는 것)을 되돌립니다.
        PAIR 은 카드가 둘(캐릭터/페르소나)이라 그대로 둡니다. */
@@ -3068,19 +3176,17 @@
     .oc-info-main .pd-profile-img{width:100%;max-width:none;justify-self:stretch;}
     /* 좌우 두 칸을 위아래로 세웁니다. 이 화면은 내용이 넘치면 장 안에서 스크롤되고,
        페이지는 아래 ︽ ︾ 로 넘깁니다. */
-    .oc-page{overflow-y:auto;overscroll-behavior:contain;}
-    /* 높이를 화면에 맞춰 나누지 않고 내용대로 흘려보냅니다 —
-       한 칸으로 세우면 내용이 칸 높이를 넘어 아래 칸 위에 겹쳐 그려집니다. */
-    .oc-info-grid{grid-template-columns:1fr;gap:12px;flex:none;}
-    .oc-info-main{min-height:auto;}
-    .oc-free-box{flex:none;min-height:120px;max-height:220px;}
+    .oc-page{overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;}
+    /* OC 도 같은 이유로 자유 글 칸이 남는 높이를 가져갑니다 */
+    .oc-info-main{min-height:auto;display:flex;flex-direction:column;}
+    .oc-free-box{flex:1;min-height:120px;max-height:none;}
     /* 넘김 칸 자체가 3:4 이므로 사진은 칸을 그대로 채웁니다 (데스크톱과 같습니다).
        폭을 따로 묶어두면 사진 장만 다른 장보다 좁아 보입니다. */
     .oc-side-img{height:100%;width:100%;max-width:none;aspect-ratio:auto;margin:0;}
     .oc-kw{font-size:11px;padding:9px 4px;}
 
     /* ---------- Archive ---------- */
-    .archive-body{padding:16px 14px 10px;}
+    .archive-body{padding:16px 0 10px;}
     /* 한 페이지 8개는 그대로 두고 4x2 를 2x4 로 세웁니다 (JS 수정 불필요) */
     /* 한 페이지 4개 (2열 x 2행). renderArchive 의 perPage 와 같아야 합니다 —
        어긋나면 마지막 줄이 잘리거나 빈 줄이 남습니다. */
@@ -3097,7 +3203,7 @@
     .log-table td.arc-td-check .gallery-check{width:22px;height:22px;font-size:12px;}
     .log-table td:last-child{width:60px;}
     .log-table td{padding:12px 4px;}
-    .archive-search{margin:0 14px 14px;}
+    .archive-search{margin:0 0 14px;}
 
     /* 검색 컨트롤 4개를 한 줄에 유지합니다.
        [게시일][제목▾][검색어][✕] — 검색어 칸만 남는 폭을 전부 가져갑니다. */
@@ -3111,19 +3217,69 @@
     /* ---------- 모달 공통 ---------- */
     .modal{max-width:100%;max-height:calc(100dvh - 24px);padding:20px 16px;
       overscroll-behavior:contain;}
-    .modal.wide,.modal.wide.arc-modal,.modal.login-modal,.modal.gf-modal{max-width:100%;}
+    .modal.wide,.modal.login-modal,.modal.gf-modal{max-width:100%;}
     .modal-close{width:38px;height:38px;top:8px;right:8px;font-size:15px;}
-    .arc-kebab-btn{width:38px;height:38px;top:8px;right:52px;font-size:17px;}
-    .arc-kebab-menu{top:50px;right:8px;}
-    /* 화면 쪽은 상단바 안에 있으므로 창 기준 자리를 물려받으면 안 됩니다 */
+    /* ☰ 를 감췄으므로 ← 는 왼쪽 끝에서 시작합니다.
+       (여기 있던 .arc-kebab-btn / .arc-kebab-menu 의 창 기준 자리는 지웠습니다 —
+        ⋮ 는 이제 창이 아니라 상단바 안에만 있습니다.) */
+    .arc-detail-bar{padding-left:0;}
     .arc-detail-bar .arc-kebab-btn{width:30px;height:38px;top:auto;right:auto;font-size:17px;}
     .arc-detail-bar .arc-kebab-menu{top:46px;right:6px;}
     .arc-detail-col{width:100%;}
+    .arc-detail-body{overflow-x:hidden;}
     .arc-kebab-menu button{padding:13px 14px;font-size:12.5px;}
-    .arc-view-head{padding-right:96px;}
-    #modalLogView h3{padding-right:96px;}
+    /* 365px 폭에서 한 줄로 자르면 제목이 몇 글자 못 갑니다 — 두 줄까지 늘리고
+       상단바 높이는 그만큼 늘어나게 둡니다(.topbar 는 66px 로 못박혀 있습니다). */
+    .arc-detail-bar{height:auto;min-height:66px;}
+    .arc-detail-bar h3{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;
+      -webkit-box-orient:vertical;overflow:hidden;}
     .form-actions{gap:6px;}
     .gf-actions{flex-wrap:wrap;row-gap:8px;}
+
+    /* ---------- ARCHIVE 쓰기 모드 ----------
+       PC 에서는 [← 제목 … 취소 게시] 가 한 줄이지만 365px 에서는 제목이 갈
+       자리가 없습니다. 세로로 쌓습니다.
+
+           ←                    취소 게시
+           제목
+           부제목
+           카테고리
+           단추줄 →→→ (좌우로 굴림)
+
+       .arcd-left 를 display:contents 로 푸는 것이 핵심입니다 — ← 와 제목칸이
+       한 상자 안에 묶여 있어서, 풀지 않으면 둘을 다른 줄에 놓을 수 없습니다.
+       (상자가 사라져도 잃을 것이 없습니다. gap 과 flex 뿐이고 둘 다 여기서
+        다시 정합니다.) */
+    .arcd-editing .arc-detail-bar{height:auto;flex-wrap:wrap;row-gap:12px;padding-bottom:2px;}
+    .arcd-editing .arcd-left{display:contents;}
+    .arcd-editing .arcd-back{order:1;}
+    .arcd-editing .arcd-actions{order:2;margin-left:auto;margin-right:0;}
+    .arcd-editing .arcd-titles{order:3;flex:0 0 100%;}
+    .arcd-editing .arcd-sub-input{margin-top:7px;}
+
+    /* 단추줄 — 카테고리를 윗줄로 빼고, 단추는 **한 줄을 지키며 좌우로 구릅니다**.
+       두 줄 세 줄로 접히면 그만큼 글 쓰는 칸이 짧아지고, 줄마다 단추 자리가
+       달라져 손이 기억하지 못합니다. 스크롤 막대는 숨깁니다(폴더 탭과 같은 방식). */
+    .arcd-toolbar{flex-wrap:wrap;gap:10px;align-items:center;}
+    .arcd-cat{order:-1;flex:0 0 100%;margin-left:0;}
+    .arcd-cat select{padding:5px 2px 6px;font-size:13px;}
+    .arcd-toolbar .rt-toolbar{flex:0 0 100%;flex-wrap:nowrap;
+      overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-ms-overflow-style:none;}
+    .arcd-toolbar .rt-toolbar::-webkit-scrollbar{display:none;height:0;}
+    /* 굴러가는 줄 안에서는 아무것도 줄어들면 안 됩니다 */
+    .arcd-toolbar .rt-toolbar > *{flex:none;}
+
+    /* ---------- 상세 화면 머리(배너) ----------
+       ← 는 보이는 크기(22px)는 그대로 두고 **누를 수 있는 자리만** 넓힙니다.
+       상자 자체를 40px 로 키우면 화살표가 제자리에서 밀려나고 제목과 왼쪽 끝이
+       어긋납니다. ::after 로 상자 밖 9px 까지 덮으면 배치는 하나도 건드리지
+       않고 손가락 규격(40px)이 됩니다. ARCHIVE 의 ← 도 같은 .dt-back 입니다. */
+    .dt-back{position:relative;font-size:19px;}
+    .dt-back::after{content:'';position:absolute;top:-9px;left:-9px;right:-9px;bottom:-9px;}
+    /* 폰에서 장을 넘기는 방법은 스와이프뿐이라, 몇 장인지 알려 주는 이 점이
+       유일한 단서입니다. 누를 수는 없으므로(pointer-events:none) 크기만
+       키우고, 밝은 사진 위에서도 보이도록 그림자를 답니다. */
+    .oc-page-dot{width:6px;height:6px;box-shadow:0 1px 2px rgba(0,0,0,.45);}
 
     /* 제목/부제목은 <input> 이라 브라우저마다 기본 좌우 여백이 다릅니다
        (크롬 2px, 사파리 0px). 둘의 시작점이 어긋나 보이는 것을 막고
@@ -3132,18 +3288,35 @@
     .pd-title-input{font-size:18px;margin:14px 0 0;}
     /* 세 장의 높이를 화면에 맞춥니다 (배너 + 제목 + 여백을 뺀 나머지).
        탭 줄이 없어진 만큼 OC(208)와 같은 값으로 맞췄습니다. */
-    /* 좁은 화면에서는 INFO 를 한 화면에 우겨넣지 않고 장 안에서 스크롤합니다 */
-    .pd-tab-pane{padding:8px 2px 8px 0;overflow-y:auto;overscroll-behavior:contain;}
-    /* 세 칸을 옆으로 늘어놓기엔 좁으므로 두 프로필만 나란히 두고, 그 아래로
-       RELATIONSHIP, 맨 아래에 넘김 칸을 놓습니다. 넘김 칸이 화면 폭만큼
-       높아서(아래 참고) 맨 아래가 아니면 RELATIONSHIP 이 한참 밀려납니다. */
-    .pd-info-grid{grid-template-columns:1fr 1fr;
-      grid-template-areas:"char persona" "rel rel" "center center";
-      gap:14px 10px;flex:none;min-height:auto;}
-    .pd-info-col{display:block;min-height:auto;}
-    .pd-info-col .pd-profile{display:flex;flex:none;min-height:auto;}
-    .pd-info-col .pd-profile-info{display:block;}
-    .pd-info-col .pd-desc-box{flex:none;max-height:200px;}
+    /* 좁은 화면에서는 INFO 를 한 화면에 우겨넣지 않고 장 안에서 스크롤합니다.
+       overflow-x 를 함께 못박는 까닭: CSS 는 한 축이 auto 이고 다른 축이
+       visible 이면 **다른 축도 auto 로 바꿔 버립니다**. 그대로 두면 안에서
+       1px 만 삐져나가도 가로 스크롤이 생깁니다. */
+    .pd-tab-pane{padding:8px 2px 8px 0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;}
+    /* ---- INFO 는 두 장을 옆으로 넘겨 봅니다 ----
+       프로필과 넘김 칸을 위아래로 쌓으면 폰 한 화면에 들어가지 않아 긴 스크롤이
+       생겼습니다. 옆으로 넘기면 각각이 한 화면에 딱 들어갑니다.
+       PAIR·OC 가 같은 구조가 되도록 PAIR 의 프로필 두 장은 .pd-info-main 이
+       묶습니다(PC 에서는 display:contents 라 없는 셈입니다).
+       넘기는 것은 main.js 의 makeInfoPager 입니다. */
+    .pd-info-grid,.oc-info-grid{display:block;position:relative;overflow:hidden;
+      flex:1;min-height:0;gap:0;}
+    .pd-info-main,.pd-info-side,
+    .oc-info-main,.oc-info-side{position:absolute;inset:0;
+      overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;
+      transition:transform .38s cubic-bezier(.4,0,.2,1);}
+    /* 프로필 장 — PAIR 은 두 장을 나란히, OC 는 한 장.
+       칸 이름(grid-area:char / persona)은 PC 격자의 것이라 여기서 풀어 줍니다 —
+       그대로 두면 이 격자에 없는 이름을 가리켜 둘이 같은 자리에 겹칩니다. */
+    .pd-info-main{display:grid;grid-template-columns:1fr 1fr;gap:0 10px;align-content:stretch;}
+    .pd-info-col-char,.pd-info-col-persona{grid-area:auto;}
+    /* 여기 있던 세 줄(프로필을 '내용만큼'으로 되돌리던 것)은 지웠습니다.
+       프로필 아래에 넘김 칸이 이어져 있던 시절의 값인데, 지금은 프로필이
+       한 장을 통째로 쓰므로 PC 와 똑같이 두면 됩니다 — 사진이 위, 소개 칸이
+       남는 높이를 다 가져가고 넘치면 그 안에서만 굴러갑니다.
+       그대로 뒀더니 화면 아래 절반이 그냥 비어 있었습니다.
+       사진 비율만 폰에서 조금 낮춥니다(3:4 는 두 장을 나란히 놓기엔 깁니다). */
+    .pd-info-col .pd-profile-img{aspect-ratio:1/1;}
     .pd-info-side{margin-bottom:0;}
     /* 직계 자식만 — TIMELINE 의 제목은 .pd-section-head 안에 있고
        아래 여백을 머리줄 쪽이 갖습니다(둘의 값을 같게 맞춥니다). */
@@ -3157,25 +3330,52 @@
     .pd-profile-img{width:100%;max-width:none;justify-self:center;}
     .pd-name-input{width:100%;font-size:14px;}
 
-    /* Relationship 은 데스크톱과 같이 가로로 나란히 */
-
     /* ---------- 갤러리 ----------
        5열 15장 -> 3열 9장 (JS 의 galleryPerPage() 와 짝을 맞춥니다) */
     .gallery-grid{grid-template-columns:repeat(3,1fr);gap:8px;}
+    /* 줄 수(3)는 PC 와 같이 그대로 둡니다 — 격자에는 사진이 몇 장이든 늘
+       한 쪽 분량의 칸이 들어가고(renderGallery 가 남는 자리를 .gallery-slot
+       으로 채웁니다) 그래서 쪽을 넘겨도 격자 높이가 변하지 않습니다.
+
+       다만 **줄 높이(1fr)를 무엇으로 정하는지**가 PC 와 다릅니다.
+       PC 는 격자가 남은 높이를 나눠 가지므로(.gallery-grid-wrap 이 flex:1)
+       줄 높이가 이미 정해져 있고, 그래서 썸네일의 1:1 을 꺼도 됩니다.
+       폰은 격자가 제 높이만큼만 차지하는데(flex:0 0 auto), 그러면 1fr 을
+       정해 줄 근거가 칸 안의 내용뿐입니다. 그런데 썸네일 속 사진(.gt-img)은
+       position:absolute 라 높이를 만들지 못합니다 —
+       **한 쪽이 사진으로 꽉 차면 세 줄이 모두 높이 0 이 되어 사진이 납작하게
+       눌립니다.** 사진이 모자라 빈 칸(.gallery-slot, 1:1)이 섞인 쪽은 그 칸이
+       줄 높이를 잡아 줘서 멀쩡해 보였고, 그래서 폴더에 따라 되기도 하고
+       안 되기도 했습니다.
+       빈 칸과 똑같이 1:1 을 돌려주어 줄 높이를 못박습니다. */
+    .pd-tab-pane-gallery .gallery-thumb,
+    .oc-page-gallery .gallery-thumb{aspect-ratio:1/1;height:auto;}
     /* PC 는 격자가 남은 높이를 거의 채우지만 폰에서는 남는 높이가 커서,
        flex:1 로 두면 화살표가 가장자리로 밀려 이미지와 100px 넘게 벌어집니다.
        내용 높이만큼만 차지하게 하고 위아래 auto 여백으로 가운데 정렬합니다. */
     .gallery-grid-wrap{flex:0 0 auto;margin-top:auto;margin-bottom:auto;
       padding-top:34px;padding-bottom:34px;}
-    /* 화살표가 pointer-events:none 이라 못 눌렀습니다. 탭으로 페이지를 넘길 수 있게 합니다.
-       세로 여백을 주면 눌리는 영역이 첫 줄 썸네일을 덮어 이미지 대신 페이지가 넘어가므로,
-       좌우로만 넓혀 위 여백(34px) 안에 정확히 들어가게 합니다. */
-    .gallery-scroll-hint{pointer-events:auto;padding:0 20px;}
-    .gallery-scroll-hint.disabled{pointer-events:none;}
-    .gallery-scroll-hint.up{top:7px;}
-    .gallery-scroll-hint{bottom:0;}
-    .gallery-fab{width:44px;height:44px;font-size:18px;}
-    .gallery-fab-row{bottom:4px;left:4px;gap:8px;}
+    /* ---- 아래 줄: 왼쪽에 ＋·선택, 오른쪽에 < > ----
+       여기 있던 규칙 넷은 **화살표가 격자 위아래에 떠 있고 단추가 동그란
+       상자이던 시절**의 값이었습니다. 지금 화살표는 .gallery-page-nav 안에
+       흐름대로 서고(position:static) 단추도 테두리 없는 글자·아이콘이라,
+       옛 규칙은 아무 일도 하지 않거나(top/bottom) 모양만 망가뜨리고
+       있었습니다(44px 정사각 안에 15px 아이콘).
+
+       보이는 크기는 PC 와 같게 두고 **눌리는 높이만 36px**로 맞춥니다 —
+       단추와 화살표가 같은 36px 이라 두 줄 끝이 나란히 섭니다.
+       (화살표 36 = 글자 14 + 위아래 11) */
+    .gallery-fab{width:auto;min-width:36px;height:36px;padding:0 8px;font-size:15px;}
+    .gallery-fab-row{left:0;gap:6px;}
+    /* 두 줄 다 이름을 두 겹으로 씁니다 - PC 쪽 .pd-tab-pane-gallery .gallery-fab-row
+       (0,2,0) 가 이 파일 앞쪽에 있어서, 한 겹으로 쓰면 bottom 만 그쪽 값(14px)이
+       남아 단추 줄이 화살표보다 6px 위에 섭니다. */
+    .pd-tab-pane-gallery .gallery-fab-row,
+    .oc-page-gallery .gallery-fab-row,
+    .pd-tab-pane-gallery .gallery-page-nav,
+    .oc-page-gallery .gallery-page-nav{bottom:8px;}
+    .gallery-page-nav .gallery-scroll-hint,
+    .gallery-page-nav .gallery-scroll-hint.up{padding:11px 12px;}
     .gallery-check{width:22px;height:22px;font-size:12px;}
     /* 폴더가 여러 개면 줄바꿈되어 격자 높이를 잡아먹습니다.
        한 줄로 고정하고 좌우로 밀어 보게 합니다 (스크롤바는 숨김). */
@@ -3190,6 +3390,13 @@
     .gallery-folder-rename{padding:2px 4px;font-size:11px;}
 
     /* ---------- LOG / 타임라인 ---------- */
+    /* 폴더 탭 · 검색 · 선택 · ＋게시글 추가가 한 줄에 다 들어가지 않습니다.
+       폴더 탭이 왼쪽에서 남는 폭을 다 쓰고(좌우로 밀어 봅니다) 단추는
+       오른쪽에 그대로 두되, 그래도 모자라면 줄을 바꿉니다. */
+    .log-pane-toolbar{flex-wrap:wrap;row-gap:8px;}
+    .log-pane-toolbar .log-folder-bar{flex:1 1 100%;order:-1;}
+    .log-pane-toolbar .log-search{flex:1 1 auto;}
+    .log-pane-toolbar .log-tool-btns{flex:none;margin-left:auto;}
     .log-entry{padding:13px 12px;}
     .tl-del{width:28px;height:28px;}
     .log-pg-btn{padding:8px 12px;font-size:12px;}
@@ -3237,6 +3444,13 @@
     .profile-view-text,.arc-view-content{font-size:12.5px;}
     .arc-view-content,.log-editor,.arc-editor{overflow-wrap:anywhere;}
 
+    /* ---------- 복사 칸 ----------
+       글자는 11px 그대로 둡니다 — 갈무리11 은 11px 에 맞춰 그린 글꼴이라
+       배수(22px)가 아닌 값으로 키우면 흐려집니다.
+       손가락으로 누를 것은 복사 단추뿐이라 그것만 키웁니다. */
+    .cb-copy{padding:11px 18px;font-size:11px;}
+    .copy-box{margin-bottom:40px;padding:12px 13px;}
+
     /* ---------- 라이트박스 ---------- */
     /* 화살표를 사진 위에 겹쳐 올리므로 줄 간격은 없애고, 썸네일 줄만 아래에 띄웁니다 */
     .lightbox{gap:12px;}
@@ -3277,13 +3491,23 @@
   /* 세로가 짧은 기기(iPhone SE 667px) — 한 페이지는 JS 에서 6장으로 줄입니다 */
   @media (max-width:768px) and (max-height:720px){
     .gallery-grid{gap:6px;}
+    /* 이 기기는 한 쪽이 6장이라(galleryPerPage) 빈 칸까지 세어도 두 줄뿐입니다.
+       세 줄로 못박아 두면 셋째 줄이 높이 0 으로 남고 줄 사이 여백만 한 번 더
+       들어갑니다. **galleryPerPage() 와 이 값은 같이 움직여야 합니다** —
+       3열 × 줄 수 = 한 쪽 장수. */
+    .pd-tab-pane-gallery .gallery-grid,
+    .oc-page-gallery .gallery-grid{grid-template-rows:repeat(2,1fr);}
   }
 
-  /* 가로 모드 — 세로 공간이 거의 없으므로 배너를 낮추고 탭 높이를 최소로 */
+  /* 가로 모드 — 세로가 520px 도 안 되므로 배너 132px 은 화면의 1/4 입니다.
+     세로로 눕힌 화면에서는 배너가 아니라 내용이 보여야 하므로 92px 로 낮추고,
+     그만큼 머리글 여백과 제목도 함께 줄입니다(제목 줄이 배너 밖으로 나가면
+     사진 아래 흰 바탕에 흰 글씨가 남습니다). */
   @media (max-width:900px) and (orientation:landscape) and (max-height:520px){
-    /* 배너는 이제 높이가 132px 로 못박혀 있습니다(.dt-banner) -- 모바일에서는
-       더 낮춰야 할 수도 있지만, 모바일 배치는 다음 단계에서 한 번에 잡습니다. */
+    .dt-banner{height:92px;}
+    .dt-head{padding:8px 14px 9px;}
     .pd-title-input{font-size:16px;margin-top:8px;}
+    .pd-subtitle-input{font-size:11px;margin-top:2px;}
   }
 
   /* 길게 눌러 드래그할 때 글자가 같이 선택되는(파랗게 잡히는) 문제 —

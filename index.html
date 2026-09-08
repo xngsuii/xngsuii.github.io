@@ -4,7 +4,12 @@
 <meta charset="UTF-8" />
 <!-- viewport-fit=cover: 아이폰 노치/홈 인디케이터 영역까지 배경이 이어지게 합니다.
      user-scalable=no 는 넣지 않습니다 — 확대는 접근성 기능이라 막지 않습니다. -->
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<!-- maximum-scale=1: 아이폰 사파리는 글자가 16px 보다 작은 입력칸에 커서가
+     들어가면 화면을 저 혼자 확대합니다(안드로이드는 안 그럽니다). 이 값이
+     있으면 그 자동 확대만 멈춥니다 — 손가락으로 오므려 키우는 것은 iOS 10
+     이후 사파리가 늘 허용하므로 그대로 됩니다. 글자를 16px 로 키우지 않고
+     막을 수 있는 유일한 길입니다. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
 <title>갠홈</title>
 
 <!-- ================= 탭 마크 (파비콘) =================
@@ -64,7 +69,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
-<link rel="stylesheet" href="css/style.css?v=140" />
+<link rel="stylesheet" href="css/style.css?v=158" />
 </head>
 <body>
 <div class="app-window">
@@ -423,6 +428,11 @@
           <!-- 왼쪽 캐릭터 프로필 · 가운데 넘김 칸 · 오른쪽 페르소나 프로필,
                그 아래 가로 전체를 쓰는 RELATIONSHIP. 프로필은 사진이 위, 소개가 아래입니다. -->
           <div class="pd-info-grid">
+            <!-- 프로필 두 장을 한 상자로 묶습니다. PC 에서는 display:contents 로
+                 이 상자를 지워 예전처럼 [캐릭터][넘김칸][페르소나] 세 칸이 되고,
+                 폰에서는 진짜 상자가 되어 **넘김 칸과 옆으로 넘겨 보는 두 장 중
+                 하나**가 됩니다. 묶지 않으면 둘을 한 장으로 다룰 수가 없습니다. -->
+            <div class="pd-info-main">
             <div class="pd-info-col pd-info-col-char">
                 <div class="pd-profile char-layout">
                   <div class="adjustable-img pd-profile-img" id="pdCharImgBox">
@@ -478,6 +488,7 @@
                     <button class="adj-change" data-editonly>📷</button>
                   </div>
                 </div>
+            </div>
             </div>
 
             <!-- 가운데 칸은 다섯 장입니다 — 세로 이미지 / 메모 / TIMELINE / 메시지 / 테마곡.
@@ -916,13 +927,38 @@
   </div>
 </div>
 
-<!-- Log write / view -->
-<div class="modal-overlay" id="modalLogWrite">
-  <div class="modal">
-    <button class="modal-close" data-close>✕</button>
-    <h3 id="logWriteHeading">게시글 작성</h3>
-    <div class="form-row"><label>제목</label><input type="text" id="logTitle" /></div>
-    <div class="form-row"><label>내용</label>
+<!-- ---- LOG 게시글 화면 ----
+     창이 아니라 화면입니다. ARCHIVE 글 화면과 같은 구성(상단바 → 단추줄 →
+     글칸)이지만, 패널 전체가 아니라 PAIR·OC 상세의 **배너 아래 칸**만 덮습니다 —
+     누구의 LOG 인지 알려 주는 배너는 그대로 보여야 합니다.
+
+     여기서는 숨어 있고, 열 때 JS 가 지금 열려 있는 상세의 장 칸
+     (.pd-tab-content / .oc-pages) 으로 옮깁니다 — PAIR 상세와 OC 상세가
+     같은 조각을 나눠 쓰므로 id 를 둘로 만들 수 없습니다.
+
+     읽기와 쓰기는 ARCHIVE 와 같이 .arcd-editing 하나로 갈립니다. -->
+<section class="log-detail" id="logDetail">
+  <div class="topbar arc-detail-bar logd-bar">
+    <div class="arcd-left">
+      <button type="button" class="dt-back arcd-back" id="logBackBtn" title="목록으로">←</button>
+      <div class="arcd-titles">
+        <h3 id="logViewTitle"></h3>
+        <div class="arcd-meta"><span id="logViewDate"></span></div>
+        <input type="text" class="arcd-title-input" id="logTitle" placeholder="제목" />
+      </div>
+    </div>
+    <button class="arc-kebab-btn" id="logKebabBtn" data-editonly title="더보기">⋮</button>
+    <div class="arc-kebab-menu" id="logKebabMenu">
+      <button type="button" id="logPinBtn">고정</button>
+      <button type="button" id="logEditBtn">수정</button>
+      <button type="button" id="logDeleteBtn">삭제</button>
+    </div>
+    <div class="arcd-actions">
+      <button type="button" class="btn-ghost" id="logCancelBtn">취소</button>
+      <button type="button" class="btn-primary" id="saveLogBtn">게시</button>
+    </div>
+  </div>
+  <div class="arcd-toolbar logd-toolbar">
       <div class="rt-toolbar rt-toolbar-log">
         <button type="button" data-cmd="bold" title="볼드"><b>B</b></button>
         <button type="button" data-cmd="italic" title="이탤릭"><i>I</i></button>
@@ -940,27 +976,17 @@
           <label class="rt-colorcell"><input type="color" id="logHighlightColor" value="#f8ddbf" /><span>형광펜</span></label>
         </div>
       </div>
+  </div>
+  <div class="arc-detail-body logd-body">
+    <div class="arc-detail-col">
+      <!-- 읽을 때 -->
+      <div class="profile-view-text arc-view-content" id="logViewContent"></div>
+      <!-- 고칠 때 -->
       <div class="profile-view-text log-editor" id="logContent" contenteditable="true"></div>
       <div class="log-autofmt-hint">&quot;따옴표&quot; 보조색 · (괄호) 괄호색 · **별표** 볼드 — 저장 시 자동 적용됩니다.</div>
     </div>
-    <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;" id="logWriteHint">작성 시각이 자동으로 기록됩니다.</div>
-    <div class="form-actions"><button class="btn-ghost" data-close>취소</button><button class="btn-primary" id="saveLogBtn">저장</button></div>
   </div>
-</div>
-<div class="modal-overlay" id="modalLogView">
-  <div class="modal">
-    <button class="modal-close" data-close>✕</button>
-    <button class="arc-kebab-btn" id="logKebabBtn" data-editonly title="더보기">⋮</button>
-    <div class="arc-kebab-menu" id="logKebabMenu">
-      <button type="button" id="logPinBtn">고정</button>
-      <button type="button" id="logEditBtn">수정</button>
-      <button type="button" id="logDeleteBtn">삭제</button>
-    </div>
-    <h3 id="logViewTitle"></h3>
-    <div style="font-size:10.5px;color:var(--text-muted);margin-bottom:28px;" id="logViewDate"></div>
-    <div class="profile-view-text arc-view-content" id="logViewContent"></div>
-  </div>
-</div>
+</section>
 
 <!-- Archive write / view modals -->
 <!-- 노래 관리 (편집 모드에서 사이드바 위젯의 ＋) -->
@@ -1157,7 +1183,7 @@
        (그 목록을 만드는 것도 JS인데 새 CSS 가 감싸이지 않은 select 를 폭 0 으로
        접습니다), 스티커 서랍이 엉뚱한 자리에 놓였습니다.
        **CSS 와 JS 를 함께 고쳤으면 번호도 함께 올리세요.** -->
-<script src="js/main.js?v=140"></script>
+<script src="js/main.js?v=158"></script>
 <script type="module" src="js/firebase-store.js?v=115"></script>
 </body>
 </html>

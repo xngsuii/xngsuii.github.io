@@ -1037,7 +1037,12 @@ function activateView(view){
   if(!el) return;
   /* 상세 화면에서 다른 곳으로 옮기면 '상세를 보고 있다' 표시를 지웁니다 —
      사이드바에서 PAIR 을 다시 누르는 것도 이 길로 들어옵니다. */
-  if(view !== 'pair-detail' && view !== 'oc-detail') delete document.body.dataset.detail;
+  if(view !== 'pair-detail' && view !== 'oc-detail'){
+    delete document.body.dataset.detail;
+    /* 상세 위에 얹혀 있던 LOG 글 화면도 같이 걷습니다 —
+       그냥 두면 다음에 상세를 열 때 글이 펼쳐진 채로 나옵니다. */
+    if(typeof logDetailOpen === 'function' && logDetailOpen()) closeLogDetail();
+  }
   const changed = !el.classList.contains('active');
   document.querySelectorAll('.view').forEach(v=> v.classList.remove('active', 'view-enter'));
   el.classList.add('active');
@@ -1517,31 +1522,6 @@ document.querySelectorAll('.modal-overlay').forEach(ov=>{ ov.addEventListener('c
    getSnapshot() 은 지금 입력 상태를 문자열로 돌려주는 함수 — 모달을 열 때
    armUnsavedGuard() 로 그 시점 값을 기준선으로 저장해 두고, 닫으려는 시점에
    다시 불러 값이 달라졌으면 '저장 안 됨'으로 봅니다. */
-function guardUnsavedClose(overlayId, getSnapshot){
-  const overlay = document.getElementById(overlayId);
-  if(!overlay) return;
-  let baseline = null;
-  overlay._armUnsavedGuard = ()=>{ baseline = getSnapshot(); };
-  const dirty = ()=> baseline !== null && getSnapshot() !== baseline;
-  const attempt = (e)=>{
-    if(!overlay.classList.contains('open') || !dirty()) return;
-    e.stopPropagation();
-    e.preventDefault();
-    siteConfirm('저장하지 않은 내용이 있어요. 그래도 나갈까요?', '나가기').then(ok=>{
-      if(ok){ baseline = null; overlay.classList.remove('open'); }
-    });
-  };
-  overlay.querySelectorAll('.modal-close').forEach(btn=> btn.addEventListener('click', attempt, true));
-  overlay.addEventListener('click', (e)=>{ if(e.target===overlay) attempt(e); }, true);
-}
-guardUnsavedClose('modalLogWrite', ()=> JSON.stringify([
-  document.getElementById('logTitle').value,
-  document.getElementById('logContent').innerHTML,
-  document.getElementById('logSubColor').value,
-  document.getElementById('logParenColor').value,
-  document.getElementById('logHighlightColor').value
-]));
-
 /* ============================================================
    사이드바 뮤직 위젯
    ------------------------------------------------------------
@@ -2358,9 +2338,7 @@ function renderPairPosts(){
   }
 
   if(pagSlot && totalPages>1){
-    let pag = `<button class="log-pg-btn" data-pg="prev" ${pairPage===1?'disabled':''}>&lt;</button>`;
-    for(let i=1;i<=totalPages;i++){ pag += `<button class="log-pg-btn ${i===pairPage?'active':''}" data-pg="${i}">${i}</button>`; }
-    pag += `<button class="log-pg-btn" data-pg="next" ${pairPage===totalPages?'disabled':''}>&gt;</button>`;
+    const pag = pagerHtml(totalPages, pairPage);
     pagSlot.innerHTML = `<div class="log-pagination">${pag}</div>`;
     pagSlot.querySelectorAll('.log-pg-btn').forEach(btn=>{
       btn.addEventListener('click', ()=>{
@@ -2518,10 +2496,23 @@ function setPdPage(idx, animate){
 
    돌아갈 때 보던 쪽을 되살립니다 — 3쪽에서 글을 열었으면 3쪽으로 돌아옵니다. */
 let pairListPage = 1, ocListPage = 1, arcListPage = 1;
+/* 히스토리에 '상세를 보고 있음' 한 칸을 쌓습니다.
+   안드로이드의 뒤로가기 단추와 아이폰 사파리의 왼쪽 모서리 스와이프는 둘 다
+   '히스토리를 한 칸 되돌리는' 같은 동작이라, 한 번 쌓아 두면 둘 모두가 아래
+   popstate 로 들어옵니다 — 따로 손댈 것이 없습니다.
+   주소는 그대로 둡니다(칸만 쌓습니다). 이 사이트는 주소로 화면을 가리키지
+   않으므로, 주소를 바꾸면 새로고침했을 때 갈 곳이 없어집니다. */
+function pushDetailHistory(name){
+  try{ history.pushState({ ghDetail:name }, ''); }catch(_){}
+}
 function openDetailView(name){
+  /* 이미 상세를 보고 있으면 쌓지 않습니다 — ARCHIVE 는 읽기와 고치기가 같은
+     화면이라(읽기 → 수정 → 게시 → 읽기) 그대로 두면 칸이 여러 개 쌓입니다. */
+  const first = !document.body.dataset.detail;
   activateView(name);
   /* 창일 때는 바깥을 눌러 닫았습니다. 화면이 된 지금은 Escape 만 남깁니다. */
   document.body.dataset.detail = name;
+  if(first) pushDetailHistory(name);
 }
 function closeDetailView(){
   delete document.body.dataset.detail;
@@ -2539,30 +2530,71 @@ function backToOcList(){
   activateView('oc');
 }
 /* ARCHIVE 는 폴더까지 함께 돌아옵니다 — 폴더는 화면을 옮겨도 그대로 기억되므로
-   (currentArcFolderIds) 여기서는 쪽만 되돌리면 됩니다. */
-async function backToArchiveList(){
-  if(arcEditing() && !(await leaveArcEdit())) return;
+   (currentArcFolderIds) 여기서는 쪽만 되돌리면 됩니다.
+   '저장 안 했는데 나갈래?' 를 묻는 것은 이 함수가 아니라 requestLeaveDetail
+   입니다 — 나가는 길이 셋(← · Escape · 기기 뒤로가기)이라 물어보는 자리를
+   한 군데로 모아 두어야 두 번 묻거나 건너뛰는 일이 없습니다. */
+function backToArchiveList(){
+  exitArcEdit();
   editingArcId = null;
   closeDetailView();
   arcPage = arcListPage;
   renderArchive();
   activateView('archive');
 }
-document.getElementById('pdBackBtn')?.addEventListener('click', backToPairList);
-document.getElementById('ocBackBtn')?.addEventListener('click', backToOcList);
-document.getElementById('arcBackBtn')?.addEventListener('click', backToArchiveList);
+/* 실제로 화면을 닫는 일만 합니다 — 물어보는 것은 requestLeaveDetail 이 끝냈고,
+   여기까지 왔다는 것은 나가도 좋다는 뜻입니다. */
+function closeDetailNow(d){
+  if(d === 'pair-detail') backToPairList();
+  else if(d === 'oc-detail') backToOcList();
+  else backToArchiveList();
+}
+/* 상세에서 나가려는 모든 길이 여기로 모입니다 — ← 단추, Escape, 그리고 기기의
+   뒤로가기. 나가도 되는지 먼저 묻고, 괜찮으면 **히스토리를 한 칸 되돌립니다**.
+   화면을 직접 닫지 않고 아래 popstate 에게 맡기는 까닭: 우리가 닫든 기기가
+   닫든 길이 하나여야 쌓아둔 칸과 화면이 어긋나지 않습니다(직접 닫으면 칸이
+   남아서, 그 다음 뒤로가기 한 번이 아무 일도 안 하는 것처럼 보입니다). */
+async function requestLeaveDetail(){
+  const d = document.body.dataset.detail;
+  if(!d) return;
+  /* LOG 글 화면은 상세 위에 한 겹 더 얹혀 있으므로 이쪽이 먼저 닫힙니다 */
+  if(logDetailOpen()){
+    if(logEditing() && !(await leaveLogEdit())) return;
+    if(history.state && history.state.ghDetail === 'log-detail') history.back();
+    else closeLogDetail();
+    return;
+  }
+  if(arcEditing() && !(await leaveArcEdit())) return;
+  if(history.state && history.state.ghDetail) history.back();
+  else closeDetailNow(d);
+}
+document.getElementById('pdBackBtn')?.addEventListener('click', requestLeaveDetail);
+document.getElementById('ocBackBtn')?.addEventListener('click', requestLeaveDetail);
+document.getElementById('arcBackBtn')?.addEventListener('click', requestLeaveDetail);
+/* 기기의 뒤로가기 — 안드로이드 뒤로가기 단추, 아이폰의 왼쪽 모서리 스와이프,
+   그리고 우리가 부른 history.back() 이 모두 여기로 들어옵니다.
+   뒤로가기는 되돌릴 수 없으므로, 고치던 글이 있어서 '남겠다'고 하면 칸을
+   도로 쌓아 화면과 히스토리를 다시 맞춥니다. */
+window.addEventListener('popstate', async ()=>{
+  if(logDetailOpen()){
+    if(logEditing() && !(await leaveLogEdit())){ pushDetailHistory('log-detail'); return; }
+    closeLogDetail();
+    return;
+  }
+  const d = document.body.dataset.detail;
+  if(!d) return;
+  if(arcEditing() && !(await leaveArcEdit())){ pushDetailHistory(d); return; }
+  closeDetailNow(d);
+});
 /* Escape 로도 목록으로. 글을 쓰는 중(입력칸에 커서)에는 가로채지 않습니다 —
    그때 Escape 는 그 칸의 것이고, 창(모달)이 떠 있으면 그쪽이 먼저입니다. */
 document.addEventListener('keydown', (e)=>{
   if(e.key !== 'Escape') return;
-  const d = document.body.dataset.detail;
-  if(!d) return;
+  if(!document.body.dataset.detail) return;
   if(document.querySelector('.modal-overlay.open, .lightbox.open')) return;
   const t = e.target;
   if(t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
-  if(d === 'pair-detail') backToPairList();
-  else if(d === 'oc-detail') backToOcList();
-  else backToArchiveList();
+  requestLeaveDetail();
 });
 
 /* 상세 화면을 지금 보고 있는지. 예전에는 '창이 열려 있나'를
@@ -3861,6 +3893,41 @@ function filterLogItems(items){
    사진이 든 카드는 사진이 도착해야 높이를 알 수 있으므로, 도착할 때마다
    다시 잽니다(위 renderLogList 의 load 처리). */
 const LOG_PER_PAGE = 10;
+
+/* ---- 폰에서 LOG 표의 한 페이지 줄 수 ----
+   ARCHIVE 의 fitArchiveRows 와 같은 방식이고, 이유도 같습니다.
+   PC 의 LOG 는 벽돌식 카드라 한 쪽에 열 장으로 못박아도 되지만(카드는 길이가
+   제각각이고 칸 안에서 스크롤됩니다), 폰에서는 ARCHIVE 의 OOC·ETC 와 같은
+   줄 목록이 됩니다. 줄 목록은 기기 높이에 따라 들어가는 줄 수가 달라지므로
+   고정 값으로는 어떤 기기에선 스크롤이 생기고 어떤 기기에선 아래가 남습니다.
+   ARCHIVE 를 화면으로 옮길 때 그쪽만 고치고 여기는 빠져 있었습니다.
+
+   그린 뒤에 실제 줄 높이와 표 칸의 남은 높이를 재서 다시 그립니다. 표 칸
+   (.log-table-scroll)의 높이는 내용과 무관하게 부모가 정해 주므로(flex:1)
+   줄이 넘치든 모자라든 같은 값이 나옵니다 — 그래서 한 번에 수렴합니다. */
+let logRowsPerPage = 0;      // 재서 얻은 줄 수 (0 = 아직 못 쟴)
+let logRowsFitting = false;  // 다시 그리는 중 (한 번만 돌게)
+function fitLogRows(){
+  const root = logHost && logHost.root;
+  const scroll = root && root.querySelector('.log-table-scroll');
+  if(!scroll) return;
+  const row = scroll.querySelector('tbody tr');
+  if(!row) return;
+  const rowH = row.getBoundingClientRect().height;
+  const boxH = scroll.clientHeight;
+  if(rowH <= 0 || boxH <= 0) return;      // 아직 안 보이는 화면 — 잴 수 없습니다
+  const head = scroll.querySelector('thead');
+  const headH = head ? head.getBoundingClientRect().height : 0;
+  /* 소수점 높이가 반올림되며 1px 이 모자라 스크롤이 생기는 것을 막으려고
+     0.5px 만 봐줍니다. 넘치는 쪽보다 한 줄 덜 넣는 쪽이 안전합니다. */
+  const fit = Math.max(1, Math.floor((boxH - headH + 0.5) / rowH));
+  if(fit === logRowsPerPage || logRowsFitting) return;
+  logRowsPerPage = fit;
+  logRowsFitting = true;
+  const p = logPost();
+  if(p) renderLogList(p);
+  logRowsFitting = false;
+}
 const LOG_CARD_COLS = 3;
 const LOG_CARD_GAP = 10;
 const LOG_PREVIEW_LINES = 8;
@@ -3926,7 +3993,9 @@ function renderLogList(p){
      탭 줄이 뜨는 보기 모드에서는 그 높이만큼(한 줄) 페이지 크기를 줄입니다 —
      보기 모드는 아래에 검색 줄까지 있어 15줄이 딱 맞게 들어차 있었습니다. */
   const showFolderBar = isLoggedIn || (p.logFolders||[]).length>1;
-  const perPage = LOG_PER_PAGE;
+  /* 폰은 줄 목록이라 화면 높이에 맞춰 잰 값을 씁니다(fitLogRows).
+     아직 못 잰 동안에는 10줄로 한 번 그리고, 그 그림을 재서 곧바로 다시 그립니다. */
+  const perPage = isMobileWidth() ? (logRowsPerPage || LOG_PER_PAGE) : LOG_PER_PAGE;
   renderLogFolderBar(p, showFolderBar);
   /* 지금 고른 폴더의 글만 보여줍니다 (갤러리·PROMPT 와 같은 규칙) */
   const folder = (p.logFolders||[]).find(f=>f.id===currentLogFolderId) || (p.logFolders||[])[0];
@@ -3966,9 +4035,7 @@ function renderLogList(p){
   const asRows = isMobileWidth();
   let pag='';
   if(totalPages>1){
-    pag += `<button class="log-pg-btn" data-pg="prev" ${pdLogPage===1?'disabled':''}>&lt;</button>`;
-    for(let i=1;i<=totalPages;i++){ pag += `<button class="log-pg-btn ${i===pdLogPage?'active':''}" data-pg="${i}">${i}</button>`; }
-    pag += `<button class="log-pg-btn" data-pg="next" ${pdLogPage===totalPages?'disabled':''}>&gt;</button>`;
+    pag = pagerHtml(totalPages, pdLogPage);
   }
   const pagHtml = `<div class="log-pagination-slot">${totalPages>1?`<div class="log-pagination">${pag}</div>`:''}</div>`;
 
@@ -4006,6 +4073,8 @@ function renderLogList(p){
     wrap.innerHTML = `<div class="log-cards-scroll"><div class="log-cards" id="pdLogCards">${cards}</div></div>` + pagHtml;
   }
   updateLogSelectBtns();
+  /* 줄 목록일 때만 — 그린 뒤에 재서 줄 수가 다르면 한 번 다시 그립니다 */
+  if(asRows) fitLogRows();
 
   /* 카드든 줄이든 누르고 끄는 동작은 같습니다 */
   const bindItem = (el, entry)=>{
@@ -4162,15 +4231,18 @@ function initLogRoot(host){
   if(!root) return;
   const use = ()=>{ logHost = host; };
 
+  /* 새 글도 읽는 화면과 같은 자리에서 씁니다 — 빈 화면이 수정 모드로 열리고,
+     게시를 눌러야 실제로 만들어집니다(ARCHIVE 와 같은 규칙). */
   const addBtn = root.querySelector('.log-add-btn');
   if(addBtn) addBtn.addEventListener('click', ()=>{
     use();
     if(!isLoggedIn) return;
-    editingLogId = null;
-    document.getElementById('logWriteHeading').innerText='게시글 작성';
-    document.getElementById('logWriteHint').innerText='작성 시각이 자동으로 기록됩니다.';
-    fillLogEditor(null);
-    openModal('modalLogWrite');
+    currentLogViewId = null;
+    document.getElementById('logViewTitle').innerText = '';
+    document.getElementById('logViewDate').innerText = '';
+    document.getElementById('logViewContent').innerHTML = '';
+    openLogDetail();
+    enterLogEdit(null);
   });
 
   /* 선택 모드 — ARCHIVE 표 화면과 같은 규칙입니다 */
@@ -4266,24 +4338,98 @@ let currentLogViewId = null;
   });
 })();
 
+/* ---- LOG 글 화면 ----
+   ARCHIVE 글 화면과 같은 구조입니다(arcDetailEl / enterArcEdit … 와 나란히
+   읽어 보세요). 다른 점은 이 조각이 패널 전체가 아니라 PAIR·OC 상세의
+   **장 칸 안**에 얹힌다는 것뿐입니다. */
+function logDetailEl(){ return document.getElementById('logDetail'); }
+function logDetailOpen(){ return !!logDetailEl()?.classList.contains('open'); }
+function logEditing(){ return !!logDetailEl()?.classList.contains('arcd-editing'); }
+
+/* 지금 열려 있는 상세의 장 칸. LOG 목록이 PAIR 상세에도 OC 상세에도 있어서
+   글 화면 조각 하나를 둘이 나눠 씁니다 — 열 때마다 그쪽으로 옮깁니다. */
+function logPaneHost(){
+  if(pairDetailOpen()) return document.querySelector('#view-pair-detail .pd-tab-content');
+  if(ocDetailOpen())   return document.querySelector('#view-oc-detail .oc-pages');
+  return null;
+}
+function openLogDetail(){
+  const el = logDetailEl(); if(!el) return;
+  const host = logPaneHost();
+  if(host && el.parentNode !== host) host.appendChild(el);
+  const first = !logDetailOpen();
+  el.classList.add('open');
+  /* 상세 안에서 한 겹 더 들어간 자리이므로 히스토리에도 한 칸 더 쌓습니다 —
+     기기 뒤로가기를 누르면 목록이 아니라 LOG 목록으로 돌아옵니다.
+     읽기 ↔ 수정을 오갈 때는 쌓지 않습니다(같은 화면입니다). */
+  if(first) pushDetailHistory('log-detail');
+}
+function closeLogDetail(){
+  const el = logDetailEl(); if(!el) return;
+  exitLogEdit();
+  el.classList.remove('open');
+  currentLogViewId = null;
+  editingLogId = null;
+}
+
+let logEditBaseline = null;
+function logEditSnapshot(){
+  return JSON.stringify([
+    document.getElementById('logTitle').value,
+    document.getElementById('logContent').innerHTML,
+    document.getElementById('logSubColor').value,
+    document.getElementById('logParenColor').value,
+    document.getElementById('logHighlightColor').value
+  ]);
+}
+function logEditDirty(){ return logEditBaseline !== null && logEditSnapshot() !== logEditBaseline; }
+function exitLogEdit(){
+  logEditBaseline = null;
+  logDetailEl()?.classList.remove('arcd-editing');
+}
+async function leaveLogEdit(){
+  if(logEditDirty() && !(await siteConfirm('저장하지 않은 내용이 있어요. 그래도 나갈까요?', '나가기'))) return false;
+  exitLogEdit();
+  return true;
+}
+
 /* 편집기는 값을 읽어서 도로 저장하는 자리라, 사진이 다 온 뒤에 채웁니다.
    안 온 사진을 빈 자리로 그려놓고 저장하면 그 사진이 지워집니다. */
-async function fillLogEditor(entry){
-  if(entry && !(await window.SiteStore.ensure(entry.content))){
-    /* 사진을 못 받았습니다. 이대로 채우면 그 자리가 빈 <img> 가 되고,
-       저장하는 순간 사진이 영영 사라집니다. 창을 닫는 편이 낫습니다. */
-    closeModal('modalLogWrite');
-    alert('사진을 다 불러오지 못했어요. 이대로 수정하면 사진이 사라질 수 있어서 창을 닫았습니다.\n인터넷 연결을 확인하고 다시 열어주세요.');
-    return;
-  }
+async function enterLogEdit(entry){
+  editingLogId = entry ? entry.id : null;
   document.getElementById('logTitle').value = entry ? entry.title : '';
-  document.getElementById('logContent').innerHTML = entry ? imgUrl(logContentToHtml(entry.content)) : '';
+  const ed = document.getElementById('logContent');
+  ed.innerHTML = '';
   document.getElementById('logSubColor').value       = (entry && entry.subColor)       || LOG_SUB_COLOR_DEFAULT;
   document.getElementById('logParenColor').value     = (entry && entry.parenColor)     || LOG_PAREN_COLOR_DEFAULT;
   document.getElementById('logHighlightColor').value = (entry && entry.highlightColor) || LOG_HIGHLIGHT_DEFAULT;
   document.getElementById('logTextColor').value  = '#1a1a1a';
-  document.getElementById('modalLogWrite')._armUnsavedGuard?.();
+  logDetailEl().classList.add('arcd-editing');
+  logEditBaseline = null;
+  const body = logDetailEl().querySelector('.arc-detail-body');
+  if(body) body.scrollTop = 0;
+  if(entry && !(await window.SiteStore.ensure(entry.content))){
+    /* 사진을 못 받았습니다. 이대로 채우면 그 자리가 빈 <img> 가 되고,
+       저장하는 순간 사진이 영영 사라집니다. 고치기를 그만두는 편이 낫습니다. */
+    exitLogEdit();
+    alert('사진을 다 불러오지 못했어요. 이대로 수정하면 사진이 사라질 수 있어서 수정을 그만둡니다.\n인터넷 연결을 확인하고 다시 열어주세요.');
+    return;
+  }
+  if(editingLogId !== (entry ? entry.id : null)) return;   // 그 사이 다른 글을 열었으면 그만
+  ed.innerHTML = entry ? imgUrl(logContentToHtml(entry.content)) : '';
+  logEditBaseline = logEditSnapshot();
 }
+
+document.getElementById('logBackBtn')?.addEventListener('click', ()=> requestLeaveDetail());
+/* 취소 — 고치던 글이 있으면 그 글을 읽는 자리로, 새 글이었으면 목록으로 */
+document.getElementById('logCancelBtn')?.addEventListener('click', async ()=>{
+  const id = editingLogId;
+  if(!(await leaveLogEdit())) return;
+  editingLogId = null;
+  const p = logPost();
+  const entry = (id && p) ? p.log.find(x=>x.id===id) : null;
+  if(entry) openLogView(entry); else requestLeaveDetail();
+});
 
 bindOnce(document.getElementById('saveLogBtn'), async ()=>{
   const title=document.getElementById('logTitle').value.trim();
@@ -4293,17 +4439,24 @@ bindOnce(document.getElementById('saveLogBtn'), async ()=>{
   const subColor       = document.getElementById('logSubColor').value;
   const parenColor     = document.getElementById('logParenColor').value;
   const highlightColor = document.getElementById('logHighlightColor').value;
+  let savedId = editingLogId;
   if(editingLogId){
     const entry = p.log.find(x=>x.id===editingLogId);
     if(entry){ entry.title=title; entry.content=content; entry.subColor=subColor; entry.parenColor=parenColor; entry.highlightColor=highlightColor; }
   }else{
     /* 새 글은 지금 보고 있는 폴더에 들어갑니다 (갤러리·PROMPT 와 같은 규칙) */
     const folderId = currentLogFolderId || (p.logFolders[0] && p.logFolders[0].id) || LOG_DEFAULT_FOLDER;
-    p.log.push({ id:Date.now(), title, date:nowStamp(), content, subColor, parenColor, highlightColor, folderId });
+    savedId = Date.now();
+    p.log.push({ id:savedId, title, date:nowStamp(), content, subColor, parenColor, highlightColor, folderId });
+    pdLogPage = 1;      // 새 글은 목록 첫 쪽에 있습니다. 고친 글은 보던 쪽 그대로.
   }
   await logHost.save();
-  pdLogPage=1;
-  renderLogList(p); closeModal('modalLogWrite');
+  exitLogEdit();
+  editingLogId = null;
+  renderLogList(p);
+  /* 고친 결과를 바로 읽는 자리로 (ARCHIVE 와 같습니다) */
+  const saved = p.log.find(x=>x.id===savedId);
+  if(saved) openLogView(saved); else requestLeaveDetail();
 });
 function openLogView(entry){
   currentLogViewId = entry.id;
@@ -4311,7 +4464,7 @@ function openLogView(entry){
   document.getElementById('logViewDate').innerText=entry.date||'';
   renderLogContentInto(document.getElementById('logViewContent'), entry);
   updateLogPinBtn(entry);
-  openModal('modalLogView');
+  openLogDetail();
 }
 function updateLogPinBtn(entry){
   const btn=document.getElementById('logPinBtn');
@@ -4347,12 +4500,7 @@ document.getElementById('logEditBtn').addEventListener('click', async ()=>{
   const p=logPost();
   const entry = p.log.find(x=>x.id===currentLogViewId);
   if(!entry) return;
-  editingLogId = entry.id;
-  document.getElementById('logWriteHeading').innerText='게시글 수정';
-  document.getElementById('logWriteHint').innerText=`작성일: ${entry.date||''}`;
-  closeModal('modalLogView');
-  openModal('modalLogWrite');
-  await fillLogEditor(entry);
+  await enterLogEdit(entry);
 });
 document.getElementById('logDeleteBtn').addEventListener('click', async ()=>{
   logKebabMenu.classList.remove('open');
@@ -4362,7 +4510,7 @@ document.getElementById('logDeleteBtn').addEventListener('click', async ()=>{
   p.log = p.log.filter(x=>x.id!==currentLogViewId);
   await logHost.save();
   renderLogList(p);
-  closeModal('modalLogView');
+  requestLeaveDetail();
 });
 
 /* ============================================================
@@ -5354,6 +5502,32 @@ const GALLERY_SLIDE_MS = 450;
 const MOBILE_MQ = '(max-width:768px)';
 const SHORT_MQ  = '(max-height:720px)';
 function isMobileWidth(){ return window.matchMedia(MOBILE_MQ).matches; }
+
+/* ---- 쪽 번호 ----
+   네 군데(PAIR 목록 · PAIR 안의 LOG · OC 목록 · ARCHIVE 목록)가 같은 줄을
+   그리므로 한 함수로 모읍니다.
+
+   좁은 화면에서는 번호를 다섯 개까지만 그리고, 지금 쪽을 가운데 두는 창을
+   씌워 그 언저리만 보여 줍니다 — 스무 쪽짜리 목록이면 번호 스무 개가 한 줄에
+   들어가지 않아 줄이 접히고 그 아래 내용이 통째로 밀려납니다.
+   창은 양 끝에서 끝에 붙습니다(1~5 / 16~20), 그래서 개수는 늘 다섯입니다.
+   PC 는 자리가 넉넉하므로 예전처럼 전부 보여 줍니다. */
+const PAGER_MAX_MOBILE = 5;
+function pagerRange(total, cur){
+  if(!isMobileWidth() || total <= PAGER_MAX_MOBILE) return [1, total];
+  const half = Math.floor(PAGER_MAX_MOBILE / 2);
+  const from = Math.min(Math.max(cur - half, 1), total - PAGER_MAX_MOBILE + 1);
+  return [from, from + PAGER_MAX_MOBILE - 1];
+}
+function pagerHtml(total, cur){
+  const [from, to] = pagerRange(total, cur);
+  let h = `<button class="log-pg-btn" data-pg="prev" ${cur===1?'disabled':''}>&lt;</button>`;
+  for(let i=from;i<=to;i++){
+    h += `<button class="log-pg-btn ${i===cur?'active':''}" data-pg="${i}">${i}</button>`;
+  }
+  h += `<button class="log-pg-btn" data-pg="next" ${cur===total?'disabled':''}>&gt;</button>`;
+  return h;
+}
 function galleryPerPage(){
   if(!isMobileWidth()) return 15;
   return window.matchMedia(SHORT_MQ).matches ? 6 : 9;
@@ -6542,9 +6716,7 @@ function renderOcPosts(){
   }
 
   if(pagSlot && totalPages>1){
-    let pag = `<button class="log-pg-btn" data-pg="prev" ${ocPage===1?'disabled':''}>&lt;</button>`;
-    for(let i=1;i<=totalPages;i++){ pag += `<button class="log-pg-btn ${i===ocPage?'active':''}" data-pg="${i}">${i}</button>`; }
-    pag += `<button class="log-pg-btn" data-pg="next" ${ocPage===totalPages?'disabled':''}>&gt;</button>`;
+    const pag = pagerHtml(totalPages, ocPage);
     pagSlot.innerHTML = `<div class="log-pagination">${pag}</div>`;
     pagSlot.querySelectorAll('.log-pg-btn').forEach(btn=>{
       btn.addEventListener('click', ()=>{
@@ -6712,9 +6884,69 @@ function makeSidePager(pagesEl, dotsEl){
   return { set, get(){ return idx; } };
 }
 let ocSidePager = null, pdSidePager = null;
+/* ---- 폰에서 INFO 를 두 장으로 ----
+   프로필과 넘김 칸(이미지·메모·타임라인·테마곡)을 위아래로 쌓으면 폰 한 화면에
+   들어가지 않아 긴 스크롤이 생깁니다. 옆으로 넘겨 보게 하면 각각이 한 화면에
+   딱 들어갑니다. PC 에서는 아무 일도 하지 않습니다 — 거기서는 세 칸이 한
+   화면에 나란히 있으니 넘길 것이 없습니다.
+
+   넘김 칸 안에는 이미 좌우 넘김(makeSidePager)이 있어 두 겹이 됩니다.
+   부딪히지 않도록 규칙을 나눕니다.
+     · 프로필 장에서 **왼쪽**으로 밀면 → 넘김 칸으로
+     · 넘김 칸에서 **오른쪽**으로 밀되, 그 안이 첫 장(이미지)일 때만 → 프로필로
+   안쪽이 첫 장인지는 손가락을 **뗄 때가 아니라 댈 때** 봅니다. 안쪽 넘김이
+   더 안에 있어 먼저 처리되므로, 뗄 때 보면 이미 0 으로 바뀐 뒤라 한 번에
+   두 칸이 움직여 버립니다. */
+function makeInfoPager(gridEl, innerPager){
+  if(!gridEl) return { set(){}, get(){ return 0; } };
+  const slides = ()=> Array.from(gridEl.children).filter(el=> el.nodeType===1);
+  let idx = 0;
+  function set(i, animate){
+    const els = slides();
+    if(!els.length) return;
+    if(!isMobileWidth()){
+      /* PC 로 돌아오면 인라인으로 걸어둔 자리를 지웁니다 — 안 그러면 격자
+         칸들이 옆으로 밀린 채 남습니다. */
+      idx = 0;
+      els.forEach(el=>{ el.style.transition=''; el.style.transform=''; });
+      return;
+    }
+    idx = clamp(i, 0, els.length-1);
+    els.forEach((el,n)=>{
+      el.style.transition = (animate===false) ? 'none' : '';
+      /* 장끼리 16px 씩 띄웁니다 (makeSidePager 와 같은 이유) */
+      el.style.transform = `translateX(calc(${(n-idx)*100}% + ${(n-idx)*16}px))`;
+    });
+    if(animate===false){
+      void els[0].offsetWidth;
+      els.forEach(el=>{ el.style.transition=''; });
+    }
+  }
+  let x0=null, y0=0, innerAtStart=0;
+  gridEl.addEventListener('touchstart', (e)=>{
+    if(e.touches.length!==1){ x0=null; return; }
+    x0=e.touches[0].clientX; y0=e.touches[0].clientY;
+    innerAtStart = innerPager ? innerPager.get() : 0;
+  }, {passive:true});
+  gridEl.addEventListener('touchend', (e)=>{
+    if(x0===null) return;
+    const dx=e.changedTouches[0].clientX-x0, dy=e.changedTouches[0].clientY-y0;
+    x0=null;
+    if(!isMobileWidth()) return;
+    if(Math.abs(dx)<40 || Math.abs(dx)<=Math.abs(dy)) return;   // 세로로 민 것은 장 넘김 몫
+    if(idx===0 && dx<0) set(1);
+    else if(idx===1 && dx>0 && innerAtStart===0) set(0);
+  }, {passive:true});
+  set(0, false);
+  return { set, get(){ return idx; } };
+}
+
+let ocInfoPager = null, pdInfoPager = null;
 function initSidePagers(){
   ocSidePager = makeSidePager(document.getElementById('ocSidePages'), document.getElementById('ocSideDots'));
   pdSidePager = makeSidePager(document.getElementById('pdSidePages'), document.getElementById('pdSideDots'));
+  ocInfoPager = makeInfoPager(document.querySelector('#view-oc-detail .oc-info-grid'), ocSidePager);
+  pdInfoPager = makeInfoPager(document.querySelector('#view-pair-detail .pd-info-grid'), pdSidePager);
 }
 
 /* ---- 테마곡 ----
@@ -7274,8 +7506,11 @@ function initOcDetail(){
    세로 휠 / 휠(가운데) 버튼 끌기 / 세로 스와이프로 한 장씩 넘깁니다.
    step(+1|-1) 하나만 넘기면 되고, paneSel 은 좁은 화면에서 장 자체가
    스크롤될 때 그 스크롤을 먼저 쓰도록 하기 위한 선택자입니다. */
-function bindPageGestures(el, step, paneSel){
+function bindPageGestures(el, step0, paneSel){
   if(!el) return;
+  /* LOG 글 화면이 장 칸을 덮고 있는 동안에는 장을 넘기지 않습니다 —
+     글을 읽으려고 굴린 것이 뒤에 깔린 장을 넘겨 버립니다. */
+  const step = (d)=>{ if(logDetailOpen()) return; step0(d); };
 
   /* 테마곡 목록은 다릅니다 — 스크롤이 생겨 있으면 위아래 끝에 닿아도
      장을 넘기지 않고 그 칸에서만 스크롤합니다. 곡을 훑어보다가 창이
@@ -7293,7 +7528,9 @@ function bindPageGestures(el, step, paneSel){
      길이가 제각각이라 스크롤이 생기므로 여기 없으면 목록을 내리는 도중
      장이 같이 넘어가 버립니다. 목록에 없는 칸은 스크롤이 없어 그냥 지나갑니다. */
   const INNER = '.oc-free-box, .side-memo-box, .log-table-scroll, .log-cards-scroll, '
-              + '.pd-desc-box, .timeline-list, .msg-list, ' + paneSel;
+              + '.pd-desc-box, .timeline-list, .msg-list, '
+              /* 폰의 INFO 두 장 — 각각 제 안에서 굴러갑니다(makeInfoPager) */
+              + '.pd-info-main, .pd-info-side, .oc-info-main, .oc-info-side, ' + paneSel;
   const consumedByInnerScroll = (target, down)=>{
     if(!target || !target.closest) return false;
     const box = target.closest(INNER);
@@ -7411,8 +7648,9 @@ function arcDetailEl(){ return document.getElementById('view-archive-detail'); }
 function arcEditing(){ return !!arcDetailEl()?.classList.contains('arcd-editing'); }
 
 /* 저장하지 않고 나가려 할 때 물어보기 위한 기준선.
-   예전에는 guardUnsavedClose 가 창의 ✕ 와 바깥 클릭만 지켰는데, 화면에는
-   그 둘이 없으므로 취소·뒤로·Escape 세 곳이 이 함수를 지나가게 했습니다. */
+   창일 때는 ✕ 와 바깥 클릭만 지키면 됐지만 화면에는 그 둘이 없으므로,
+   취소·뒤로·Escape 세 곳이 모두 이 함수를 지나가게 했습니다.
+   (LOG 글 화면도 같은 방식입니다 — logEditSnapshot / leaveLogEdit) */
 let arcEditBaseline = null;
 function arcEditSnapshot(){
   return JSON.stringify([
@@ -7435,7 +7673,7 @@ async function leaveArcEdit(){
   return true;
 }
 
-/* fillLogEditor 과 같은 이유로, 사진·첨부가 다 온 뒤에 채웁니다 */
+/* enterLogEdit 과 같은 이유로, 사진·첨부가 다 온 뒤에 채웁니다 */
 async function enterArcEdit(existingItem){
   editingArcId = existingItem ? existingItem.id : null;
   document.getElementById('arcCategoryInput').value = existingItem ? (existingItem.category||'ooc') : currentArchiveCategory;
@@ -7451,7 +7689,7 @@ async function enterArcEdit(existingItem){
   arcEditBaseline = null;
   document.getElementById('arcDetailBody').scrollTop = 0;
   if(existingItem && !(await window.SiteStore.ensure([existingItem.content, existingItem.files || []]))){
-    /* fillLogEditor 과 같은 이유 — 빈 자리로 채운 뒤 저장하면 사진이 사라집니다 */
+    /* enterLogEdit 과 같은 이유 — 빈 자리로 채운 뒤 저장하면 사진이 사라집니다 */
     exitArcEdit();
     alert('사진을 다 불러오지 못했어요. 이대로 수정하면 사진이 사라질 수 있어서 수정을 그만둡니다.\n인터넷 연결을 확인하고 다시 열어주세요.');
     return;
@@ -7483,7 +7721,7 @@ document.getElementById('arcCancelBtn').addEventListener('click', async ()=>{
   if(!(await leaveArcEdit())) return;
   editingArcId = null;
   const item = id ? state.archive.find(x=>x.id===id) : null;
-  if(item) openArcView(item); else backToArchiveList();
+  if(item) openArcView(item); else requestLeaveDetail();
 });
 
 document.querySelectorAll('.rt-toolbar-arc button[data-cmd]').forEach(btn=>{
@@ -7937,7 +8175,7 @@ document.getElementById('arcDeleteBtn').addEventListener('click', async ()=>{
   if(!await siteConfirm('이 게시글을 삭제할까요?')) return;
   state.archive = state.archive.filter(x=>x.id!==currentArcViewId);
   await storageSet('archive', state.archive);
-  backToArchiveList();
+  requestLeaveDetail();
 });
 
 let arcPage=1;
@@ -8163,7 +8401,22 @@ function rtRememberColor(hex){
     const paintDot = ()=>{ dot.style.background = input.value; };
     paintDot();
 
-    const close = ()=> wrap.classList.remove('open');
+    /* 폰에서는 ARCHIVE 단추줄이 좌우로 구르는 칸이라(overflow-x:auto),
+       그 안에서 절대 위치로 뜬 이 메뉴가 칸 밖으로 잘려 보이지 않습니다.
+       열 때만 화면 기준(fixed)으로 바꿔 달고 닫을 때 되돌립니다 —
+       PC 에서는 아무 일도 하지 않습니다. */
+    const placeMenu = ()=>{
+      if(!isMobileWidth()){ menu.style.position=''; menu.style.top=''; menu.style.left=''; return; }
+      const r = btn.getBoundingClientRect();
+      menu.style.position = 'fixed';
+      menu.style.top  = (r.bottom + 5) + 'px';
+      /* 메뉴는 최소 152px + 테두리·여백. 오른쪽 끝에서 넘치지 않게 당겨 둡니다. */
+      menu.style.left = Math.max(6, Math.min(r.left, window.innerWidth - 178)) + 'px';
+    };
+    const close = ()=>{
+      wrap.classList.remove('open');
+      menu.style.position = ''; menu.style.top = ''; menu.style.left = '';
+    };
     const draw = ()=>{
       const recent = rtRecentColors();
       menu.innerHTML =
@@ -8206,6 +8459,7 @@ function rtRememberColor(hex){
       if(wrap.classList.contains('open')){ close(); return; }
       draw();
       wrap.classList.add('open');
+      placeMenu();
     });
     menu.addEventListener('click', (e)=>{
       const sw = e.target.closest('.rt-cpick-sw');
@@ -8369,9 +8623,7 @@ function renderArchive(){
 
   let pag='';
   if(totalPages>1){
-    pag += `<button class="log-pg-btn" data-pg="prev" ${arcPage===1?'disabled':''}>&lt;</button>`;
-    for(let i=1;i<=totalPages;i++){ pag += `<button class="log-pg-btn ${i===arcPage?'active':''}" data-pg="${i}">${i}</button>`; }
-    pag += `<button class="log-pg-btn" data-pg="next" ${arcPage===totalPages?'disabled':''}>&gt;</button>`;
+    pag = pagerHtml(totalPages, arcPage);
   }
 
   if(isGallery){
@@ -8799,8 +9051,14 @@ function initResponsiveWatch(){
        OOC·ETC 줄 수는 화면 높이에 맞춰 잰 값이라 다시 재게 지워 둡니다. */
     arcPage = 1;
     arcRowsPerPage = 0;
+    /* LOG 표의 줄 수도 같은 이유로 다시 재게 지웁니다 (위 renderLogList 가
+       이미 불렸으므로, 다음에 그릴 때 새로 잽니다) */
+    logRowsPerPage = 0;
     if(document.getElementById('view-archive').classList.contains('active')) renderArchive();
     /* PAIR·OC 목록도 한 페이지 개수가 달라지므로(8 ↔ 4) 첫 페이지로 되돌리고 다시 그립니다 */
+    /* INFO 를 옆으로 넘겨 둔 채 PC 로 돌아오면 칸이 밀린 채 남습니다 */
+    pdInfoPager?.set(0, false);
+    ocInfoPager?.set(0, false);
     pairPage = 1; ocPage = 1;
     if(document.getElementById('view-pair').classList.contains('active')) renderPairPosts();
     if(document.getElementById('view-oc').classList.contains('active')) renderOcPosts();
