@@ -1032,6 +1032,26 @@ let viewEnterTimer = null;
 /* 메뉴를 옮길 때 화면을 바꾸는 유일한 통로입니다. 화면이 실제로 달라질 때만
    올라오는 애니메이션을 겁니다 — 같은 화면에서 카테고리만 고른 것까지 다시
    올리면 눈이 피곤합니다. */
+/* ---- HOME 등장 ----
+   선이 먼저 그어지고 그 다음 내용이 들어옵니다. CSS 가 전부 그리고, 여기서는
+   .hg-intro 를 붙였다 떼기만 합니다 — 붙어 있는 동안에는 칸 테두리가 투명하고
+   대신 .hg-line 이 그어지므로, **끝나면 반드시 떼야** 원래 테두리로 돌아옵니다.
+   style.css 의 마지막 animation-delay + --hi-fade 보다 조금 길게 잡습니다. */
+const HOME_INTRO_MS = 1300;
+let homeIntroTimer = null;
+function restartHomeIntro(){
+  const grid = document.querySelector('#home-intro-page .home-grid');
+  if(!grid) return;
+  /* 폰은 격자 배치가 달라 선 자리가 맞지 않습니다 — 그쪽은 화면이 통째로
+     올라오는 기존 움직임만 씁니다. */
+  if(isMobileWidth()) return;
+  clearTimeout(homeIntroTimer);
+  grid.classList.remove('hg-intro');
+  void grid.offsetWidth;          // 같은 애니메이션을 다시 걸려면 한 번 끊어야 합니다
+  grid.classList.add('hg-intro');
+  homeIntroTimer = setTimeout(()=> grid.classList.remove('hg-intro'), HOME_INTRO_MS);
+}
+
 function activateView(view){
   const el = document.getElementById('view-' + view);
   if(!el) return;
@@ -1050,6 +1070,7 @@ function activateView(view){
   el.classList.add('view-enter');
   clearTimeout(viewEnterTimer);
   viewEnterTimer = setTimeout(()=> el.classList.remove('view-enter'), VIEW_ENTER_MS);
+  if(view === 'home') restartHomeIntro();
 }
 
 const navItems = document.querySelectorAll('.nav-item');
@@ -4066,6 +4087,10 @@ function renderLogList(p){
         + (sel?`<div class="gallery-check lc-check${checked?' checked':''}">${checked?'✓':''}</div>`:'')
         + `<div class="lc-no">${String(displayNo.get(entry)||'').padStart(2,'0')}</div>`
         + `<h4 class="lc-title">${entry.pinned?'<span class="arc-pin-tag">📌</span> ':''}${escapeHtml(entry.title)}</h4>`
+        /* 부제목은 있을 때만 줄을 만듭니다 — 빈 줄로 두면 제목과 본문 사이가
+           이유 없이 벌어집니다 (ARCHIVE 상단바의 부제목과 같은 규칙). */
+        + (String(entry.subtitle||'').trim()
+            ? `<div class="lc-sub">${escapeHtml(entry.subtitle.trim())}</div>` : '')
         + body
         + `<div class="lc-foot"><span class="lc-date">${entry.date||''}</span><span class="lc-more">MORE →</span></div>`
         + `</article>`;
@@ -4322,6 +4347,15 @@ let currentLogViewId = null;
   if(cbBtn2) cbBtn2.addEventListener('click', ()=> insertCopyBox('logContent'));
   const foldBtn = document.getElementById('logFoldBtn');
   if(foldBtn) foldBtn.addEventListener('click', ()=> insertFoldBlock('logContent'));
+  /* 글자 크기 — OC 자유 글 칸의 단추와 같은 함수를 씁니다.
+     mousedown 을 막는 것이 중요합니다: stepFontSize 는 '골라 놓은 글'에
+     적용되므로, 단추를 누르며 커서가 옮겨 가면 아무 일도 일어나지 않습니다. */
+  ['logSizeUpBtn','logSizeDownBtn'].forEach((id,i)=>{
+    const b = document.getElementById(id);
+    if(!b) return;
+    b.addEventListener('mousedown', e=> e.preventDefault());
+    b.addEventListener('click', ()=> stepFontSize('logContent', i===0 ? 1 : -1));
+  });
   initFoldEnter('logContent');
   initCopyBoxKeys('logContent');
   /* 사진 삽입 — ARCHIVE 편집기와 같은 방식(본문 안에 data URL 로 넣습니다) */
@@ -4376,6 +4410,7 @@ let logEditBaseline = null;
 function logEditSnapshot(){
   return JSON.stringify([
     document.getElementById('logTitle').value,
+    document.getElementById('logSubtitle').value,
     document.getElementById('logContent').innerHTML,
     document.getElementById('logSubColor').value,
     document.getElementById('logParenColor').value,
@@ -4398,6 +4433,9 @@ async function leaveLogEdit(){
 async function enterLogEdit(entry){
   editingLogId = entry ? entry.id : null;
   document.getElementById('logTitle').value = entry ? entry.title : '';
+  /* 부제목은 없어도 되는 칸입니다. 예전에 쓴 글에는 이 값 자체가 없으므로
+     항상 || '' 로 받습니다 (ARCHIVE 와 같습니다). */
+  document.getElementById('logSubtitle').value = (entry && entry.subtitle) || '';
   const ed = document.getElementById('logContent');
   ed.innerHTML = '';
   document.getElementById('logSubColor').value       = (entry && entry.subColor)       || LOG_SUB_COLOR_DEFAULT;
@@ -4435,6 +4473,7 @@ bindOnce(document.getElementById('saveLogBtn'), async ()=>{
   const title=document.getElementById('logTitle').value.trim();
   if(!title){ alert('제목을 입력해주세요.'); return; }
   const p=logPost();
+  const subtitle       = document.getElementById('logSubtitle').value.trim();
   const content        = editorHtml('logContent');
   const subColor       = document.getElementById('logSubColor').value;
   const parenColor     = document.getElementById('logParenColor').value;
@@ -4442,12 +4481,12 @@ bindOnce(document.getElementById('saveLogBtn'), async ()=>{
   let savedId = editingLogId;
   if(editingLogId){
     const entry = p.log.find(x=>x.id===editingLogId);
-    if(entry){ entry.title=title; entry.content=content; entry.subColor=subColor; entry.parenColor=parenColor; entry.highlightColor=highlightColor; }
+    if(entry){ entry.title=title; entry.subtitle=subtitle; entry.content=content; entry.subColor=subColor; entry.parenColor=parenColor; entry.highlightColor=highlightColor; }
   }else{
     /* 새 글은 지금 보고 있는 폴더에 들어갑니다 (갤러리·PROMPT 와 같은 규칙) */
     const folderId = currentLogFolderId || (p.logFolders[0] && p.logFolders[0].id) || LOG_DEFAULT_FOLDER;
     savedId = Date.now();
-    p.log.push({ id:savedId, title, date:nowStamp(), content, subColor, parenColor, highlightColor, folderId });
+    p.log.push({ id:savedId, title, subtitle, date:nowStamp(), content, subColor, parenColor, highlightColor, folderId });
     pdLogPage = 1;      // 새 글은 목록 첫 쪽에 있습니다. 고친 글은 보던 쪽 그대로.
   }
   await logHost.save();
@@ -4461,6 +4500,14 @@ bindOnce(document.getElementById('saveLogBtn'), async ()=>{
 function openLogView(entry){
   currentLogViewId = entry.id;
   document.getElementById('logViewTitle').innerText=entry.title;
+  /* 부제목이 비면 줄과 가운뎃점을 함께 숨깁니다 — ARCHIVE 와 같은 규칙이고,
+     남겨 두면 날짜 앞에 점 하나가 덩그러니 남습니다. */
+  const lSub = document.getElementById('logViewSub');
+  const lSubTx = String(entry.subtitle||'').trim();
+  lSub.innerText = lSubTx;
+  lSub.style.display = lSubTx ? '' : 'none';
+  const lDot = document.getElementById('logViewMetaDot');
+  if(lDot) lDot.style.display = lSubTx ? '' : 'none';
   document.getElementById('logViewDate').innerText=entry.date||'';
   renderLogContentInto(document.getElementById('logViewContent'), entry);
   updateLogPinBtn(entry);
@@ -7755,6 +7802,13 @@ if(arcDividerBtn){
   });
 }
 
+/* 글자 크기 — OC 자유 글 칸의 단추와 같은 함수(stepFontSize)를 씁니다 */
+['arcSizeUpBtn','arcSizeDownBtn'].forEach((id,i)=>{
+  const b = document.getElementById(id);
+  if(!b) return;
+  b.addEventListener('mousedown', e=> e.preventDefault());
+  b.addEventListener('click', ()=> stepFontSize('arcContentEditor', i===0 ? 1 : -1));
+});
 const arcFoldBtn = document.getElementById('arcFoldBtn');
 if(arcFoldBtn){
   arcFoldBtn.addEventListener('mousedown', e=> e.preventDefault());
@@ -9590,6 +9644,11 @@ async function boot(){
   /* 첫 화면(HOME)에 보이는 사진을 대기열 맨 앞으로 — renderAll 이
      안 보이는 목록까지 전부 그리면서 순서를 밀어냈을 수 있습니다. */
   prefetchImgs([state.profile, state.homeBanner, state.cards]);
+
+  /* HOME 들어오는 움직임은 여기서 처음 겁니다. 첫 화면은 index.html 에서
+     .active 로 켜져 있어 activateView 를 지나가지 않고, 데이터가 오기 전에
+     걸면 빈 배너와 빈 이름이 들어왔다가 나중에 채워집니다. */
+  if(document.getElementById('view-home')?.classList.contains('active')) restartHomeIntro();
 }
 
 /* ------------------------------------------------------------
