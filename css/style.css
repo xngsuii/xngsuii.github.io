@@ -376,7 +376,6 @@
   .mm-list{display:flex;flex-direction:column;gap:4px;max-height:220px;overflow-y:auto;margin-top:10px;}
   .mm-row{display:flex;align-items:center;gap:8px;padding:7px 8px;border:1px solid var(--border);
     background:var(--surface);font-size:11px;cursor:grab;}
-  .mm-row.dragging{opacity:.4;}
   .mm-row .mm-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .mm-row .mm-a{flex:none;font-size:10px;color:var(--text-muted);max-width:88px;overflow:hidden;
     text-overflow:ellipsis;white-space:nowrap;}
@@ -447,7 +446,6 @@
   .nav-sub-item .ns-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .nav-sub-item .ns-edit{flex:none;font-size:10px;opacity:.45;padding:0 2px;}
   .nav-sub-item .ns-edit:hover{opacity:1;color:var(--accent);}
-  .nav-sub-item.dragging{opacity:.4;}
   /* 카테고리 추가 — 라벨 옆 '＋' 를 누르면 목록 하단에 이 줄이 뜹니다 */
   .ns-add-row{display:flex;align-items:center;gap:4px;padding:4px 6px 4px 10px;}
   .ns-add-input{flex:1;min-width:0;font-family:var(--mono);font-size:11px;padding:5px 7px;
@@ -619,6 +617,13 @@
     pointer-events:none;z-index:1;}
   .hg-h{left:0;right:0;bottom:0;height:1px;}   /* 칸의 아래 테두리 자리 */
   .hg-v{top:0;bottom:0;right:0;width:1px;}     /* 칸의 오른쪽 테두리 자리 */
+  /* 데이터가 오기 전 — 움직임 없이 감추기만 합니다. .hg-intro 와 감추는
+     내용은 같고, 다른 점은 애니메이션이 걸리지 않는다는 것뿐입니다. */
+  .home-grid.hg-hold > .hg-cell{border-color:transparent;}
+  .home-grid.hg-hold .intro-banner,
+  .home-grid.hg-hold .intro-sitename,
+  .home-grid.hg-hold .home-intro,
+  .home-grid.hg-hold .hg-login{opacity:0;}
   .home-grid.hg-intro > .hg-cell{border-color:transparent;}
   .home-grid.hg-intro > .hg-line{display:block;
     animation:hg-grow-x var(--hi-line) cubic-bezier(.4,0,.2,1) both;}
@@ -741,7 +746,6 @@
      .dc-adjustable 은 main.js 가 만들어 카드를 꽉 채우던(position:absolute)
      칸입니다. 여기서 흐름 안(relative)으로 되돌려 글과 세로로 쌓습니다. */
   .dream-card{position:relative;overflow:hidden;min-height:0;border:0;background:var(--bg);color:var(--text);display:flex;flex-direction:column;}
-  .dream-card.dragging{opacity:.4;}
   .dream-card .dc-adjustable{position:relative;inset:auto;flex:1;min-height:110px;}
   /* 평소에는 흑백, 마우스를 올리면 천천히 색이 돌아옵니다.
      hover 가 없는 기기(터치)에서는 아예 걸지 않습니다 — 색을 되돌릴 방법이
@@ -1145,7 +1149,6 @@
   .oc-theme-grip{flex:none;width:12px;text-align:center;color:var(--text-muted);
     font-size:9px;line-height:1;cursor:grab;user-select:none;display:none;}
   body.logged-in .oc-theme-grip{display:block;}
-  .oc-theme-row.dragging{opacity:.4;}
   .oc-theme-row.drop-target{border-color:var(--accent);background:var(--surface);}
   .oc-theme-art{width:30px;height:30px;flex:none;background:var(--surface-2) center/cover no-repeat;
     border:1px solid var(--border);display:flex;align-items:center;justify-content:center;}
@@ -1305,9 +1308,11 @@
      이 화면의 ≡ 가 한 덩어리로 보입니다. */
   .log-detail.open{position:absolute;inset:0;z-index:6;background:var(--bg);
     display:flex;flex-direction:column;min-height:0;padding-top:12px;}
-  /* ≡ 는 같은 글자 크기에서 화살표보다 작게 그려집니다 — 배너의 ← 와 같은
-     무게로 보이도록 올려 둡니다(폰에서도 .dt-back 의 19px 보다 큽니다). */
-  .logd-back{font-size:21px;}
+  /* ≡ 는 글자로 두면 서체마다 크기가 제각각이고, 어느 크기로 맞춰도 데스크톱
+     에서는 배너의 ← 보다 한참 작게 그려졌습니다. 다른 아이콘들(.rt-ico/.gf-ico)
+     과 같이 선으로 직접 그립니다. */
+  .logd-ico{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;
+    stroke-width:1.5;stroke-linecap:round;pointer-events:none;}
   /* 장 칸 안이라 위 여백은 ARCHIVE(14px)보다 조금 좁게 */
   .log-detail .arc-detail-bar{padding-top:10px;}
   .log-detail .arc-detail-body{padding-top:6px;}
@@ -1479,8 +1484,6 @@
   .log-select-btn.active{background:var(--accent);color:#fff;}
   /* 잠긴 비밀 폴더 안내는 목록 칸 한가운데에 (갤러리와 같은 자리) */
   .log-locked{position:static;transform:none;justify-content:center;flex:1;min-height:0;}
-  /* 폴더로 끌어다 옮기는 중인 줄 */
-  .log-table tr.dragging{opacity:.4;}
   .log-table tr.selected td{background:var(--surface-2);color:var(--accent);}
   /* 게시글 검색 (보기 모드 전용) */
   /* 검색창은 페이지 버튼 아래, 가로 가운데에 놓입니다 */
@@ -1792,8 +1795,7 @@
   /* 편집기·본문마다 `... img{margin:8px 0}` 이 따로 있어서, 그보다 확실히
      앞서도록 클래스 두 개를 겹쳐 씁니다 (칸 사이 간격은 gap 이 냅니다) */
   .img-pair > .img-pair-cell > img{display:block;width:100%;max-width:100%;height:auto;margin:0;}
-  /* 끌어다 놓는 중 표시 */
-  .img-dragging{opacity:.4;}
+  /* 끌어다 놓을 자리 표시 */
   .img-drop-target{outline:2px dashed var(--accent);outline-offset:2px;}
   /* 접기 안에 들어간 두 칸 블록도 코드 블록처럼 들여쓴 자리에서 시작합니다 */
   .fold-block > .img-pair{margin-left:20px;}
@@ -2190,7 +2192,6 @@
   .pd-profile-divider{height:1px;background:#f0b89a;margin:8px 0 10px;}
   /* 말풍선: 인덱스 탭(INFO/GALLERY/LOG)과 동일한 오렌지 #EF3921 + 흰 글자 */
   .meta-row{display:flex;align-items:baseline;gap:8px;padding:2px 0;font-size:11px;line-height:1.4;}
-  .meta-row.dragging-meta{opacity:.4;}
   .meta-drag{cursor:grab;color:var(--text-muted);font-size:10px;flex:none;user-select:none;}
   .meta-label{font-weight:700;color:var(--accent);min-width:54px;flex:none;outline:none;}
   .meta-value{color:var(--text);flex:1;outline:none;}
@@ -2229,8 +2230,6 @@
   .gallery-folder-tab:hover{background:var(--surface-2);}
   .gallery-folder-tab.active:hover{background:var(--text);}
   .gallery-folder-tab.drop-target{background:var(--accent);color:#fff;border-color:var(--accent);}
-  /* 순서를 바꾸려고 끌고 있는 탭 (썸네일 드래그와 같은 표시) */
-  .gallery-folder-tab.dragging{opacity:.4;}
   .gallery-folder-rename{border:none;background:none;color:inherit;font-size:10px;opacity:.7;padding:0 2px;}
   .gallery-folder-rename:hover{opacity:1;}
   .gallery-folder-add{font-family:var(--mono);font-size:10.5px;font-weight:700;border:1px dashed var(--accent);background:var(--bg);color:var(--accent);padding:5px 10px;}
@@ -2363,8 +2362,13 @@
   /* 그림은 굵기를 서체로 바꿀 수 없으므로, 손이 닿으면 선을 굵게 그립니다 */
   .gallery-fab:hover .gf-ico,
   .gallery-fab.active .gf-ico{stroke-width:2;}
+  /* ---- 끌고 있는 동안 ----
+     예전에는 끌고 있는 것마다 opacity:.4 를 걸어 반투명하게 만들었습니다
+     (썸네일 · 카드 · 표의 줄 · 폴더 탭 · 정보 행 · 노래 목록 · 스택 편집 …).
+     주인 요청으로 전부 걷어냈습니다 — 잡고 있는 것은 **원래 모습 그대로**
+     보여야 합니다. 어디에 놓이는지는 받는 쪽의 표시(.drop-target)가 알려 줍니다.
+     새로 끄는 자리를 만들 때도 잡히는 쪽을 흐리게 하지 마세요. */
   .gallery-thumb{position:relative;}
-  .gallery-thumb.dragging{opacity:.4;}
   .gallery-check{position:absolute;top:4px;left:4px;width:16px;height:16px;border:1px solid var(--border);background:var(--bg);z-index:3;display:flex;align-items:center;justify-content:center;font-size:10px;}
   .gallery-check.checked{background:var(--accent);color:#fff;border-color:var(--accent);}
   .pd-side .pd-section{flex:1;overflow-y:auto;}
@@ -2391,7 +2395,6 @@
     .log-card:hover{border-color:var(--accent);box-shadow:0 5px 12px rgba(0,0,0,.16);}
   }
   .log-card.selected{background:var(--accent-soft);}
-  .log-card.dragging{opacity:.4;}
   .log-card .lc-check{position:absolute;right:8px;top:8px;}
   .lc-no{font-family:var(--mono);font-size:8px;font-weight:700;color:var(--text-muted);letter-spacing:.06em;}
   /* 부제목은 제목 바로 아래. 비어 있으면 JS 가 줄 자체를 내보내지 않습니다 */
@@ -2708,7 +2711,6 @@
     overflow-y:auto;flex:1;min-height:0;align-content:start;}
   .se-cell{position:relative;aspect-ratio:1/1;border:1px solid var(--border);
     overflow:hidden;cursor:pointer;}
-  .se-cell.dragging{opacity:.4;}
   .se-img{position:absolute;inset:0;background:center/cover no-repeat;}
   /* 마우스를 올리면 어둡게 덮이고 그 위에 큰 ✕ — 누르면 그 장만 빠집니다 */
   .se-x{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
@@ -2741,7 +2743,6 @@
      두르면 선이 사진보다 먼저 보이기 때문입니다. */
   .arc-nai-grid{display:grid;grid-template-columns:repeat(4, 1fr);grid-template-rows:repeat(2, 1fr);gap:16px;flex:1;min-height:0;}
   .arc-nai-thumb{position:relative;min-height:0;background:var(--surface-2);border:1px solid var(--rule-soft);cursor:pointer;overflow:hidden;}
-  .arc-nai-thumb.dragging{opacity:.4;}
   /* 사진은 안쪽 레이어에 깝니다 — 흐림 효과가 제목·버튼·보더까지 번지지 않게 */
   .an-img{position:absolute;inset:0;background-size:cover;background-position:center;background-repeat:no-repeat;}
   /* '썸네일 흐리게' 폴더. 갤러리와 달리 커서를 올려도 풀리지 않고
@@ -3609,6 +3610,18 @@
   /* 드래그 중 표시용. 스크롤을 실제로 막는 것은 JS 의 touchmove preventDefault 이고
      (touch-action 은 손가락이 닿는 순간 정해져 도중에 바꿔도 안 먹습니다),
      여기서는 글자 선택만 확실히 꺼둡니다. */
-  body.touch-dragging{-webkit-user-select:none;user-select:none;}
-  .touch-drag-ghost{position:fixed;z-index:900;pointer-events:none;opacity:.85;
+  body.dragging-now{-webkit-user-select:none;user-select:none;}
+  /* 손가락·커서를 따라다니는 복사본. **이것이 곧 끌고 있는 그림입니다** —
+     브라우저가 만드는 반투명한 그림은 쓰지 않습니다(main.js 의 dragstart 설명).
+     그래서 투명도를 주지 않습니다: 잡고 있는 것은 원래 모습 그대로여야 합니다. */
+  .drag-ghost{position:fixed;z-index:900;pointer-events:none;
     box-shadow:0 8px 24px rgba(0,0,0,.35);transform-origin:center;}
+  /* 예외 둘 — **놓는 곳이 폴더 탭인 것들**입니다.
+     LOG 카드와 PROMPT 썸네일은 순서를 바꾸는 것이 아니라 폴더 위에 떨어뜨리는
+     것인데, 손에 든 것이 크고 불투명하면 지금 어느 폴더 위에 있는지가 그 밑에
+     가려 보이지 않습니다. 이 둘만 비쳐 보이게 둡니다.
+     OOC·ETC 의 표 줄도 같은 방식이지만 줄에는 바탕이 없어 이미 비칩니다.
+     순서만 바꾸는 나머지(카드·썸네일·탭·행)는 아래를 볼 이유가 없으므로
+     원래 모습 그대로 둡니다. */
+  .drag-ghost.log-card,
+  .drag-ghost.arc-nai-thumb{opacity:.7;box-shadow:0 6px 18px rgba(0,0,0,.2);}

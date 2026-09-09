@@ -1042,6 +1042,10 @@ let homeIntroTimer = null;
 function restartHomeIntro(){
   const grid = document.querySelector('#home-intro-page .home-grid');
   if(!grid) return;
+  /* .hg-hold 는 index.html 에 적혀 있는 '아직 아무것도 없음' 표시입니다.
+     **어떤 경로로 들어오든 반드시 떼야 합니다** — 남겨 두면 HOME 이 빈
+     격자만 보인 채로 남습니다(그래서 아래 폰 분기보다 먼저 뗍니다). */
+  grid.classList.remove('hg-hold');
   /* 폰은 격자 배치가 달라 선 자리가 맞지 않습니다 — 그쪽은 화면이 통째로
      올라오는 기존 움직임만 씁니다. */
   if(isMobileWidth()) return;
@@ -1235,7 +1239,7 @@ function renderNavSub(nav){
       selectNavSub(nav, id);
     });
     /* '전체'는 늘 맨 위에 있어야 하므로 끌 수 없습니다.
-       draggable 만 켜두면 손가락 드래그는 initTouchDrag 가 알아서 처리합니다. */
+       draggable 만 켜두면 손가락 드래그는 initDragEngine 이 알아서 처리합니다. */
     if(!fixed && isLoggedIn){
       btn.draggable = true;
       btn.addEventListener('dragstart', ()=>{ draggedCatId = id; btn.classList.add('dragging'); });
@@ -4865,7 +4869,7 @@ function initFolderUnlock(){
 let draggedFolderId = null;
 let draggedFolderBar = null;
 function bindFolderTabReorder(btn, folder, ctx, bar){
-  // 속성으로 넣어야 터치 드래그(initTouchDrag)도 같이 걸립니다
+  // 속성으로 넣어야 우리 드래그 엔진(initDragEngine)이 같이 걸립니다
   btn.setAttribute('draggable','true');
   btn.addEventListener('dragstart', (e)=>{
     draggedFolderId = folder.id;
@@ -6151,14 +6155,14 @@ function initGalleryRoot(host){
   if(wrap){
     let x0=null, y0=0;
     wrap.addEventListener('touchstart', (e)=>{
-      if(e.touches.length!==1 || document.body.classList.contains('touch-dragging')){ x0=null; return; }
+      if(e.touches.length!==1 || document.body.classList.contains('dragging-now')){ x0=null; return; }
       x0=e.touches[0].clientX; y0=e.touches[0].clientY;
     }, {passive:true});
     wrap.addEventListener('touchend', (e)=>{
       if(x0===null) return;
       const dx=e.changedTouches[0].clientX-x0, dy=e.changedTouches[0].clientY-y0;
       x0=null;
-      if(document.body.classList.contains('touch-dragging')) return;
+      if(document.body.classList.contains('dragging-now')) return;
       if(host.horizontal){
         if(Math.abs(dx)<45 || Math.abs(dx)<Math.abs(dy)) return;
         step(dx<0 ? 1 : -1);
@@ -6291,7 +6295,7 @@ function renderStackEdit(){
     grid.appendChild(cell);
   });
   /* 끌기와 누르기가 한 칸에 같이 붙어 있어도 엇갈리지 않습니다 — 마우스로
-     끌면 브라우저가 뒤이어 click 을 보내지 않고, 손가락은 initTouchDrag 이
+     끌면 브라우저가 뒤이어 click 을 보내지 않고, 손가락은 initDragEngine 이
      끌고 난 뒤의 click 한 번을 막아 줍니다. */
 }
 /* 스택에서 한 장 빼기 — **사진을 지우는 것이 아닙니다.** 묶음에서만 빠져서
@@ -7626,14 +7630,14 @@ function bindPageGestures(el, step0, paneSel){
   /* 손가락 위아래 스와이프. 갤러리의 좌우 스와이프와는 방향으로 구분됩니다. */
   let y0=null, x0=0, startTarget=null;
   el.addEventListener('touchstart', (e)=>{
-    if(e.touches.length!==1 || document.body.classList.contains('touch-dragging')){ y0=null; return; }
+    if(e.touches.length!==1 || document.body.classList.contains('dragging-now')){ y0=null; return; }
     y0=e.touches[0].clientY; x0=e.touches[0].clientX; startTarget=e.target;
   }, {passive:true});
   el.addEventListener('touchend', (e)=>{
     if(y0===null) return;
     const dy=e.changedTouches[0].clientY-y0, dx=e.changedTouches[0].clientX-x0;
     y0=null;
-    if(document.body.classList.contains('touch-dragging')) return;
+    if(document.body.classList.contains('dragging-now')) return;
     if(Math.abs(dy)<50 || Math.abs(dy)<Math.abs(dx)) return;
     // 안에서 아직 더 스크롤될 곳이 남았으면 장을 넘기지 않습니다
     if(lockedByThemeList(startTarget)) return;
@@ -8920,19 +8924,109 @@ function galleryStepPage(dir){
     animateGalleryPageChange(-1, ()=>{ galleryPage--; renderGallery(p); });
   }
 }
-/* ---- 길게 눌러 드래그 ----------------------------------------
-   HTML5 드래그앤드롭은 터치에서 아예 동작하지 않습니다.
+/* ---- 브라우저 드래그는 쓰지 않습니다 --------------------------
+   끌기가 시작되면 브라우저는 원본을 찍어 제 그림을 만들어 손에 붙이는데,
+   그 그림은 **반투명하고 CSS 로 손댈 수 없습니다**(크로미움 전체가 그렇습니다 —
+   크롬이든 엣지든 같습니다). 화면에 남은 원본의 opacity 를 1 로 되돌려도
+   소용이 없는 까닭입니다. 둘은 서로 다른 그림입니다.
+   setDragImage 로 우리가 만든 그림을 건네줘도 투명도는 브라우저가 다시
+   덧씌웁니다 — 내용만 바꿀 수 있고 투명도는 못 바꿉니다.
+
+   그래서 **끄는 일 자체를 우리가 합니다**(아래 initDragEngine). 스티커가
+   이미 그렇게 돌아가고 있었고, 같은 이유였습니다.
+   여기서는 그 앞을 막습니다 — 우리가 맡은 요소([draggable="true"])에서는
+   브라우저 드래그를 시작조차 하지 않게 하고, 요소 자신의 dragstart 도
+   여기서 끊습니다(뒤에서 우리가 같은 이름의 이벤트를 다시 쏩니다).
+
+   맡지 않는 것 하나: 글 쓰는 칸 안의 사진입니다. 그 안에서는 글자 선택과
+   엉키므로 브라우저에 맡기고, 대신 그림만 복제본으로 갈아끼워 둘레에 붙는
+   테를 없앱니다. */
+document.addEventListener('dragstart', (e)=>{
+  /* 우리가 쏜 가짜 이벤트(MouseEvent)는 그냥 지나갑니다 — 진짜만 DragEvent 입니다 */
+  if(!(window.DragEvent && e instanceof DragEvent)) return;
+  /* 우리가 맡은 것 — 브라우저 드래그를 켜지 않습니다 */
+  if(e.target && e.target.closest && e.target.closest('[draggable="true"]')){
+    e.preventDefault();
+    e.stopPropagation();
+    return;
+  }
+  const dt = e.dataTransfer;
+  if(!dt || typeof dt.setDragImage !== 'function') return;
+  /* 여기까지 온 것은 글 칸 안의 사진뿐입니다. dragstart 는 끌기의 출발
+     요소에서 나므로 e.target 이 곧 브라우저가 찍을 대상입니다. */
+  const src = e.target;
+  if(!src || src.nodeType !== 1) return;
+  /* 글자를 골라서 끄는 것은 브라우저에 맡깁니다 — 그때 찍어야 할 것은
+     '고른 글자'이지 그것이 들어 있는 칸 전체가 아닙니다. */
+  const sel = window.getSelection();
+  if(sel && !sel.isCollapsed && src.closest && src.closest('[contenteditable="true"]')) return;
+  const rect = src.getBoundingClientRect();
+  if(rect.width < 1 || rect.height < 1) return;
+  /* 화면보다 큰 것은 그대로 둡니다 — 복제해 봐야 그림이 잘립니다 */
+  if(rect.width > window.innerWidth || rect.height > window.innerHeight) return;
+
+  const clone = src.cloneNode(true);
+  /* 복제본에는 '끌고 있음' 표시가 붙으면 안 됩니다 — 그림은 원래 모습이어야
+     합니다(지금은 그 표시가 모양을 바꾸지 않지만, 나중에 바뀌어도 안전하게). */
+  clone.classList.remove('dragging', 'dragging-meta', 'img-dragging');
+
+  let node = clone;
+  if(src.tagName === 'TR'){
+    const srcTable = src.closest('table');
+    const table = document.createElement('table');
+    table.className = srcTable ? srcTable.className : '';
+    table.style.tableLayout = 'fixed';
+    const tb = document.createElement('tbody');
+    tb.appendChild(clone);
+    table.appendChild(tb);
+    /* 칸 너비도 원본 그대로 옮깁니다 — 표에서 떼어내면 스스로 정할 수가 없습니다 */
+    const srcCells = src.children, newCells = clone.children;
+    for(let i = 0; i < srcCells.length; i++){
+      if(newCells[i]) newCells[i].style.width = srcCells[i].getBoundingClientRect().width + 'px';
+    }
+    node = table;
+  }
+  /* 복제본이 문서에 잠깐 들어가므로 id 는 전부 떼어냅니다 — 같은 id 가 둘이면
+     그 한 틱 동안 getElementById 가 복제본을 집어갈 수 있습니다. */
+  if(node.removeAttribute) node.removeAttribute('id');
+  node.querySelectorAll('[id]').forEach(x=> x.removeAttribute('id'));
+  node.style.position = 'fixed';
+  node.style.left   = rect.left + 'px';
+  node.style.top    = rect.top + 'px';
+  node.style.width  = rect.width + 'px';
+  node.style.height = rect.height + 'px';
+  node.style.margin = '0';
+  node.style.opacity = '1';
+  node.style.pointerEvents = 'none';
+  node.style.zIndex = '2147483646';
+  document.body.appendChild(node);
+  try{ dt.setDragImage(node, e.clientX - rect.left, e.clientY - rect.top); }catch(_){}
+  /* 그림은 이 순간 이미 떠 갔습니다 — 복제본은 더 둘 이유가 없습니다 */
+  setTimeout(()=> node.remove(), 0);
+}, true);
+
+/* ---- 끄는 일은 여기서 다 합니다 --------------------------------
+   손가락도 마우스도 이 한 곳을 지나갑니다. 브라우저의 드래그앤드롭은
+   쓰지 않습니다 — 터치에서는 아예 동작하지 않고, 마우스에서는 손에 붙는
+   그림이 반투명한데 그것을 바꿀 방법이 없기 때문입니다(위 dragstart 설명).
+
    기존 dragstart/dragover/dragleave/drop/dragend 핸들러들은 전부 평범한
    리스너라서, 같은 이름의 MouseEvent 를 만들어 쏘면 그대로 실행됩니다.
-   덕분에 카드 순서 / 프로필 정보행 / 갤러리 썸네일 / 폴더 탭 드롭 네 곳의
-   기존 코드를 한 줄도 고치지 않고 터치를 지원합니다.
-   (갤러리 화살표 위에 손가락을 얹고 있으면 페이지가 넘어가는 것도 그대로) */
-function initTouchDrag(){
-  const HOLD_MS = 400;        // 이만큼 누르고 있어야 드래그 시작
-  const MOVE_TOLERANCE = 8;   // 그 전에 이만큼 움직이면 스크롤로 봅니다
+   덕분에 끄는 자리 열세 곳의 코드를 한 줄도 고치지 않고 방식만 갈아끼웠습니다.
+   (갤러리 화살표 위에 얹고 있으면 페이지가 넘어가는 것도 그대로)
+
+   손가락과 마우스가 다른 점은 **언제 시작하는가** 하나뿐입니다.
+   · 손가락 — 0.4초 누르고 있어야 시작합니다. 그 전에 움직이면 스크롤입니다.
+   · 마우스 — 누른 채 4px 만 움직이면 바로 시작합니다. 기다리게 하면
+     고장난 것처럼 느껴지고, 마우스에는 '스크롤하려던 것'이 없습니다. */
+function initDragEngine(){
+  const HOLD_MS = 400;        // 손가락: 이만큼 누르고 있어야 시작
+  const MOVE_TOLERANCE = 8;   // 손가락: 그 전에 이만큼 움직이면 스크롤로 봅니다
+  const MOUSE_START_PX = 4;   // 마우스: 이만큼 움직이면 시작
 
   let timer = null, src = null, ghost = null, active = false;
   let startX = 0, startY = 0, offX = 0, offY = 0, lastTarget = null;
+  let visualEl = null, byMouse = false;
 
   const fire = (el, type, x, y)=>{
     if(!el) return;
@@ -8941,17 +9035,50 @@ function initTouchDrag(){
     }));
   };
 
+  /* 손에 붙는 복사본을 만듭니다.
+     표의 줄(<tr>)만 특별합니다 — 표에서 떼어내면 칸이라는 개념이 없어져
+     글자가 한 줄로 쏟아집니다(실제로 그렇게 보였습니다). 같은 클래스의 표로
+     감싸고 칸 너비도 원본에서 옮겨 와야 모양이 유지됩니다. */
+  const makeGhost = (visual)=>{
+    const clone = visual.cloneNode(true);
+    /* 복제본이 문서에 들어가므로 id 는 떼어냅니다 — 같은 id 가 둘이면
+       끄는 동안 getElementById 가 복제본을 집어갑니다. */
+    clone.removeAttribute('id');
+    clone.querySelectorAll('[id]').forEach(x=> x.removeAttribute('id'));
+    if(visual.tagName !== 'TR') return clone;
+
+    const srcTable = visual.closest('table');
+    const table = document.createElement('table');
+    table.className = srcTable ? srcTable.className : '';
+    table.style.tableLayout = 'fixed';
+    table.style.borderCollapse = 'collapse';
+    const tb = document.createElement('tbody');
+    tb.appendChild(clone);
+    table.appendChild(tb);
+    /* 칸 너비는 표가 정해 주던 것이라 원본에서 재어 옮깁니다 */
+    const from = visual.children, to = clone.children;
+    for(let i = 0; i < from.length; i++){
+      if(to[i]) to[i].style.width = from[i].getBoundingClientRect().width + 'px';
+    }
+    return table;
+  };
+
   const cleanup = ()=>{
     if(timer){ clearTimeout(timer); timer = null; }
     if(ghost){ ghost.remove(); ghost = null; }
-    document.body.classList.remove('touch-dragging');
-    src = null; active = false; lastTarget = null;
+    /* 감춰 둔 원본을 되돌립니다. 그 사이 목록이 다시 그려져 이 요소가 사라졌어도
+       (drop 뒤에 흔히 그렇습니다) 문서에서 떨어져 나간 것에 쓰는 것뿐이라
+       아무 일도 일어나지 않습니다. */
+    if(visualEl) visualEl.style.visibility = '';
+    document.body.classList.remove('dragging-now');
+    src = null; visualEl = null; active = false; lastTarget = null; byMouse = false;
   };
 
   const begin = (visual)=>{
     active = true;
-    if(navigator.vibrate) navigator.vibrate(15);   // 안드로이드만 반응, iOS 는 무시
-    document.body.classList.add('touch-dragging');
+    /* 진동은 손가락일 때만 — 마우스로 끌 때 울리면 이상합니다 */
+    if(!byMouse && navigator.vibrate) navigator.vibrate(15);   // 안드로이드만 반응, iOS 는 무시
+    document.body.classList.add('dragging-now');
     /* 길게 누르는 사이 브라우저가 이미 글자를 선택했을 수 있습니다.
        CSS 의 user-select:none 은 새 선택만 막으므로 여기서 한 번 지웁니다. */
     const sel = window.getSelection && window.getSelection();
@@ -8960,14 +9087,21 @@ function initTouchDrag(){
     const r = visual.getBoundingClientRect();
     offX = startX - r.left;
     offY = startY - r.top;
-    ghost = visual.cloneNode(true);
-    ghost.classList.add('touch-drag-ghost');
+    ghost = makeGhost(visual);
+    ghost.classList.add('drag-ghost');
     ghost.style.left = r.left + 'px';
     ghost.style.top = r.top + 'px';
     ghost.style.width = r.width + 'px';
     ghost.style.height = r.height + 'px';
     ghost.style.margin = '0';
     document.body.appendChild(ghost);
+    /* **들어올린 것은 제자리에서 사라집니다.** 손에 하나, 자리에 하나 —
+       같은 것이 둘로 보이면 무엇을 들고 있는지 알 수 없습니다.
+       display 가 아니라 visibility 로 감추는 까닭: 자리(빈 칸)는 남겨 두어야
+       어디에 놓이는지 보이고, 목록이 갑자기 한 칸 줄어들며 튀지도 않습니다.
+       (dragover 가 이 요소를 목록 안에서 옮기므로, 그 빈 칸이 곧 놓일 자리를
+        미리 보여 줍니다.) */
+    visual.style.visibility = 'hidden';
 
     fire(src, 'dragstart', startX, startY);
   };
@@ -8984,28 +9118,33 @@ function initTouchDrag(){
   }, {passive:false});
 
   document.addEventListener('pointerdown', (e)=>{
-    if(e.pointerType === 'mouse') return;         // PC 는 기본 DnD 를 씁니다
+    if(e.pointerType === 'mouse' && e.button !== 0) return;   // 왼쪽 단추만
     const t = e.target;
     if(!(t instanceof Element)) return;
-    // 글을 쓰는 중에는 iOS 텍스트 선택(돋보기)과 충돌하므로 걸지 않습니다
+    /* 글을 쓰는 칸 안은 건드리지 않습니다 — 글자 선택(과 iOS 의 돋보기)과
+       엉킵니다. 그 안의 사진은 브라우저 드래그에 맡깁니다. */
     if(t.closest('[contenteditable="true"]')) return;
     const handle = t.closest('[draggable="true"]');
     if(!handle) return;
 
     cleanup();
     src = handle;
+    byMouse = (e.pointerType === 'mouse');
     startX = e.clientX; startY = e.clientY;
     // 손잡이(::)만 draggable 인 정보행은 행 전체를 들어올려야 자연스럽습니다
-    const visual = handle.closest('.meta-row') || handle;
-    timer = setTimeout(()=> begin(visual), HOLD_MS);
+    visualEl = handle.closest('.meta-row') || handle;
+    /* 마우스는 기다리지 않습니다 — 움직이는 순간 시작합니다(pointermove) */
+    if(!byMouse) timer = setTimeout(()=> begin(visualEl), HOLD_MS);
   }, {passive:true});
 
   document.addEventListener('pointermove', (e)=>{
-    if(e.pointerType === 'mouse' || !src) return;
+    if(!src) return;
     if(!active){
-      // 아직 시작 전인데 움직였다면 스크롤하려던 것으로 봅니다
-      if(Math.hypot(e.clientX - startX, e.clientY - startY) > MOVE_TOLERANCE) cleanup();
-      return;
+      const moved = Math.hypot(e.clientX - startX, e.clientY - startY);
+      /* 마우스는 조금만 움직이면 시작, 손가락은 같은 움직임이 '스크롤하려던 것' */
+      if(byMouse){ if(moved > MOUSE_START_PX) begin(visualEl); }
+      else if(moved > MOVE_TOLERANCE) cleanup();
+      if(!active) return;
     }
     e.preventDefault();
     ghost.style.left = (e.clientX - offX) + 'px';
@@ -9024,7 +9163,7 @@ function initTouchDrag(){
   }, {passive:false});
 
   const finish = (e)=>{
-    if(e.pointerType === 'mouse' || !src) return;
+    if(!src) return;
     if(!active){ cleanup(); return; }
     const source = src;
     ghost.style.display = 'none';
@@ -9042,6 +9181,9 @@ function initTouchDrag(){
   };
   document.addEventListener('pointerup', finish);
   document.addEventListener('pointercancel', ()=> cleanup());
+  /* 창 밖에서 손을 떼면 pointerup 이 오지 않습니다 — 그대로 두면 복제본이
+     화면에 붙은 채 남습니다. */
+  window.addEventListener('blur', ()=> cleanup());
 }
 
 /* ---- 라이트박스 좌우 스와이프 ---- */
@@ -9612,7 +9754,7 @@ async function boot(){
   initHomeTouchNav();
   initLightboxSwipe();
   initLightboxKeys();
-  initTouchDrag();
+  initDragEngine();
   initResponsiveWatch();
   initContentBlocks();
 
@@ -9765,7 +9907,15 @@ function initPhotoIndicator(){
 }
 
 /* 불러오기 실패를 화면 위에 조용히 알립니다 (동작을 막지 않도록) */
+/* 데이터를 못 받았어도 HOME 은 보여야 합니다 — 기다리는 표시를 떼어 둡니다 */
+function unholdHome(){
+  document.querySelector('#home-intro-page .home-grid')?.classList.remove('hg-hold');
+}
+/* 어떤 이유로든 boot 이 끝나지 않는 경우를 위한 안전줄 */
+setTimeout(unholdHome, 8000);
+
 function showLoadError(){
+  unholdHome();
   const bar = document.createElement('div');
   bar.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:9999;background:#c1440e;color:#fff;'
     + 'font-size:12px;padding:8px 12px;text-align:center;font-family:inherit;';
