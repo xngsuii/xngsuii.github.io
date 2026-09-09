@@ -262,6 +262,9 @@
      .sticker-drawer 가 가지고 있습니다. 여기 다시 넣으면 서랍만 메뉴 밑에
      떨어져 붙습니다. */
   .music-block{padding:0 0 16px;}
+  /* 데이터가 오기 전 — 비워 둡니다. visibility 인 까닭은 HOME 격자와 같습니다:
+     자리를 남겨야 사이드바가 뒤늦게 밀려 내려가지 않습니다. */
+  .music-block.mb-hold{visibility:hidden;}
   .mb-body{display:flex;align-items:center;gap:8px;}
   .mb-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px;}
   .mb-top{display:flex;align-items:baseline;justify-content:space-between;gap:4px;}
@@ -651,13 +654,19 @@
   /* 선이 다 그어진 뒤에 내용이 들어옵니다 */
   .home-grid.hg-intro .intro-banner,
   .home-grid.hg-intro .intro-sitename,
-  .home-grid.hg-intro .home-intro,
-  .home-grid.hg-intro .hg-login{animation:hg-fade var(--hi-fade) ease both;}
+  .home-grid.hg-intro .home-intro{animation:hg-fade var(--hi-fade) ease both;}
   @keyframes hg-fade{ from{opacity:0;transform:translateY(6px);} to{opacity:1;transform:none;} }
   .home-grid.hg-intro .intro-banner  {animation-delay:.62s;}
   .home-grid.hg-intro .intro-sitename{animation-delay:.70s;}
   .home-grid.hg-intro .home-intro    {animation-delay:.76s;}
-  .home-grid.hg-intro .hg-login      {animation-delay:.82s;}
+  /* 단추는 둘로 나뉩니다 — 밑줄은 **선**이라 다른 선들 사이에 끼어 그어지고
+     (l5 와 l6 사이), 글자는 나머지 내용과 함께 나중에 들어옵니다.
+     글자만 따로 나타나게 하려고 opacity 가 아니라 color 를 씁니다 —
+     opacity 는 ::after 로 그린 밑줄까지 함께 흐리게 만듭니다. */
+  .home-grid.hg-intro .postcard-btn::after{
+    animation:hg-grow-x var(--hi-line) cubic-bezier(.4,0,.2,1) both;animation-delay:.44s;}
+  .home-grid.hg-intro .postcard-btn{animation:hg-btn-in var(--hi-fade) ease both;animation-delay:.82s;}
+  @keyframes hg-btn-in{ from{color:transparent;} to{color:var(--text);} }
 
   /* 배너는 칸 크기가 고정이고 **사진이 잘려 칸을 꽉 채웁니다**.
      비율을 정해 두지 않는 것이 중요합니다 — 예전에는 aspect-ratio:3/1 이라
@@ -681,13 +690,38 @@
      그대로 덮으며 나타나는 입력 두 칸뿐입니다.
      .login-sheet 의 .open / .closing 클래스는 main.js 가 붙였다 뗍니다 —
      아래 애니메이션 길이는 main.js 의 LOGIN_CLOSE_MS 와 같아야 합니다. */
-  .postcard-btn{
-    border:1px solid var(--border);background:var(--bg);padding:7px 13px;
-    font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0;
+  /* ---- SIGN IN / SIGN OUT ----
+     칸을 가로로 가득 채우는 넓은 단추입니다. 상자를 두르지 않고 **아랫변 하나**
+     로만 그립니다 — 격자의 다른 선들과 같은 말투이고, 들어올 때 그 선이
+     오른쪽에서 왼쪽으로 그어집니다(아래 .hg-intro 규칙).
+     밑줄을 border 가 아니라 ::after 로 두는 까닭: border 는 그어지게 만들 수
+     없습니다(선을 늘리려면 늘릴 상자가 있어야 합니다). */
+  .hg-login{display:block;padding:0;}
+  .postcard-btn{position:relative;width:100%;height:44px;
+    display:flex;align-items:center;justify-content:flex-end;
+    /* 자간이 마지막 글자 뒤에도 붙으므로 오른쪽 여백에서 그만큼 뺍니다 */
+    padding:0 15px 0 16px;border:0;background:transparent;
+    font-family:var(--mono);font-size:20px;letter-spacing:.04em;
+    font-weight:400;font-variation-settings:'wght' 400;
     text-transform:uppercase;line-height:1;color:var(--text);
-    transition:background .16s ease,color .16s ease;}
-  .postcard-btn:hover{background:var(--text);color:#fff;}
-  .postcard-btn:disabled{opacity:.4;cursor:default;}
+    transition:color .16s ease;}
+  /* 밑줄은 **글자에 붙습니다** — 칸을 가로지르는 선은 격자선처럼 읽혀서
+     '밑줄 그어진 라벨'이 되지 않습니다. 그래서 글자를 감싼 span 에 긋습니다.
+     text-decoration 이 아니라 늘어나는 상자인 까닭: text-decoration 은
+     그어지게 만들 수 없습니다(늘릴 상자가 없습니다).
+     평소에는 없고, 손이 닿으면 **왼쪽에서 오른쪽으로** 그어집니다.
+     색은 currentColor — 글자가 주황으로 바뀌면 밑줄도 함께 갑니다. */
+  .pb-label{position:relative;display:inline-block;}
+  .pb-label::after{content:'';position:absolute;left:0;right:0;bottom:-3px;height:1px;
+    background:currentColor;transform:scaleX(0);transform-origin:left;
+    transition:transform .24s cubic-bezier(.4,0,.2,1);}
+  .postcard-btn:hover .pb-label::after{transform:scaleX(1);}
+  /* 밑줄은 격자의 다른 선들과 같은 선입니다 — 손이 닿는다고 색이 변하면
+     혼자 다른 규칙을 따르는 선이 됩니다. 글자만 반응합니다. */
+  .postcard-btn::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;
+    background:var(--border);transform-origin:right;}
+  .postcard-btn:hover{color:var(--accent);text-decoration-color:var(--accent);}
+  .postcard-btn:disabled{color:var(--text-muted);cursor:default;}
   .login-sheet{position:absolute;inset:0;z-index:5;display:none;background:var(--bg);}
   .login-sheet.open{display:flex;align-items:center;}
   .ls-box{flex:1;padding:0 22px;animation:ls-in .3s ease both;}
@@ -2795,7 +2829,6 @@
   .arc-nai-cap{padding:12px;opacity:0;transition:opacity .18s ease;min-width:0;}
   @media (hover:hover){ .arc-nai-thumb:hover .arc-nai-cap{opacity:1;} }
   .arc-nai-thumb.revealed .arc-nai-cap{opacity:1;}
-  .arc-nai-overlay-static .arc-nai-cap{opacity:1;}
   /* 목록의 No 와 같은 번호입니다(표의 첫 칸과 같은 값). 제목보다 크게 두어
      사진 위에서 먼저 읽히게 합니다 - 사진만 보고 몇 번 글인지 알기 위한
      표시라, 이 칸에서는 제목보다 이쪽이 먼저 필요합니다. */
@@ -2808,8 +2841,17 @@
   /* 부제목과 날짜는 제목보다 한 단씩 물러섭니다 — 크기와 밝기 둘 다로 */
   .arc-nai-sub{color:rgba(255,255,255,.82);font-size:11px;font-weight:300;letter-spacing:-.01em;line-height:1.35;margin-top:3px;}
   .arc-nai-date{color:rgba(255,255,255,.6);font-size:10px;font-weight:400;letter-spacing:.06em;line-height:1;margin-top:6px;font-variant-numeric:tabular-nums;}
-  /* 사진이 없는 칸은 흰 바탕이라 글자색을 뒤집습니다 */
-  .arc-nai-overlay-static{background:rgba(0,0,0,.08) !important;}
+  /* 사진이 없는 칸도 다른 칸과 똑같이 **마우스를 올려야** 번호·제목·날짜가
+     뜹니다(예전에는 늘 떠 있었습니다 — .arc-nai-overlay-static 이 흐림을
+     풀어 두고 있었습니다). 평소에는 그냥 회색 칸이고, 손이 닿으면 옅게
+     어두워지면서 글자가 나타납니다. 사진 칸이 어두워지는 것과 같은 움직임인데,
+     흰 바탕이라 훨씬 옅게만 덮습니다. */
+  .arc-nai-overlay-static{background:rgba(0,0,0,0) !important;}
+  @media (hover:hover){
+    .arc-nai-thumb:hover .arc-nai-overlay-static{background:rgba(0,0,0,.08) !important;}
+  }
+  .arc-nai-thumb.revealed .arc-nai-overlay-static{background:rgba(0,0,0,.08) !important;}
+  /* 흰 바탕 위라 글자색을 뒤집습니다 */
   .arc-nai-overlay-static .arc-nai-no,
   .arc-nai-overlay-static .arc-nai-title{color:var(--text);text-shadow:none;}
   .arc-nai-overlay-static .arc-nai-sub,
@@ -2839,6 +2881,11 @@
   .sticker{position:absolute;pointer-events:auto;cursor:grab;touch-action:none;
     -webkit-user-select:none;user-select:none;}
   .sticker img{display:block;width:100%;height:auto;-webkit-user-drag:none;pointer-events:none;}
+  /* 그림자는 켜고 끌 수 있습니다(서랍 머리줄의 체크칸, 저장되는 설정입니다).
+     box-shadow 가 아니라 drop-shadow 인 까닭: 스티커는 대개 배경이 뚫린
+     그림이라 상자 그림자를 달면 있지도 않은 네모가 생깁니다. drop-shadow 는
+     그림의 실제 모양을 따라갑니다. */
+  .sticker-layer.st-shadow .sticker img{filter:drop-shadow(2px 3px 3px rgba(0,0,0,.3));}
   /* 좌우반전은 이미지에만 겁니다 — 스티커 자체(.sticker)에는 떨어짐·말랑팝
      애니메이션이 transform 을 쓰고 있어서, 여기에 겹치면 서로 지워버립니다. */
   .sticker.flipped img,.sd-item.flipped img,.st-preview.flipped img{transform:scaleX(-1);}
@@ -2900,7 +2947,8 @@
     .home-grid.hg-intro .intro-banner,
     .home-grid.hg-intro .intro-sitename,
     .home-grid.hg-intro .home-intro,
-    .home-grid.hg-intro .hg-login{animation-delay:0s;}
+    .home-grid.hg-intro .postcard-btn,
+    .home-grid.hg-intro .postcard-btn::after{animation-delay:0s;}
   }
 
   /* ---------- 스티커 서랍 ----------
@@ -2949,7 +2997,14 @@
     to  {opacity:1;transform:none;}
   }
   .sticker-drawer.closing .sticker-drawer-box{display:block;animation:sd-rise-r .26s ease reverse both;}
-  .sd-head{margin-bottom:8px;padding-right:0;}
+  .sd-head{display:flex;align-items:center;justify-content:space-between;gap:8px;
+    margin-bottom:8px;padding-right:0;}
+  /* 체크칸 — 서랍 안의 다른 글자(10px 라벨)와 같은 크기로 물러서 있습니다 */
+  .sd-shadow{align-items:center;gap:4px;cursor:pointer;
+    font-family:var(--mono);font-size:9.5px;font-weight:500;letter-spacing:.08em;
+    color:var(--text-muted);user-select:none;}
+  .sd-shadow:hover{color:var(--text);}
+  .sd-shadow input{width:11px;height:11px;margin:0;accent-color:var(--accent);cursor:pointer;}
   .sd-title{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.16em;
     text-transform:uppercase;color:var(--text-muted);}
   /* 스크롤 상자와 단 나누기를 분리합니다 — 단(column-count)에 직접 높이를 주면
@@ -3097,7 +3152,7 @@
     .ns-add-input{padding:9px 10px;font-size:13px;}
     /* 좁은 화면은 아래 여백 자체가 적어서 데스크톱(90px)만큼 내리면
        ︾ 단추와 부딪힙니다. 절반쯤만 내립니다. */
-    .postcard-btn{min-height:40px;font-size:14px;margin-top:44px;}
+    .postcard-btn{height:48px;font-size:12px;margin-top:0;padding:0 14px;}
     /* 좁은 화면에서는 엽서가 이미 화면 폭을 거의 다 쓰므로 키우지 않고
        엽서와 같은 자리·같은 크기로 되돌립니다 */
     .login-sheet{left:0;right:0;top:0;bottom:0;padding:0 24px;}
@@ -3625,3 +3680,9 @@
      원래 모습 그대로 둡니다. */
   .drag-ghost.log-card,
   .drag-ghost.arc-nai-thumb{opacity:.7;box-shadow:0 6px 18px rgba(0,0,0,.2);}
+  /* LOVE INTEREST 카드는 테두리 없이 사진과 글이 바탕 위에 그대로 놓인 모양이라,
+     그림자를 달면 없던 상자가 생긴 것처럼 보입니다. 들 때도 원래 모습대로. */
+  /* 바탕까지 지웁니다 — 카드에는 테두리가 없고 사진과 글이 지면 위에 그냥
+     놓인 모양이라, 흰 바탕을 달고 오면 없던 상자가 따라오는 것처럼 보입니다.
+     글자는 지면 위에 그대로 얹혀 옵니다. */
+  .drag-ghost.dream-card{box-shadow:none;background:transparent;}

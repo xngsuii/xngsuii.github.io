@@ -48,6 +48,9 @@ const SCALAR_KEYS = ['profile', 'siteName', 'homeIntro', 'homeBanner', 'archiveS
                      /* 사이드바 뮤직 위젯의 재생 목록. 곡마다 영상 번호와 제목·아티스트뿐이라
                         몇십 곡이 되어도 작습니다(음량은 기기별 취향이라 저장하지 않습니다). */
                      'musicList',
+                     /* 스티커 그림자 켜기/끄기 — 참/거짓 하나입니다.
+                        보는 사람 모두에게 같아야 하므로 기기가 아니라 여기 둡니다. */
+                     'stickerShadow',
                      /* 화면에 붙여 두는 스티커. 그림은 blob:// 로 빠져나가므로
                         남는 것은 자리·크기·문구뿐이라 작습니다. */
                      'stickers'];

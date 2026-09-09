@@ -69,7 +69,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
-<link rel="stylesheet" href="css/style.css?v=172" />
+<link rel="stylesheet" href="css/style.css?v=181" />
 </head>
 <body>
 <div class="app-window">
@@ -117,7 +117,15 @@
     <div class="sticker-drawer" id="stickerDrawer">
       <!-- 열렸을 때 손잡이 위로 떠오르는 판 -->
       <div class="sticker-drawer-box">
-        <div class="sd-head"><span class="sd-title">Sticker</span></div>
+        <!-- 그림자 켜기/끄기는 저장되는 설정입니다(모두에게 같게 보입니다) —
+             그래서 고칠 수 있을 때만 나옵니다. -->
+        <div class="sd-head">
+          <span class="sd-title">Sticker</span>
+          <label class="sd-shadow" data-editonly>
+            <input type="checkbox" id="sdShadowChk" />
+            <span>그림자</span>
+          </label>
+        </div>
         <div class="sd-scroll"><div class="sd-list" id="sdList"></div></div>
         <div class="sd-tools" id="sdTools" data-editonly>
           <button class="sd-tool" id="sdAddBtn" type="button">＋ 추가</button>
@@ -133,7 +141,10 @@
 
     <!-- 뮤직 위젯 — 예전 이름/소개글 자리입니다. 상자 없이 구분선 위에 놓입니다.
          소리는 화면 밖에 숨긴 유튜브 플레이어(#ytHost)가 냅니다. -->
-    <div class="music-block">
+    <!-- mb-hold: 데이터가 오기 전까지 비워 둡니다. 그대로 두면 TITLE / ARTIST /
+         0:00 이라는 '들어갈 모양'이 1초쯤 진짜처럼 떠 있습니다.
+         (HOME 격자의 hg-hold 와 같은 장치 — main.js 의 revealAfterLoad 가 뗍니다) -->
+    <div class="music-block mb-hold">
       <div class="mb-body">
         <div class="mb-info">
           <div class="mb-top">
@@ -269,7 +280,11 @@
               <!-- 글자가 상황에 따라 바뀝니다 — 보기 모드에서는 LOGIN,
                    편집 모드에서는 LOGOUT. 상자가 열려 있을 때는 이것이
                    곧 '로그인' 단추입니다(main.js 를 보세요). -->
-              <button type="button" class="postcard-btn" id="postcardBtn">Login</button>
+              <!-- 글자를 span 으로 감싸는 까닭: 밑줄이 **글자 폭에만** 그어져야 하는데,
+                   단추는 칸 전체를 차지하므로 단추에 그으면 칸을 가로지릅니다.
+                   글자를 바꿀 때는 loginLabel() 을 쓰세요 — innerText 로 바로 쓰면
+                   이 span 이 사라집니다. -->
+              <button type="button" class="postcard-btn" id="postcardBtn"><span class="pb-label">Sign in</span></button>
             </div>
             <div class="hg-cell hg-b hg-r"></div>
 
@@ -1216,7 +1231,7 @@
        (그 목록을 만드는 것도 JS인데 새 CSS 가 감싸이지 않은 select 를 폭 0 으로
        접습니다), 스티커 서랍이 엉뚱한 자리에 놓였습니다.
        **CSS 와 JS 를 함께 고쳤으면 번호도 함께 올리세요.** -->
-<script src="js/main.js?v=172"></script>
+<script src="js/main.js?v=181"></script>
 <script type="module" src="js/firebase-store.js?v=115"></script>
 </body>
 </html>

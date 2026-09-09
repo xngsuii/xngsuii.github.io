@@ -15,7 +15,7 @@ function applyEditMode(){
   document.body.classList.toggle('logged-in', isLoggedIn);
   /* 예전의 LOCKED/UNLOCKED 배지는 없앴습니다 — 이 글자가 그 역할을 합니다 */
   const pcBtn = document.getElementById('postcardBtn');
-  if(pcBtn) pcBtn.innerText = isLoggedIn ? 'Logout' : 'Login';
+  loginLabel(isLoggedIn ? 'Sign out' : 'Sign in');
   if(isLoggedIn) closeLoginSheet();
 
   document.getElementById('siteName').readOnly = !isLoggedIn;
@@ -132,6 +132,15 @@ function closeLoginSheet(immediate){
   }, LOGIN_CLOSE_MS);
 }
 const postcardBtnEl = document.getElementById('postcardBtn');
+/* 단추 글자는 밑줄(.pb-label::after) 때문에 span 안에 있습니다 —
+   postcardBtnEl.innerText 로 바로 쓰면 그 span 이 통째로 날아갑니다.
+   값을 넣으면 바꾸고, 없이 부르면 지금 글자를 돌려줍니다. */
+function loginLabel(text){
+  const el = document.querySelector('#postcardBtn .pb-label');
+  if(!el) return '';
+  if(text !== undefined) el.innerText = text;
+  return el.innerText;
+}
 async function submitLogin(){
   const email = document.getElementById('loginId').value.trim();
   const pw    = document.getElementById('loginPw').value;
@@ -158,8 +167,8 @@ postcardBtnEl.addEventListener('click', async ()=>{
   }
   /* 저장이 밀려 있으면 몇 초 걸릴 수 있어 버튼을 잠가 둡니다 */
   postcardBtnEl.disabled = true;
-  const before = postcardBtnEl.innerText;
-  postcardBtnEl.innerText = '...';
+  const before = loginLabel();
+  loginLabel('...');
   try{
     await window.SiteStore.signOut();
   }catch(e){
@@ -167,7 +176,7 @@ postcardBtnEl.addEventListener('click', async ()=>{
     alert('로그아웃하지 못했어요. 잠시 뒤 다시 눌러주세요.');
   }finally{
     postcardBtnEl.disabled = false;
-    if(postcardBtnEl.innerText === '...') postcardBtnEl.innerText = before;
+    if(loginLabel() === '...') loginLabel(before);
   }
 });
 /* 그만두려면 Esc 를 누르거나 상자 바깥을 누릅니다 (따로 취소 단추는 없습니다).
@@ -629,6 +638,7 @@ function migrateArchiveItem(item){
 async function loadState(){
   state.musicList = normalizeMusicList(await storageGet('musicList', []));
   state.stickers  = normalizeStickers(await storageGet('stickers', []));
+  state.stickerShadow = !!(await storageGet('stickerShadow', false));
   state.profile   = await storageGet('profile', state.profile);
   state.siteName  = await storageGet('siteName', state.siteName);
   state.homeIntro = await storageGet('homeIntro', '');
@@ -676,6 +686,8 @@ function renderAll(){
   renderOcPosts();
   renderArchive();
   renderStickers();
+  /* 저장된 그림자 설정을 화면과 체크칸에 맞춥니다 (renderStickers 는 화면만 봅니다) */
+  applyStickerShadow();
   applyEditMode();
 }
 
@@ -9324,11 +9336,27 @@ function stickerPos(s){
 /* 꺼낼 때마다 새 자리에 나옵니다. 스티커 크기를 감안해 가장자리는 비워 둡니다. */
 function randomStickerPos(){ return { x: 8 + Math.random()*60, y: 10 + Math.random()*60 }; }
 
+/* 그림자 켜기/끄기 — 화면과 체크칸을 한 번에 맞춥니다.
+   그리는 것은 CSS(.sticker-layer.st-shadow)가 하고, 여기서는 표시만 붙입니다. */
+function applyStickerShadow(){
+  const layer = document.getElementById('stickerLayer');
+  if(layer) layer.classList.toggle('st-shadow', !!state.stickerShadow);
+  const chk = document.getElementById('sdShadowChk');
+  if(chk) chk.checked = !!state.stickerShadow;
+}
+document.getElementById('sdShadowChk')?.addEventListener('change', (e)=>{
+  if(!isLoggedIn){ e.target.checked = !!state.stickerShadow; return; }
+  state.stickerShadow = e.target.checked;
+  applyStickerShadow();
+  storageSet('stickerShadow', state.stickerShadow);
+});
+
 function renderStickers(){
   const layer = document.getElementById('stickerLayer');
   if(!layer) return;
   const removing = stickerRemoveMode && isLoggedIn;
   layer.classList.toggle('removing', removing);
+  layer.classList.toggle('st-shadow', !!state.stickerShadow);
   layer.innerHTML = '';
   state.stickers.forEach(s=>{
     if(!stickerOut(s)) return;
@@ -9787,6 +9815,9 @@ async function boot(){
      안 보이는 목록까지 전부 그리면서 순서를 밀어냈을 수 있습니다. */
   prefetchImgs([state.profile, state.homeBanner, state.cards]);
 
+  /* 기다리던 자리를 이제 엽니다 — 사이드바는 어느 화면에서든 보이므로
+     HOME 이 켜져 있는지와 상관없이 부릅니다. */
+  revealAfterLoad();
   /* HOME 들어오는 움직임은 여기서 처음 겁니다. 첫 화면은 index.html 에서
      .active 로 켜져 있어 activateView 를 지나가지 않고, 데이터가 오기 전에
      걸면 빈 배너와 빈 이름이 들어왔다가 나중에 채워집니다. */
@@ -9907,15 +9938,19 @@ function initPhotoIndicator(){
 }
 
 /* 불러오기 실패를 화면 위에 조용히 알립니다 (동작을 막지 않도록) */
-/* 데이터를 못 받았어도 HOME 은 보여야 합니다 — 기다리는 표시를 떼어 둡니다 */
-function unholdHome(){
+/* 데이터가 오기 전까지 '아직 아무것도 없음'으로 기다리는 자리가 둘 있습니다 —
+   HOME 격자(.hg-hold)와 사이드바 뮤직 위젯(.mb-hold). 어느 길로 들어오든
+   **반드시 떼야** 하므로(안 떼면 그 자리가 영영 빈 채로 남습니다) 한 곳에
+   모아 두고, 실패했을 때와 아예 끝나지 않았을 때까지 세 군데서 부릅니다. */
+function revealAfterLoad(){
   document.querySelector('#home-intro-page .home-grid')?.classList.remove('hg-hold');
+  document.querySelector('.music-block')?.classList.remove('mb-hold');
 }
 /* 어떤 이유로든 boot 이 끝나지 않는 경우를 위한 안전줄 */
-setTimeout(unholdHome, 8000);
+setTimeout(revealAfterLoad, 8000);
 
 function showLoadError(){
-  unholdHome();
+  revealAfterLoad();
   const bar = document.createElement('div');
   bar.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:9999;background:#c1440e;color:#fff;'
     + 'font-size:12px;padding:8px 12px;text-align:center;font-family:inherit;';
