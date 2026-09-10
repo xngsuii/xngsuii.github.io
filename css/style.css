@@ -1466,8 +1466,9 @@
   .dt-head{position:absolute;inset:0;z-index:3;pointer-events:none;
     padding:11px 14px 12px;display:flex;flex-direction:column;justify-content:space-between;}
   .dt-head-top{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;}
-  /* 화살표는 KoPub 돋움에 빈 글자로 들어 있어 사라집니다(.rel-icon 과 같은 함정).
-     기호용 서체를 직접 지정합니다. */
+  /* ← 는 Pretendard 에 없습니다. 이름을 지정하지 않으면 기기가 가진 아무
+     서체로 그려져 컴퓨터마다 굵기가 달라 보이므로, 넘어갈 곳을 직접 정합니다
+     (파일 맨 위 .lb-nav 무리와 같은 장치인데, 그 목록에는 안 들어 있습니다). */
   .dt-back{pointer-events:auto;flex:none;width:22px;height:22px;padding:0;border:0;
     background:transparent;color:#fff;font-size:17px;line-height:1;
     font-family:system-ui,'Segoe UI Symbol',sans-serif;
