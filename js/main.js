@@ -1058,9 +1058,6 @@ function restartHomeIntro(){
      **어떤 경로로 들어오든 반드시 떼야 합니다** — 남겨 두면 HOME 이 빈
      격자만 보인 채로 남습니다(그래서 아래 폰 분기보다 먼저 뗍니다). */
   grid.classList.remove('hg-hold');
-  /* 폰은 격자 배치가 달라 선 자리가 맞지 않습니다 — 그쪽은 화면이 통째로
-     올라오는 기존 움직임만 씁니다. */
-  if(isMobileWidth()) return;
   clearTimeout(homeIntroTimer);
   grid.classList.remove('hg-intro');
   void grid.offsetWidth;          // 같은 애니메이션을 다시 걸려면 한 번 끊어야 합니다
@@ -3424,6 +3421,40 @@ async function copyText(text){
   return ok;
 }
 
+/* 복사 칸에 적힌 글자를 그대로 꺼냅니다.
+   **한 상자 안에 내용 칸(.cb-body)이 여러 개일 수 있습니다.** 내용 칸에서
+   엔터를 치거나 여러 줄을 붙여넣으면 브라우저가 그 <div> 를 커서 자리에서
+   쪼개면서 같은 class 를 물려받은 형제를 만듭니다 — 화면에서는 이어진 줄로
+   똑같이 보이지만(그래서 눈치채기 어렵습니다) 마크업으로는 칸이 줄마다
+   따로입니다. 첫 칸만 가져가면 첫 줄에서 복사가 끊깁니다(실제로 그랬습니다).
+   이미 저장된 글에도 그렇게 쪼개진 상자가 있으니, 저장된 글은 손대지 않고
+   읽는 쪽에서 모읍니다.
+   innerText 를 쓰지 않는 까닭: 접힌 접기 안에 든 상자는 화면에 그려지지 않아
+   innerText 가 <br> 을 줄바꿈으로 세어 주지 못합니다(그때는 줄이 다 붙어
+   나옵니다). 그래서 <br> 만 직접 줄바꿈으로 바꿔 가며 훑습니다. */
+function cbNodeText(el){
+  let out = '';
+  el.childNodes.forEach(n=>{
+    if(n.nodeType === 3) out += n.data;
+    else if(n.nodeType === 1) out += (n.tagName === 'BR') ? '\n' : cbNodeText(n);
+  });
+  return out;
+}
+function copyBoxText(box){
+  const parts = [];
+  box.querySelectorAll('.cb-body').forEach(b=>{
+    let s = cbNodeText(b);
+    /* 칸을 닫는 <br> 하나는 줄로 세지 않습니다 — 브라우저도 그것을 줄로
+       그리지 않습니다(빈 칸의 <br> 은 '이 줄은 비어 있다'는 표시일 뿐입니다).
+       칸과 칸 사이의 줄바꿈은 아래 join 이 이미 넣어 주므로, 빼지 않으면
+       빈 줄 하나가 두 줄로 벌어집니다. */
+    const last = Array.from(b.childNodes).reverse().find(n=> n.nodeType !== 3 || n.data);
+    if(last && last.nodeName === 'BR') s = s.slice(0, -1);
+    parts.push(s);
+  });
+  return parts.join('\n');
+}
+
 /* 본문은 열 때마다 새로 그려지므로 문서에 한 번만 걸어둡니다 */
 function initContentBlocks(){
   document.addEventListener('click', async (e)=>{
@@ -3435,9 +3466,8 @@ function initContentBlocks(){
     if(cbBtn){
       e.preventDefault(); e.stopPropagation();
       const box = cbBtn.closest('.copy-box');
-      const body = box && box.querySelector('.cb-body');
       const label = cbBtn.innerText;
-      const ok = await copyText(body ? body.innerText : '');
+      const ok = await copyText(box ? copyBoxText(box) : '');
       cbBtn.innerText = ok ? '복사됨' : '실패';
       setTimeout(()=>{ cbBtn.innerText = label; }, 1200);
       return;
