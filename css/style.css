@@ -73,7 +73,10 @@
      그래서 이 규칙은 더 이상 '안 그려지는 것'을 막는 장치가 아니라,
      **넘어갈 서체를 --mono 와 똑같이 맞춰 두는** 장치입니다 — 그러지 않으면
      같은 화면 안에서 어떤 기호는 system-ui, 어떤 기호는 Segoe UI Symbol 로
-     그려져 굵기가 따로 놉니다. 없는 기호 목록은 --mono 설명에 있습니다. */
+     그려져 굵기가 따로 놉니다. 없는 기호 목록은 --mono 설명에 있습니다.
+     ※ 아래 '가운데 맞추기' 보정값은 이 넘어간 서체까지 감안해 잰 값입니다 —
+       ‹ › 는 Pretendard 가 아니라 Segoe UI Symbol 이 그리므로, 같은 글자라도
+       --mono 만 보고 계산하면 맞지 않습니다. */
   .lb-nav,.arc-lb-nav,.arc-kebab-btn,
   .img-toolbar button[data-act="flip"]{font-family:var(--mono);}
 
@@ -84,12 +87,18 @@
      크게 다릅니다 — KoPub 돋움은 위 0.85em / 아래 0.25em, 조선굴림체는 0.86 / 0.14.
      아래쪽 여유가 클수록 글자는 상자 안에서 위로 붙어 보입니다.
      그래서 서체를 바꾸자 화살표·＋·기호 버튼이 일제히 어긋났습니다.
+     **아래 숫자는 Pretendard 기준으로 다시 잰 값입니다**(2026-09-10).
+     KoPub 돋움 시절의 값이 그대로 남아 있어서, 라이트박스 화살표는 3.4px,
+     코드블록 복사 단추는 4.8px 어긋난 채였습니다. Pretendard 는 KoPub 보다
+     어센트/디센트가 고르기 때문에 **글자 단추 대부분은 보정이 아예 필요하지
+     않습니다** — 남은 것은 서체가 넘어가는 기호(‹ ›)와, 서체가 원래 글줄
+     윗부분에 그리는 ❝ 뿐입니다.
 
      line-height 를 손대는 건 소용이 없습니다 — align-items:center 일 때
      글자가 앉는 자리는 (상자 가운데 + (어센트-디센트)/2) 로, line-height 와
      무관합니다. 대신 위/아래 여백(padding)으로 밀어 줍니다.
      상자 높이가 고정(box-sizing:border-box)이므로 **여백을 준 만큼의 절반이
-     실제로 움직이는 거리**입니다 — 2.5px 여백이면 1.25px 이동.
+     실제로 움직이는 거리**입니다 — 3.6px 여백이면 1.8px 이동.
 
      아래 숫자들은 눈대중이 아니라 잰 값입니다. 재는 방법: 글자 옆에 높이 0 인
      inline-block 을 하나 끼우면 그 아래 모서리가 정확히 baseline 이고,
@@ -1843,10 +1852,13 @@
      통째로 복사하는 ⧉ 버튼이 오른쪽 위에 붙습니다.
      안쪽은 보더(#1a1a1a)보다 한 단계 밝은 어두운 색 #2e2b27 에 밝은 글자 #f4f1ea. */
   .code-block{position:relative;border:1px solid var(--border);background:#2e2b27;margin:10px 0;}
-  /* 위 여백 4.5px = ⧉ 를 2.25px 내리는 보정입니다 (→ 위쪽 '가운데 맞추기' 참고) */
+  /* ⧉ 는 보정이 필요 없습니다. 여기 있던 '위 4.5px' 은 KoPub 돋움 기준이었고,
+     Pretendard 로는 그 보정이 글자를 2.4px 아래로 끌어내리고 있었습니다.
+     여백 없이 재면 0.16px — 픽셀 하나의 6분의 1이라 손댈 값이 아닙니다.
+     (→ 위쪽 '가운데 맞추기' 참고) */
   .code-block .code-block-copy{position:absolute;top:6px;right:6px;z-index:2;font-family:var(--mono);
     font-size:12px;line-height:1;border:1px solid #56514a;background:#3d3933;color:#f4f1ea;
-    width:24px;height:24px;padding:4.5px 0 0;display:flex;align-items:center;justify-content:center;}
+    width:24px;height:24px;padding:0;display:flex;align-items:center;justify-content:center;}
   .code-block .code-block-copy:hover{background:#56514a;}
   /* 선택자를 두 겹으로 씁니다 — .arc-view-content pre / .arc-editor pre 가
      밝은 배경과 보더를 이미 걸어두고 있어서 한 겹으로는 밀립니다.
@@ -2142,9 +2154,13 @@
   /* padding:0 + flex 가운데 정렬이 필요합니다 — 브라우저 기본 버튼 여백(좌우 6px)이
      24px 상자의 내용 폭을 10px 로 줄여서, 정렬 아이콘(15px)과 </> 같은 넓은 글자가
      칸을 넘쳐 오른쪽으로 쏠려 보였습니다. */
-  /* 위쪽 여백 2.5px 은 글자를 상자 한가운데로 내리는 보정입니다 — 자세한 이유는
-     아래 '글자 가운데 맞추기' 설명 참고. 여백을 주면 그 절반만큼 내려갑니다. */
-  .rt-toolbar button{width:24px;height:24px;padding:2.5px 0 0;border:1px solid var(--border);
+  /* 위쪽 여백 0.9px 은 글자를 상자 한가운데로 내리는 보정입니다 — 자세한 이유는
+     아래 '글자 가운데 맞추기' 설명 참고. 여백을 주면 그 절반만큼 내려갑니다.
+     Pretendard 에서는 0.45px 어긋나는 것이 전부라 사실상 없어도 됩니다(예전
+     KoPub 기준 2.5px 은 반대로 0.8px 끌어내리고 있었습니다). 남겨 두는 까닭은
+     글자마다 값이 조금씩 다르기 때문입니다 — B I ＋ 0.45 / U S ▾ 0.37 /
+     ― 0.03. 한 값으로는 다 맞출 수 없어서 가장 흔한 쪽에 맞춥니다. */
+  .rt-toolbar button{width:24px;height:24px;padding:0.9px 0 0;border:1px solid var(--border);
     background:var(--bg);border-radius:0;font-size:11px;
     display:inline-flex;align-items:center;justify-content:center;line-height:1;}
   /* 정렬 아이콘은 글자가 아니라 그림(SVG)이라 이미 정확히 가운데입니다.
@@ -2152,7 +2168,7 @@
   .rt-toolbar button:has(.rt-ico){padding-top:0;}
   /* ❝ 는 따옴표라 서체가 원래 글줄 윗부분에 그리도록 만든 글자입니다. 다른 단추가
      모두 가운데로 맞춰지고 나니 이것만 튀어 보여서 더 내려줍니다. */
-  .rt-toolbar button[data-cmd="blockquote"]{padding-top:7.4px;}
+  .rt-toolbar button[data-cmd="blockquote"]{padding-top:5.4px;}
   .rt-toolbar button:hover{background:var(--surface-2);}
   /* 정렬 버튼 아이콘 — 맞는 기호가 없어 얇은 선으로 직접 그립니다.
      pointer-events 를 꺼야 클릭이 늘 버튼에 잡힙니다. */
@@ -2169,7 +2185,7 @@
      (main.js 의 initTextColorPickers 가 이 구조를 만듭니다.)
 
      **선택자를 두 겹으로 쓰는 까닭** — 이 목록은 .rt-toolbar 안에 놓입니다.
-     그 안에는 `.rt-toolbar button{width:24px;height:24px;padding:2.5px 0 0}`
+     그 안에는 `.rt-toolbar button{width:24px;height:24px;padding:0.9px 0 0}`
      라는 규칙이 있어서, 한 겹짜리 이름(.rt-cpick-item)으로는 거기에 집니다
      (0,1,1 대 0,1,0). 예전에 검색줄 고르개에서 똑같이 당해 항목이 24px
      네모로 찌그러진 적이 있습니다. 이름을 두 겹으로 겹쳐 이깁니다. */
@@ -2586,7 +2602,12 @@
      화살표가 원 아래쪽으로 처집니다. 아래 여백 7px 으로 3.5px 올립니다. */
   /* position + z-index 는 스택 때문입니다 — 뒤에 비스듬히 깔린 카드가 사진 칸
      밖으로 삐져나와 화살표를 덮었습니다. 늘 화살표가 위에 오게 둡니다. */
-  .lb-nav{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;width:40px;height:40px;font-size:22px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:0 0 7px;position:relative;z-index:3;}
+  /* 아래 여백 3.6px = ‹ › 를 1.8px 올리는 보정입니다. 이 글자는 Pretendard 에
+     없어서 Segoe UI Symbol 이 그리는데, 그 서체의 디센트가 커서 글자가 상자
+     안에서 아래로 처집니다. (예전 7px 은 KoPub 기준이라 1.7px 지나쳤습니다.)
+     폰(44px/24px)에서 필요한 값은 3.5px 로, 이 값을 그대로 물려받아도
+     0.05px 차이라 따로 적지 않습니다. */
+  .lb-nav{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;width:40px;height:40px;font-size:22px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:0 0 3.6px;position:relative;z-index:3;}
   .lb-nav:hover{background:rgba(255,255,255,.28);}
   /* 순서 칩 — 사진 **왼쪽 위**에 겹칩니다.
      예전에는 아래 한가운데였는데, 이제 그 자리는 사진 제목 띠가 씁니다.
@@ -2766,7 +2787,7 @@
   /* 화살표 모양과 사진 모서리는 갤러리 크게보기와 같게 맞춥니다 */
   .arc-lb-main-wrap img{max-width:100%;max-height:82vh;object-fit:contain;border-radius:6px;}
   /* 갤러리 화살표와 같은 보정 (→ .lb-nav) */
-  .arc-lb-nav{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;width:40px;height:40px;font-size:22px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:0 0 7px;}
+  .arc-lb-nav{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;width:40px;height:40px;font-size:22px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:0 0 3.6px;}
   .arc-lb-nav:hover{background:rgba(255,255,255,.28);}
   .arc-lb-close{position:absolute;top:20px;right:20px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;width:32px;height:32px;font-size:15px;}
   .arc-lb-close:hover{background:rgba(255,255,255,.28);}
@@ -3582,7 +3603,11 @@
     /* 툴바 버튼이 많아 두 줄로 접히지만(flex-wrap), 손가락으로 누르는 게 우선입니다 */
     .rt-toolbar{gap:5px;}
     /* 글자가 커진 만큼 가운데 맞춤 보정도 같은 비율로 키웁니다 (11px→2.5, 14px→3.2) */
-    .rt-toolbar button{width:38px;height:38px;font-size:14px;padding-top:3.2px;}
+    /* 여기 있던 padding-top:3.2px 은 KoPub 기준이었습니다. 폰(38px/14px)에서
+       Pretendard 가 필요한 값은 0 에 가까워서(잰 값 0.04px) 데스크톱의 0.9px
+       을 그대로 물려받게 둡니다 — 0.36px 차이는 화면에 그려지지 않습니다.
+       아래 :has(.rt-ico) 는 그래도 필요합니다(그림은 이미 정확하므로 0). */
+    .rt-toolbar button{width:38px;height:38px;font-size:14px;}
     .rt-toolbar button:has(.rt-ico){padding-top:0;}
     /* 메모 툴바는 PC 에서만 한 줄입니다 — 손가락 크기(38px)로 커지면 어차피
        한 줄에 못 들어가고, nowrap 인 채로 두면 칸 밖으로 삐져나갑니다. */

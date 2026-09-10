@@ -1076,6 +1076,14 @@ function activateView(view){
        그냥 두면 다음에 상세를 열 때 글이 펼쳐진 채로 나옵니다. */
     if(typeof logDetailOpen === 'function' && logDetailOpen()) closeLogDetail();
   }
+  /* **화면을 옮기면 고치던 중이던 것은 반드시 끝냅니다.** 묻는 것은 아래
+     '사이드바' 규칙이 이미 했고, 여기까지 왔다는 것은 나가도 좋다는 뜻입니다.
+     이 두 줄이 없어서 생긴 일: ARCHIVE 글을 고치던 중에 사이드바로 카테고리를
+     옮기면 .arcd-editing 이 화면에 그대로 붙어 있어서, 그 다음에 **다른 글을
+     열면 새 글의 읽기 내용 위에 앞 글의 편집기가 그대로 보였습니다** —
+     '고치던 글이 뜬다'는 것이 이것입니다. 게다가 editingArcId 가 아직 앞 글을
+     가리켜서, 그 자리에서 게시를 누르면 엉뚱한 글에 저장될 수 있었습니다. */
+  if(view !== 'archive-detail' && typeof arcEditing === 'function' && arcEditing()) endArcEditing();
   const changed = !el.classList.contains('active');
   document.querySelectorAll('.view').forEach(v=> v.classList.remove('active', 'view-enter'));
   el.classList.add('active');
@@ -2593,15 +2601,48 @@ async function requestLeaveDetail(){
   if(!d) return;
   /* LOG 글 화면은 상세 위에 한 겹 더 얹혀 있으므로 이쪽이 먼저 닫힙니다 */
   if(logDetailOpen()){
-    if(logEditing() && !(await leaveLogEdit())) return;
+    if(!(await allowLeaveEditing())) return;
     if(history.state && history.state.ghDetail === 'log-detail') history.back();
     else closeLogDetail();
     return;
   }
-  if(arcEditing() && !(await leaveArcEdit())) return;
+  if(!(await allowLeaveEditing())) return;
   if(history.state && history.state.ghDetail) history.back();
   else closeDetailNow(d);
 }
+/* 고치던 중이면 물어봅니다. 나가겠다고 하면 수정 모드를 끄고 true 를,
+   남겠다고 하면 false 를 돌려줍니다 — 부르는 쪽은 false 면 그냥 멈춥니다.
+   requestLeaveDetail 안에 있던 두 줄을 그대로 꺼낸 것이라, 문구도 한 곳
+   (leaveArcEdit / leaveLogEdit)에서만 나옵니다. */
+async function allowLeaveEditing(){
+  if(logEditing()) return await leaveLogEdit();
+  if(arcEditing()) return await leaveArcEdit();
+  return true;
+}
+/* ---- 상세에서 나가는 넷째 길: 사이드바 ----
+   ← · Escape · 기기 뒤로가기는 requestLeaveDetail 로 모아 두었지만, 사이드바로
+   다른 메뉴나 카테고리를 누르는 것도 상세에서 나가는 길입니다. 그 길만
+   물어보지 않아서 고치던 내용이 조용히 사라졌고, 무엇보다 수정 모드가 화면에
+   그대로 남았습니다(→ activateView 의 주석).
+
+   원래 핸들러를 하나하나 고치지 않고 여기서 한 번에 막습니다. 나가는 문이
+   넷입니다 — 큰 메뉴(.nav-item), PAIR·OC 세부 카테고리와 ARCHIVE 세부
+   카테고리(.nav-sub-item), 그리고 카테고리 추가 ＋(.nav-cat-add).
+   방법: 잡아채(capture) 물어보고, 나가겠다고 하면 같은 단추를 다시 누릅니다.
+   두 번째에는 수정 모드가 이미 꺼져 있으니 그대로 통과합니다.
+   capture 로 받는 것이 핵심입니다 — 단추 자신에게 걸린 핸들러보다 먼저 와야
+   stopPropagation 으로 막을 수 있습니다. */
+document.querySelector('.nav')?.addEventListener('click', async (e)=>{
+  if(!(arcEditing() || logEditing())) return;         // 고치던 중이 아니면 그냥 흘려보냅니다
+  const btn = e.target.closest('.nav-item, .nav-sub-item, .nav-cat-add');
+  if(!btn) return;
+  /* ✎ 는 이름 바꾸기·삭제 창을 여는 것이라 화면을 옮기지 않습니다 */
+  if(e.target.closest('.ns-edit')) return;
+  e.preventDefault(); e.stopPropagation();
+  if(!(await allowLeaveEditing())) return;
+  btn.click();
+}, true);
+
 document.getElementById('pdBackBtn')?.addEventListener('click', requestLeaveDetail);
 document.getElementById('ocBackBtn')?.addEventListener('click', requestLeaveDetail);
 document.getElementById('arcBackBtn')?.addEventListener('click', requestLeaveDetail);
@@ -4544,6 +4585,9 @@ bindOnce(document.getElementById('saveLogBtn'), async ()=>{
   if(saved) openLogView(saved); else requestLeaveDetail();
 });
 function openLogView(entry){
+  /* ARCHIVE 와 같은 이유 — 읽는 자리는 언제나 읽는 모습으로 엽니다 */
+  exitLogEdit();
+  editingLogId = null;
   currentLogViewId = entry.id;
   document.getElementById('logViewTitle').innerText=entry.title;
   /* 부제목이 비면 줄과 가운뎃점을 함께 숨깁니다 — ARCHIVE 와 같은 규칙이고,
@@ -7759,6 +7803,15 @@ function exitArcEdit(){
   arcEditBaseline = null;
   arcDetailEl()?.classList.remove('arcd-editing');
 }
+/* 화면을 옮길 때 부르는 '완전 종료' — 수정 모드를 끄는 것에 더해 무엇을
+   고치던 중이었는지도 잊습니다. exitArcEdit 만으로는 editingArcId 가 남아,
+   다음에 그 화면에서 게시를 누르면 엉뚱한 글에 저장됩니다.
+   editingArcId 를 여기서 건드리는 까닭: 그 변수가 선언된 자리 가까이에
+   두어야 activateView(파일 앞쪽)에서 불러도 안전합니다. */
+function endArcEditing(){
+  exitArcEdit();
+  editingArcId = null;
+}
 /* 나가도 되는지 묻고, 되면 수정 모드를 끕니다. 취소·뒤로·Escape 공용. */
 async function leaveArcEdit(){
   if(arcEditDirty() && !(await siteConfirm('저장하지 않은 내용이 있어요. 그래도 나갈까요?', '나가기'))) return false;
@@ -8292,6 +8345,10 @@ let arcSelectedIds = new Set();
 let arcUnblurred = new Set();
 let draggedArcId = null;
 function openArcView(item){
+  /* 읽으려고 여는 자리이므로 수정 모드는 무조건 끕니다. 위의 두 장치가
+     이미 막고 있지만, 이 한 줄이 '글을 열면 글이 보인다'를 이 함수 안에서
+     스스로 보장합니다 — 나가는 길이 하나 더 생겨도 여기서 걸립니다. */
+  endArcEditing();
   currentArcViewId = item.id;
   document.getElementById('arcViewTitle').innerText=item.title;
   /* 부제목은 비어 있으면 줄 자체를 없앱니다 — 빈 칸으로 두면 제목과 날짜
