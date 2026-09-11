@@ -673,12 +673,25 @@ async function loadState(){
   renderAll();
 }
 
+/* 브라우저 탭에 뜨는 이름을 HOME 의 사이트 이름과 맞춥니다.
+   비어 있으면 index.html 의 <title> 그대로(갠홈)입니다 — 빈 탭 제목은
+   브라우저가 주소를 대신 띄워서 보기 흉합니다.
+   데이터가 오기 전에는 <title> 이 먼저 보이고, 불러오면 바뀝니다.
+   (홈 화면 앱 아이콘 밑의 이름 apple-mobile-web-app-title 은 따로입니다 —
+    그건 추가하는 순간 한 번 읽히고 끝이라 여기서 바꿔도 소용이 없습니다.) */
+const DOC_TITLE_DEFAULT = document.title || '갠홈';
+function syncDocTitle(name){
+  const t = String(name == null ? state.siteName : name).trim();
+  document.title = t || DOC_TITLE_DEFAULT;
+}
+
 function renderAll(){
   /* 사이드바의 이름/소개글 칸은 뮤직 위젯에 자리를 내주고 없어졌습니다.
      state.profile 은 그대로 두고 저장도 계속됩니다 — 화면에서만 뺀 것이라
      나중에 다시 쓰고 싶어지면 적어둔 내용이 그대로 남아 있습니다. */
   renderMusicWidget();
   document.getElementById('siteName').value = state.siteName;
+  syncDocTitle();
   document.getElementById('homeIntro').innerText = state.homeIntro;
   renderNavSubs();
   renderCards();
@@ -1528,6 +1541,66 @@ homePagesWrap.addEventListener('wheel', (e)=>{
 }, {passive:true});
 
 /* ============================================================
+   누를 때 나는 소리
+   ------------------------------------------------------------
+   마우스 왼쪽 단추를 **누르는 순간**(pointerdown) 소리가 납니다. click 이 아니라
+   누르는 순간인 까닭: click 은 손을 뗄 때 오므로, 딸깍 소리가 손가락보다
+   늦게 들립니다.
+
+   <audio> 가 아니라 Web Audio 로 냅니다. <audio> 는 누를 때마다 파일을 다시
+   준비하느라 늦고, 빠르게 연달아 누르면 앞 소리를 끊어 버립니다. 여기서는
+   한 번 풀어 둔 소리(clickBuf)를 매번 새로 틀기만 하므로 겹쳐도 됩니다.
+
+   · 파일은 페이지를 열 때 받아만 두고(5KB), 소리를 푸는 것은 **처음 누를 때**
+     합니다. 브라우저는 사용자가 누르기 전에 소리 장치(AudioContext)를 만들면
+     콘솔에 경고를 남기고 멈춰 둡니다 — 누른 뒤에 만들면 그런 일이 없습니다.
+     그래서 첫 번째 소리만 몇 ms 늦습니다.
+   · 파일 앞 18ms 는 비어 있습니다(mp3 로 만들 때 붙는 여백). 그만큼 건너뛰고
+     틉니다 — 파일은 그대로 두고 트는 자리만 옮기는 것입니다. 소리를 바꾸면
+     CLICK_SOUND_SKIP 을 다시 재세요.
+   · 폰(손가락)에서는 나지 않습니다 — pointerType 이 'mouse' 일 때만 틉니다.
+   · 파일을 바꾸면 주소 뒤 ?v= 를 올리세요. 이 파일은 사이트 버전(?v=18x)과
+     따로 움직입니다.
+   ============================================================ */
+const CLICK_SOUND_URL  = 'audio/click.mp3?v=1';
+const CLICK_SOUND_SKIP = 0.018;   // 초 — 파일 맨 앞의 빈 구간
+/* 파일이 거의 최대 음량(0.99)으로 만들어져 있어 그대로는 컸습니다.
+   0.4 는 약 -8dB — 들리되 거슬리지 않는 쪽으로 낮춘 값이고, 주인이 듣고 고릅니다.
+   소리 크기는 곱하기라 0.5 가 '절반쯤 작게', 0.25 가 '확 작게' 로 들립니다. */
+const CLICK_VOLUME     = 0.4;     // 1 = 파일 그대로
+let clickCtx = null, clickBuf = null, clickDecoding = null;
+const clickBytes = fetch(CLICK_SOUND_URL).then(r=> r.ok ? r.arrayBuffer() : null).catch(()=> null);
+function playClickSound(){
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if(!AC) return;
+  if(!clickCtx){ try{ clickCtx = new AC(); }catch(_){ return; } }
+  if(clickCtx.state === 'suspended') clickCtx.resume().catch(()=>{});
+  const fire = (buf)=>{
+    try{
+      const src = clickCtx.createBufferSource();
+      src.buffer = buf;
+      const gain = clickCtx.createGain();
+      gain.gain.value = CLICK_VOLUME;
+      src.connect(gain).connect(clickCtx.destination);
+      src.start(0, Math.min(CLICK_SOUND_SKIP, buf.duration));
+    }catch(_){ /* 소리는 곁들이는 것이라 실패해도 조용히 넘어갑니다 */ }
+  };
+  if(clickBuf){ fire(clickBuf); return; }
+  /* 푸는 것은 한 번만 — decodeAudioData 는 받은 바이트를 써 버려서 두 번 못 합니다 */
+  if(!clickDecoding){
+    clickDecoding = clickBytes
+      .then(b=> b ? clickCtx.decodeAudioData(b) : null)
+      .then(buf=>{ clickBuf = buf; return buf; })
+      .catch(()=> null);
+  }
+  clickDecoding.then(buf=>{ if(buf) fire(buf); });
+}
+document.addEventListener('pointerdown', (e)=>{
+  if(e.pointerType !== 'mouse' || e.button !== 0) return;
+  playClickSound();
+}, true);
+
+/* ============================================================
    MODAL HELPERS
    ============================================================ */
 /* 붙여넣은 글의 '서식'만 사이트 기준으로 맞춥니다 — 글 내용은 건드리지 않습니다.
@@ -2068,7 +2141,9 @@ bindOnce(document.getElementById('mmAddBtn'), async ()=>{
   clearMusicForm();
   renderMusicManageList(); renderMusicWidget();
 });
-document.getElementById('siteName').addEventListener('change', e=>{ if(!isLoggedIn)return; state.siteName=e.target.value; storageSet('siteName',state.siteName); });
+document.getElementById('siteName').addEventListener('change', e=>{ if(!isLoggedIn)return; state.siteName=e.target.value; storageSet('siteName',state.siteName); syncDocTitle(); });
+/* 저장은 칸을 벗어날 때(change) 하지만, 탭 제목은 치는 대로 따라가게 둡니다 */
+document.getElementById('siteName').addEventListener('input', e=>{ if(isLoggedIn) syncDocTitle(e.target.value); });
 
 document.getElementById('homeIntro').addEventListener('blur', e=>{ if(!isLoggedIn)return; state.homeIntro=e.target.innerText; storageSet('homeIntro',state.homeIntro); });
 
@@ -2215,11 +2290,14 @@ function renderCards(){
   state.cards.forEach((c, ci)=>{
     const grid = grids[Math.floor(ci/CARDS_PER_PAGE)];
     const el=document.createElement('div');
-    el.className='dream-card'; el.draggable=isLoggedIn; el.dataset.id=c.id;
+    el.className='dream-card' + (c.link ? ' has-link' : ''); el.draggable=isLoggedIn; el.dataset.id=c.id;
     el.innerHTML = `
       <div class="adjustable-img dc-adjustable"><div class="adj-layer"></div>
         <button class="adj-empty" data-editonly>＋ 사진 추가</button>
-        <button class="adj-change" data-editonly>📷</button></div>
+        <div class="dc-tools">
+          <button class="dc-link${c.link ? ' on' : ''}" data-editonly title="${c.link ? '링크 수정' : '링크 추가'}">🔗</button>
+          <button class="adj-change" data-editonly>📷</button>
+        </div></div>
       <div class="dc-grad"></div>
       <span class="dc-drag" data-editonly>⠿</span>
       <button class="dc-del" data-editonly>✕</button>
@@ -2245,6 +2323,20 @@ function renderCards(){
       await storageSet('cards', state.cards); renderCards();
     });
 
+    /* 링크 — 편집 모드에서는 🔗 로 걸고, 보기 모드에서는 사진을 누르면 갑니다.
+       편집 모드에서 사진을 눌러도 가지 않습니다(그때 사진은 끌어서 자리를 잡는
+       자리입니다). 링크가 없으면 아무 일도 없습니다.
+       c.link 는 누르는 순간에 읽습니다 — 링크를 바꿔도 카드를 다시 그릴 필요가
+       없고, 모양(has-link / on)만 applyCardLinkLook 이 고칩니다. */
+    el.querySelector('.dc-link').addEventListener('click', (ev)=>{
+      ev.stopPropagation(); if(!isLoggedIn) return;
+      openCardLinkModal(c);
+    });
+    el.querySelector('.dc-adjustable').addEventListener('click', ()=>{
+      if(isLoggedIn || !c.link) return;
+      window.open(c.link, '_blank', 'noopener');
+    });
+
     createAdjustable(
       el.querySelector('.dc-adjustable'),
       ()=>c.image,
@@ -2266,6 +2358,63 @@ function renderCards(){
   // 장 수가 줄었을 수 있으니 현재 장을 범위 안으로 맞춰 다시 세웁니다
   setCardPage(Math.min(cardPageIdx, pageCount-1), false);
 }
+
+/* ---- 카드 링크 창 ----
+   저장되는 것은 카드의 link 한 칸(문자열)입니다. 없던 칸이라 예전 카드에는
+   아예 없고, 그것이 곧 '링크 없음'입니다(migrateCard 는 모르는 칸을 지우지
+   않으므로 따로 손볼 것이 없습니다). 링크를 뗄 때 칸을 지우지 않고 ''
+   로 두는 까닭: 저장 층이 칸 단위로 합쳐 쓰는 경우에도 확실히 비워집니다. */
+let cardLinkTarget = null;
+/* 적힌 주소를 걸 수 있는 모양으로 — 'naver.com' 처럼 앞을 빼고 적어도
+   https:// 를 붙여 받아 줍니다. http·https 가 아니면(javascript: 같은 것)
+   null 을 돌려 막습니다. */
+function normalizeCardLink(raw){
+  let v = String(raw || '').trim();
+  if(!v) return '';
+  if(!/^[a-z][a-z0-9+.-]*:/i.test(v)) v = 'https://' + v;
+  try{
+    const u = new URL(v);
+    return (u.protocol === 'http:' || u.protocol === 'https:') ? u.href : null;
+  }catch(_){ return null; }
+}
+function applyCardLinkLook(c){
+  const el = document.querySelector(`.dream-card[data-id="${c.id}"]`);
+  if(!el) return;
+  el.classList.toggle('has-link', !!c.link);
+  const b = el.querySelector('.dc-link');
+  if(b){ b.classList.toggle('on', !!c.link); b.title = c.link ? '링크 수정' : '링크 추가'; }
+}
+function openCardLinkModal(c){
+  cardLinkTarget = c;
+  const has = !!c.link;
+  document.getElementById('clHeading').innerText = has ? '링크 수정' : '링크 추가';
+  const input = document.getElementById('clUrl');
+  input.value = c.link || '';
+  document.getElementById('clError').style.display = 'none';
+  document.getElementById('clDeleteBtn').style.display = has ? '' : 'none';
+  openModal('modalCardLink');
+  setTimeout(()=>{ try{ input.focus(); input.select(); }catch(_){} }, 30);
+}
+async function commitCardLink(link){
+  const c = cardLinkTarget;
+  cardLinkTarget = null;
+  closeModal('modalCardLink');
+  /* 창이 떠 있는 사이 카드가 지워졌으면 저장할 곳이 없습니다 */
+  if(!c || !isLoggedIn || !state.cards.includes(c)) return;
+  c.link = link || '';
+  applyCardLinkLook(c);
+  await storageSet('cards', state.cards);
+}
+document.getElementById('clSaveBtn')?.addEventListener('click', ()=>{
+  const raw = document.getElementById('clUrl').value;
+  const link = normalizeCardLink(raw);
+  if(link === null){ document.getElementById('clError').style.display = 'block'; return; }
+  commitCardLink(link);   // 비워서 저장하면 '' — 링크를 떼는 것과 같습니다
+});
+document.getElementById('clDeleteBtn')?.addEventListener('click', ()=> commitCardLink(''));
+document.getElementById('clUrl')?.addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter' && !e.isComposing){ e.preventDefault(); document.getElementById('clSaveBtn').click(); }
+});
 
 /* ============================================================
    PAIR

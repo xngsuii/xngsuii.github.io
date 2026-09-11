@@ -376,6 +376,7 @@
   /* 창 제목의 글자 사이 간격만 없앱니다 — 아래 라벨(유튜브 링크·음원 파일)과
      같은 서체(KoPub 돋움)인데도 .modal h3 의 letter-spacing 때문에 달라 보였습니다 */
   #modalMusic h3{letter-spacing:0;}
+  #modalCardLink h3{letter-spacing:0;}
   /* '게시글 작성 / 게시글 수정' 도 같은 이유입니다 — 한글 제목에 .04em 이 붙어
      사이트의 다른 한글보다 자간이 넓어 보였습니다. */
   #stickerModalHeading{letter-spacing:0;}
@@ -821,6 +822,23 @@
   .dream-card .dc-del{position:absolute;top:8px;right:8px;z-index:5;width:22px;height:22px;border-radius:0;background:var(--bg);border:1px solid var(--border);font-size:11px;color:var(--text);align-items:center;justify-content:center;}
   .dream-card .dc-drag{position:absolute;top:8px;left:8px;z-index:5;font-size:13px;color:#fff;cursor:grab;background:var(--scrim);border-radius:0;padding:3px 7px;}
   body:not(.logged-in) .dc-drag{display:none;}
+  /* ---- 카드 링크 ----
+     🔗 는 📷 바로 왼쪽에 붙습니다. 둘을 한 줄(.dc-tools)에 넣은 까닭: 사진이
+     없는 카드는 📷 가 사라지는데(createAdjustable 이 인라인으로 끕니다), 따로
+     right 값을 주면 🔗 혼자 모서리에서 떨어진 자리에 남습니다. 한 줄이면
+     남은 쪽이 모서리로 붙습니다. 📷 의 원래 자리 규칙(absolute · bottom · right)은
+     이 줄 안에서만 풀어 줍니다.
+     링크가 걸린 카드는 🔗 가 신호색(--accent #c1440e)으로 바뀌어, 편집 중에도
+     어느 카드에 걸려 있는지 보입니다. */
+  .dream-card .dc-tools{position:absolute;right:8px;bottom:8px;z-index:4;display:flex;gap:6px;pointer-events:none;}
+  .dream-card .dc-tools > *{pointer-events:auto;}
+  .dream-card .dc-tools .adj-change{position:static;}
+  .dream-card .dc-link{display:none;width:26px;height:26px;padding:0;border-radius:0;border:none;
+    background:var(--scrim);color:#fff;align-items:center;justify-content:center;font-size:12px;}
+  body.logged-in .dream-card .dc-link{display:flex;}
+  .dream-card .dc-link.on{background:var(--accent);}
+  /* 보기 모드에서 링크가 걸린 카드만 사진이 눌리는 모양이 됩니다 */
+  body:not(.logged-in) .dream-card.has-link .dc-adjustable{cursor:pointer;}
 
   /* ---- Pair · OC 목록 ----
      한 쪽에 4열 × 2행 = 8개가 남은 높이를 꽉 채웁니다.
@@ -2455,8 +2473,14 @@
   .log-card .lc-check{position:absolute;right:8px;top:8px;}
   .lc-no{font-family:var(--mono);font-size:8px;font-weight:700;color:var(--text-muted);letter-spacing:.06em;}
   /* 부제목은 제목 바로 아래. 비어 있으면 JS 가 줄 자체를 내보내지 않습니다 */
+  /* 제목과의 사이는 번호와 제목 사이와 **눈에 같게** 맞춥니다(글자 잉크 사이 9.7px).
+     margin 이 음수인 까닭: 카드는 flex 에 gap:6px 이라 모든 줄 사이가 똑같이
+     6px 인데, 제목(줄높이 1.35)과 부제목(1.45)은 번호(normal)보다 줄 상자에
+     위아래 여유가 더 있어서 같은 6px 이 눈에는 훨씬 넓게 보입니다. 그 여유만큼
+     당깁니다. 잰 값 — 한글 기준 -2.6px 에서 두 간격이 같아집니다
+     (영문만 있는 제목이면 1px 쯤 더 벌어져 보입니다). */
   .lc-sub{font-family:var(--font-free);font-size:10.5px;font-weight:300;line-height:1.45;
-    color:var(--text-muted);margin-top:3px;}
+    color:var(--text-muted);margin-top:-2.6px;}
   .lc-title{font-family:var(--font-free);font-size:12.5px;font-weight:700;margin:0;color:var(--text);
     line-height:1.35;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
   /* 미리보기 글은 열두 줄에서 자릅니다(예전에는 여덟 줄). 열두 줄에 못 미치면

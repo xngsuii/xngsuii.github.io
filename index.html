@@ -69,7 +69,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
-<link rel="stylesheet" href="css/style.css?v=186" />
+<link rel="stylesheet" href="css/style.css?v=188" />
 </head>
 <body>
 <div class="app-window">
@@ -1072,6 +1072,24 @@
   </div>
 </div>
 
+<!-- LOVE INTEREST 카드에 거는 링크. 보기 모드에서 카드 사진을 누르면 이 주소가
+     새 탭으로 열립니다. 비워서 저장하거나 '링크 삭제'를 누르면 떼어집니다. -->
+<div class="modal-overlay" id="modalCardLink">
+  <div class="modal gf-modal">
+    <button class="modal-close" data-close>✕</button>
+    <h3 id="clHeading">링크 추가</h3>
+    <div class="form-row"><label for="clUrl">주소</label>
+      <input type="url" id="clUrl" placeholder="https://" autocomplete="off" spellcheck="false" /></div>
+    <div class="login-error" id="clError">http 나 https 로 된 주소만 걸 수 있어요.</div>
+    <div class="form-actions gf-actions">
+      <button class="btn-ghost gf-danger" id="clDeleteBtn" style="display:none;">링크 삭제</button>
+      <span class="gf-actions-spacer"></span>
+      <button class="btn-ghost" data-close>취소</button>
+      <button class="btn-primary" id="clSaveBtn">저장</button>
+    </div>
+  </div>
+</div>
+
 <!-- 갤러리 폴더 추가/수정 (브라우저 기본 prompt 대체) -->
 <div class="modal-overlay" id="modalGalleryFolder">
   <div class="modal gf-modal">
@@ -1243,7 +1261,7 @@
        (그 목록을 만드는 것도 JS인데 새 CSS 가 감싸이지 않은 select 를 폭 0 으로
        접습니다), 스티커 서랍이 엉뚱한 자리에 놓였습니다.
        **CSS 와 JS 를 함께 고쳤으면 번호도 함께 올리세요.** -->
-<script src="js/main.js?v=186"></script>
+<script src="js/main.js?v=188"></script>
 <script type="module" src="js/firebase-store.js?v=115"></script>
 </body>
 </html>
