@@ -674,12 +674,12 @@ async function loadState(){
 }
 
 /* 브라우저 탭에 뜨는 이름을 HOME 의 사이트 이름과 맞춥니다.
-   비어 있으면 index.html 의 <title> 그대로(갠홈)입니다 — 빈 탭 제목은
+   비어 있으면 index.html 의 <title> 그대로(홈)입니다 — 빈 탭 제목은
    브라우저가 주소를 대신 띄워서 보기 흉합니다.
    데이터가 오기 전에는 <title> 이 먼저 보이고, 불러오면 바뀝니다.
    (홈 화면 앱 아이콘 밑의 이름 apple-mobile-web-app-title 은 따로입니다 —
     그건 추가하는 순간 한 번 읽히고 끝이라 여기서 바꿔도 소용이 없습니다.) */
-const DOC_TITLE_DEFAULT = document.title || '갠홈';
+const DOC_TITLE_DEFAULT = document.title || '홈';
 function syncDocTitle(name){
   const t = String(name == null ? state.siteName : name).trim();
   document.title = t || DOC_TITLE_DEFAULT;
@@ -1658,6 +1658,9 @@ function normalizeMusicList(list){
     .map(s=>{
       const o = { id: s.id || Date.now()+Math.random(),
                   title: s.title || '', artist: s.artist || '' };
+      /* 앨범아트 — **여기서 옮겨 주지 않으면 불러올 때마다 지워지고, 그대로
+         저장됩니다.** 이 함수는 아는 칸만 골라 새 물건을 만듭니다. */
+      if(s.cover) o.cover = String(s.cover);
       /* 파일이 우선입니다 — 둘 다 들어 있을 일은 없지만, 있다면 광고 없는 쪽을 씁니다 */
       if(s.src) o.src = String(s.src);
       else o.videoId = String(s.videoId);
@@ -1768,8 +1771,6 @@ function stopMusicTimer(){
   if(!musicTimer) return;
   clearInterval(musicTimer); musicTimer = null;
 }
-/* LP 재생 위치 원의 둘레 (2π × 24). style.css 의 .mb-lp-prog 와 같아야 합니다. */
-const LP_PROG_LEN = 150.8;
 function paintMusicTime(){
   const el = document.getElementById('mbTime');
   if(!el) return;
@@ -1780,21 +1781,19 @@ function paintMusicTime(){
     cur = ytPlayer.getCurrentTime(); dur = ytPlayer.getDuration();
   }
   el.innerText = fmtTime(cur) + ' / ' + fmtTime(dur);
-  /* 흐른 만큼 LP 바깥의 주황 원을 채웁니다 */
-  const prog = document.getElementById('mbLpProg');
-  if(prog){
-    const r = (dur > 0) ? Math.min(1, Math.max(0, cur/dur)) : 0;
-    prog.style.strokeDashoffset = (LP_PROG_LEN * (1 - r)).toFixed(1);
-  }
 }
-/* 곡을 바꿀 때는 원이 거꾸로 줄어드는 것이 보이지 않도록 애니메이션 없이 비웁니다 */
-function resetLpProgress(){
-  const prog = document.getElementById('mbLpProg');
-  if(!prog) return;
-  prog.style.transition = 'none';
-  prog.style.strokeDashoffset = String(LP_PROG_LEN);
-  void prog.getBoundingClientRect();
-  prog.style.transition = '';
+/* LP 한가운데 라벨에 지금 곡의 앨범아트를 넣습니다. 없으면 비워 두어
+   아래에 깔린 기본 라벨(바탕 + 점)이 보입니다.
+   사진과 같은 blob:// 이라 아직 안 왔으면 자리만 비워 두고 도착하면 채웁니다. */
+function paintLpArt(){
+  const art = document.getElementById('mbArt');
+  if(!art) return;
+  const s = currentSong();
+  const ref = s && s.cover;
+  const url = ref ? imgUrl(ref) : '';
+  if(url) art.setAttribute('href', url);
+  else art.removeAttribute('href');
+  if(ref && !url) whenImgArrives(ref, art, paintLpArt);
 }
 /* 재생/멈춤에 따라 달라지는 것만 칠합니다 (LP 회전, ▶/❚❚) */
 function paintMusicState(){
@@ -1868,6 +1867,7 @@ function renderMusicWidget(){
   const vol = document.getElementById('mbVol');
   if(vol) vol.value = musicVolume();
   paintMusicState();
+  paintLpArt();
   if(!has){ musicLoadedId = null; return; }
   if(cur && cur.id !== musicLoadedId) loadCurrentSong(false);
 }
@@ -1880,7 +1880,6 @@ async function loadCurrentSong(play){
   const already = (musicLoadedId === s.id);
   musicLoadedId = s.id;
   if(already && !play) return;    // 이미 물려 있고 재생하라는 것도 아니면 할 일이 없습니다
-  if(!already) resetLpProgress();
 
   if(isFileSong(s)){
     if(ytReady && ytPlayer){ try{ ytPlayer.pauseVideo(); }catch(e){} }
@@ -2013,6 +2012,23 @@ function renderMusicManageList(){
     const k = document.createElement('span'); k.className='mm-kind';
     k.innerText = isFileSong(s) ? 'FILE' : 'YT';
     k.title = isFileSong(s) ? '음원 파일' : '유튜브';
+    /* 이미 넣은 곡에도 앨범아트를 달 수 있게 줄마다 작은 칸을 둡니다 —
+       없으면 파일 곡은 음원을 다시 올려야만 그림을 넣을 수 있습니다. */
+    const cv = document.createElement('button'); cv.type='button'; cv.className='mm-cover';
+    cv.title = s.cover ? '앨범아트 바꾸기' : '앨범아트 넣기';
+    cv.innerText = '+';
+    if(s.cover){ cv.classList.add('has-cover'); applyThumbBg(cv, s.cover, 20); }
+    cv.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      if(!isLoggedIn) return;
+      pickCoverImage(async (dataUrl)=>{
+        const song = state.musicList.find(x=> x.id === s.id);
+        if(!song) return;
+        song.cover = dataUrl;
+        await storageSet('musicList', state.musicList);
+        renderMusicManageList(); paintLpArt();
+      });
+    });
     const t = document.createElement('span'); t.className='mm-t'; t.innerText = s.title || '(제목 없음)';
     const a = document.createElement('span'); a.className='mm-a'; a.innerText = s.artist || '';
     const del = document.createElement('button'); del.type='button'; del.className='mm-del'; del.innerText='✕';
@@ -2027,7 +2043,7 @@ function renderMusicManageList(){
       await storageSet('musicList', state.musicList);
       renderMusicManageList(); renderMusicWidget();
     });
-    row.append(k, t, a, del);
+    row.append(k, cv, t, a, del);
     /* 끄는 동안 줄이 실제로 밀려나 보이게 합니다(FLIP).
        사이드바 카테고리 순서 변경과 같은 방식으로, 다시 그리지 않고
        줄 하나만 옮깁니다 — 다시 그리면 끌고 있던 요소가 사라져
@@ -2065,15 +2081,50 @@ function renderMusicManageList(){
 let draggedMusicId = null;
 /* 고른 음원 파일 (아직 목록에 넣기 전) */
 let pickedAudio = null;   // { dataUrl, name, bytes }
+/* 고른 앨범아트 (아직 목록에 넣기 전) */
+let pickedCover = null;   // dataUrl
+
+/* 앨범아트 고르기. LP 라벨은 화면에서 23px 이라 크게 담을 이유가 없습니다 —
+   원본 크기(최대 1800px)로 넣으면 노래 한 곡에 사진 한 장만큼 저장 공간을
+   씁니다. 긴 변 320px · 약 80KB 로 줄입니다(라벨의 열 배가 넘어 선명합니다). */
+const COVER_MAX_DIM = 320, COVER_TARGET_CHARS = 80000;
+function pickCoverImage(onPicked){
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = 'image/*';
+  input.addEventListener('change', async ()=>{
+    const f = input.files[0];
+    if(!f) return;
+    try{
+      const dataUrl = await window.SiteStore.compressImage(f, COVER_MAX_DIM, COVER_TARGET_CHARS);
+      await onPicked(dataUrl);
+    }catch(e){
+      console.error(e);
+      alert('그림을 읽지 못했어요.');
+    }
+  });
+  input.click();
+}
+function paintPickedCover(){
+  const b = document.getElementById('mmCoverBtn');
+  if(!b) return;
+  b.classList.toggle('has-cover', !!pickedCover);
+  b.style.backgroundImage = pickedCover ? `url('${pickedCover}')` : '';
+}
 
 function clearMusicForm(){
   document.getElementById('mmUrl').value = '';
   document.getElementById('mmTitle').value = '';
   document.getElementById('mmArtist').value = '';
   pickedAudio = null;
+  pickedCover = null;
+  paintPickedCover();
   const n = document.getElementById('mmFileName');
   if(n) n.innerText = '선택된 파일 없음';
 }
+document.getElementById('mmCoverBtn')?.addEventListener('click', ()=>{
+  if(!isLoggedIn) return;
+  pickCoverImage((dataUrl)=>{ pickedCover = dataUrl; paintPickedCover(); });
+});
 bindOnce(document.getElementById('mbManage'), ()=>{
   if(!isLoggedIn) return;
   clearMusicForm();
@@ -2136,6 +2187,8 @@ bindOnce(document.getElementById('mmAddBtn'), async ()=>{
     }
     song = { id: Date.now(), videoId, title, artist };
   }
+  /* 앨범아트는 파일 곡·유튜브 곡 어느 쪽에도 붙습니다 */
+  if(pickedCover) song.cover = pickedCover;
   state.musicList.push(song);
   await storageSet('musicList', state.musicList);
   clearMusicForm();

@@ -10,7 +10,7 @@
      이후 사파리가 늘 허용하므로 그대로 됩니다. 글자를 16px 로 키우지 않고
      막을 수 있는 유일한 길입니다. -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-<title>갠홈</title>
+<title>홈</title>
 
 <!-- ================= 탭 마크 (파비콘) =================
      없으면 브라우저가 기본 지구본을 띄웁니다.
@@ -69,7 +69,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
-<link rel="stylesheet" href="css/style.css?v=188" />
+<link rel="stylesheet" href="css/style.css?v=189" />
 </head>
 <body>
 <div class="app-window">
@@ -167,22 +167,52 @@
           </div>
           <input type="range" class="mb-vol" id="mbVol" min="0" max="100" value="70" title="음량" />
         </div>
-        <!-- 선으로만 그린 LP. 재생 중에만 제자리에서 돕니다.
-             주황 원(.mb-lp-prog)은 재생 위치입니다. 맨 바깥 테두리가 아니라
-             한 줄 안쪽 홈(r=24) 위에 겹쳐 놓았습니다 — 0:00 에는 보이지 않고
-             곡이 끝나면 완전한 원이 됩니다(12시에서 시작하도록 -90° 돌려 둡니다).
-             누르면 아래의 재생 목록이 펼쳐집니다. -->
+        <!-- 턴테이블. 검은 LP 한가운데에 앨범아트가 들어가고, 재생 중에는
+             LP 가 돌면서 오른쪽 위의 톤암이 LP 위로 내려옵니다.
+             viewBox 1칸 = 화면 1px 입니다(72×64). 세 덩어리로 나뉩니다 —
+               .mb-disc  도는 것: 판 · 홈 · 라벨(앨범아트)
+               .mb-sheen 돌지 않는 것: 판에 비친 빛. 진짜 LP 도 빛 반사는
+                         판이 돌아도 제자리에 있습니다.
+               .mb-arm   톤암. 받침(64,8)을 축으로 25° 돌아 바늘이 홈에 앉습니다.
+             누르면 아래의 재생 목록이 펼쳐집니다(예전 LP 와 같습니다). -->
         <button type="button" class="mb-lp" id="mbLp" title="재생 목록">
-          <svg viewBox="0 0 60 60">
-            <circle cx="30" cy="30" r="28.5" class="mb-lp-edge" />
-            <circle cx="30" cy="30" r="24" />
-            <circle cx="30" cy="30" r="20.5" />
-            <circle cx="30" cy="30" r="17" />
-            <circle cx="30" cy="30" r="13.5" />
-            <circle cx="30" cy="30" r="8.5" class="mb-lp-edge" />
-            <circle cx="30" cy="30" r="24" class="mb-lp-prog" id="mbLpProg"
-                    transform="rotate(-90 30 30)" />
-            <circle cx="30" cy="30" r="1.6" class="mb-lp-hole" />
+          <svg viewBox="0 0 72 64" aria-hidden="true">
+            <defs>
+              <clipPath id="mbDiscClip"><circle cx="29" cy="32" r="28" /></clipPath>
+              <clipPath id="mbArtClip"><circle cx="29" cy="32" r="11.5" /></clipPath>
+              <linearGradient id="mbSheenGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0"   stop-color="#fff" stop-opacity="0" />
+                <stop offset=".34" stop-color="#fff" stop-opacity="0" />
+                <stop offset=".44" stop-color="#fff" stop-opacity=".16" />
+                <stop offset=".52" stop-color="#fff" stop-opacity="0" />
+                <stop offset=".68" stop-color="#fff" stop-opacity="0" />
+                <stop offset=".76" stop-color="#fff" stop-opacity=".08" />
+                <stop offset=".84" stop-color="#fff" stop-opacity="0" />
+              </linearGradient>
+            </defs>
+            <g class="mb-disc">
+              <circle cx="29" cy="32" r="28" class="mb-vinyl" />
+              <circle cx="29" cy="32" r="25.5" class="mb-groove" />
+              <circle cx="29" cy="32" r="22.5" class="mb-groove" />
+              <circle cx="29" cy="32" r="19.5" class="mb-groove" />
+              <circle cx="29" cy="32" r="16.5" class="mb-groove" />
+              <circle cx="29" cy="32" r="13.2" class="mb-groove" />
+              <!-- 앨범아트가 없을 때의 라벨. 점 하나를 비껴 찍어 두어야 돌고
+                   있는 것이 보입니다(홈은 동심원이라 돌아도 멈춘 것처럼 보입니다). -->
+              <circle cx="29" cy="32" r="11.5" class="mb-label-bg" />
+              <circle cx="33.5" cy="27.5" r="1.4" class="mb-label-dot" />
+              <image id="mbArt" x="17.5" y="20.5" width="23" height="23"
+                     preserveAspectRatio="xMidYMid slice" clip-path="url(#mbArtClip)" />
+              <circle cx="29" cy="32" r="1.3" class="mb-spindle" />
+            </g>
+            <circle cx="29" cy="32" r="28" class="mb-sheen" fill="url(#mbSheenGrad)" />
+            <g class="mb-arm">
+              <rect x="59" y="3" width="10" height="10" rx="2" class="mb-arm-base" />
+              <line x1="64" y1="8" x2="64" y2="44" class="mb-arm-rod-out" />
+              <line x1="64" y1="8" x2="64" y2="44" class="mb-arm-rod" />
+              <rect x="61.5" y="43" width="5" height="8" rx="1" class="mb-arm-head" />
+              <circle cx="64" cy="8" r="2.2" class="mb-arm-pivot" />
+            </g>
           </svg>
         </button>
       </div>
@@ -1062,6 +1092,9 @@
       <div class="mm-file-row">
         <button type="button" class="btn-ghost" id="mmFileBtn">파일 고르기</button>
         <span class="mm-file-name" id="mmFileName">선택된 파일 없음</span>
+        <!-- 앨범아트 — LP 한가운데에 들어갑니다. 유튜브 곡에도 쓰입니다.
+             고르면 버튼 자리에 그림이 작게 보입니다. -->
+        <button type="button" class="btn-ghost mm-cover-btn" id="mmCoverBtn" title="앨범아트">앨범아트</button>
       </div>
     </div>
     <div class="form-row"><label>제목</label><input type="text" id="mmTitle" placeholder="TITLE" /></div>
@@ -1261,7 +1294,7 @@
        (그 목록을 만드는 것도 JS인데 새 CSS 가 감싸이지 않은 select 를 폭 0 으로
        접습니다), 스티커 서랍이 엉뚱한 자리에 놓였습니다.
        **CSS 와 JS 를 함께 고쳤으면 번호도 함께 올리세요.** -->
-<script src="js/main.js?v=188"></script>
+<script src="js/main.js?v=189"></script>
 <script type="module" src="js/firebase-store.js?v=115"></script>
 </body>
 </html>

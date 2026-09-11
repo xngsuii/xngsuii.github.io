@@ -317,20 +317,48 @@
     border-radius:0;background:var(--text);cursor:pointer;border:none;}
   .mb-vol::-moz-range-thumb{width:9px;height:9px;border-radius:0;background:var(--text);
     cursor:pointer;border:none;}
-  /* LP — 선으로만 그립니다. 재생 중일 때만 돕니다(.spinning). */
-  .mb-lp{flex:none;width:64px;height:64px;padding:0;border:none;background:transparent;}
-  .mb-lp svg{width:100%;height:100%;display:block;}
-  .mb-lp svg circle{fill:none;stroke:var(--text);stroke-width:.8;opacity:.55;}
-  .mb-lp svg circle.mb-lp-edge{opacity:1;stroke-width:1;}
-  .mb-lp svg circle.mb-lp-hole{fill:var(--text);stroke:none;opacity:.65;}
-  /* 재생 위치를 그리는 주황 원. 맨 바깥 테두리(28.5)가 아니라 한 줄 안쪽 홈(24)
-     위에 겹쳐 놓습니다. 둘레는 2π×24 = 150.8 이고, 그만큼 비워 두었다가
-     (stroke-dashoffset) JS 가 흐른 만큼 줄여 채웁니다. 값은 main.js 의
-     LP_PROG_LEN 과 반드시 같아야 합니다 — 반지름을 바꾸면 둘 다 바꾸세요. */
-  .mb-lp svg .mb-lp-prog{stroke:var(--accent);stroke-width:1.6;stroke-linecap:round;opacity:.95;
-    stroke-dasharray:150.8;stroke-dashoffset:150.8;transition:stroke-dashoffset .5s linear;}
-  .mb-lp.spinning svg{animation:lp-spin 3.4s linear infinite;}
+  /* ---- 턴테이블 ----
+     72×64 이고 viewBox 도 72×64 라 SVG 1칸이 화면 1px 입니다. 예전 선 LP(64)보다
+     8px 넓은데, 그 8px 이 톤암이 쉬는 자리입니다(판은 왼쪽에 붙어 있습니다).
+
+     색은 테마 색이 아니라 **실물 색**을 직접 적습니다 — LP 는 어느 화면에서나
+     검고, 톤암은 밝은 금속색입니다.
+       판 #151515 · 홈 #ffffff 7% · 라벨 바탕 #e9e4da · 라벨 점 --accent
+       톤암 #ffffff(테 #b9b3a6) · 받침 #efece6(테 #b9b3a6)
+
+     **도는 것과 안 도는 것을 나눕니다.** 예전에는 svg 통째로 돌렸지만, 이제
+     톤암과 빛 반사는 제자리에 있어야 해서 .mb-disc 무리만 돌립니다.
+     SVG 안의 무리를 CSS 로 돌리려면 transform-box:view-box 와 **viewBox 좌표로 된
+     transform-origin** 이 둘 다 있어야 합니다 — 없으면 (0,0) 을 축으로 돌아
+     판이 위젯 밖으로 날아갑니다. 판 중심 (29,32) · 톤암 축 (64,8). */
+  .mb-lp{flex:none;width:72px;height:64px;padding:0;border:none;background:transparent;cursor:pointer;}
+  .mb-lp svg{width:100%;height:100%;display:block;overflow:visible;}
+  .mb-lp .mb-vinyl{fill:#151515;}
+  .mb-lp .mb-groove{fill:none;stroke:#fff;stroke-opacity:.07;stroke-width:.6;}
+  .mb-lp .mb-label-bg{fill:#e9e4da;}
+  .mb-lp .mb-label-dot{fill:var(--accent);}
+  .mb-lp .mb-spindle{fill:#151515;stroke:#e9e4da;stroke-width:.6;}
+  /* 앨범아트가 있으면 라벨 바탕과 점은 가려지고 그림이 라벨이 됩니다
+     (그림이 원 안을 꽉 채우므로 따로 숨길 필요는 없습니다) */
+  .mb-lp .mb-sheen{pointer-events:none;}
+  .mb-lp .mb-disc{transform-box:view-box;transform-origin:29px 32px;}
+  .mb-lp.spinning .mb-disc{animation:lp-spin 3.4s linear infinite;}
   @keyframes lp-spin{ to{transform:rotate(360deg);} }
+  /* 톤암 — 쉴 때는 판 오른쪽 바깥으로 곧게 서 있고, 재생하면 25° 돌아
+     바늘(헤드)이 판 위 홈에 앉습니다. 25° 는 잰 값입니다: 바늘 끝이 판
+     중심에서 22px — 판 테두리(28)보다 안, 라벨(11.5)보다 밖. 멈추면 되돌아갑니다. */
+  .mb-lp .mb-arm{transform-box:view-box;transform-origin:64px 8px;
+    transition:transform .7s cubic-bezier(.4,0,.2,1);}
+  .mb-lp.spinning .mb-arm{transform:rotate(25deg);}
+  .mb-lp .mb-arm-base{fill:#efece6;stroke:#b9b3a6;stroke-width:.8;}
+  .mb-lp .mb-arm-rod-out{stroke:#b9b3a6;stroke-width:3;stroke-linecap:round;}
+  .mb-lp .mb-arm-rod{stroke:#fff;stroke-width:1.6;stroke-linecap:round;}
+  .mb-lp .mb-arm-head{fill:#fff;stroke:#b9b3a6;stroke-width:.8;}
+  .mb-lp .mb-arm-pivot{fill:#fff;stroke:#b9b3a6;stroke-width:.8;}
+  @media (prefers-reduced-motion:reduce){
+    .mb-lp.spinning .mb-disc{animation:none;}
+    .mb-lp .mb-arm{transition:none;}
+  }
   /* ---- 재생 목록 ----
      사이드바 오른쪽에 붙습니다. 자리는 JS 가 잡고(position:fixed), 보는 전용이라
      순서 변경·삭제는 없습니다 — 그건 노래 관리 창(＋)이 합니다. */
@@ -381,11 +409,23 @@
      사이트의 다른 한글보다 자간이 넓어 보였습니다. */
   #stickerModalHeading{letter-spacing:0;}
   .mm-file-row{display:flex;align-items:center;gap:10px;min-width:0;}
+  /* 앨범아트 단추 — 고르면 그 그림이 단추 안에 들어갑니다(글자는 숨김) */
+  .mm-cover-btn{flex:none;}
+  .mm-cover-btn.has-cover{width:34px;height:34px;padding:0;color:transparent;
+    background:var(--surface-2) center/cover no-repeat;}
+  /* 목록 줄의 작은 앨범아트 칸 — 누르면 그 곡의 그림을 고르거나 바꿉니다 */
+  .mm-row .mm-cover{flex:none;width:20px;height:20px;padding:0;border:1px dashed var(--border);
+    background:var(--surface-2) center/cover no-repeat;color:var(--text-muted);
+    font-size:10px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+  .mm-row .mm-cover.has-cover{border-style:solid;color:transparent;}
+  .mm-row .mm-cover:hover{border-color:var(--accent);}
   .mm-file-name{flex:1;min-width:0;font-family:var(--mono);font-size:10.5px;color:var(--text-muted);
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   /* 목록에서 유튜브 곡과 파일 곡을 구분하는 표식 */
-  .mm-kind{flex:none;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.04em;
-    padding:2px 5px;border:1px solid var(--border);color:var(--text-muted);}
+  /* 너비를 FILE(31px)에 맞춰 고정합니다 — YT 는 25px 라, 그대로 두면 옆의
+     앨범아트 칸이 줄마다 6px 씩 어긋나 세로로 줄이 서지 않습니다. */
+  .mm-kind{flex:none;width:32px;text-align:center;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.04em;
+    padding:2px 0;border:1px solid var(--border);color:var(--text-muted);}
   .mm-list{display:flex;flex-direction:column;gap:4px;max-height:220px;overflow-y:auto;margin-top:10px;}
   .mm-row{display:flex;align-items:center;gap:8px;padding:7px 8px;border:1px solid var(--border);
     background:var(--surface);font-size:11px;cursor:grab;}
@@ -957,6 +997,21 @@
      제목·부제 쪽에는 두르지 않습니다(선이 두 겹으로 보입니다). */
   .post-thumb{width:100%;flex:1;min-height:0;border:1px solid var(--rule-soft);
     background:var(--surface-2) center/cover no-repeat;}
+  /* ---- 마우스를 올리면 사진이 살짝 커집니다 (갤러리 썸네일과 같은 1.07 · .25s) ----
+     칸(.post-thumb)을 키우면 테두리와 칸까지 커져 옆 카드를 덮으므로, 칸은 그대로
+     두고 **칸 안에 사진을 한 겹 더 깔아(::after) 그것만** 키웁니다.
+     background:inherit 가 칸에 인라인으로 박힌 사진 주소·위치(✥ 로 옮긴 자리)를
+     그대로 물려받습니다 — 잠긴 카드의 흐림(::before)과 같은 방법입니다.
+     빼는 것 둘:
+       · 잠긴 카드(.locked) — 커지면 흐림 너머 원래 그림이 짐작되고 '열 수 있다'는
+         오해를 줍니다(아래 잠긴 카드 설명).
+       · 위치를 옮기는 중(.thumb-panning) — 커진 채로 끌면 놓았을 때 자리가 달라 보입니다. */
+  .post-card:not(.locked) .post-thumb{position:relative;overflow:hidden;}
+  .post-card:not(.locked) .post-thumb::after{content:'';position:absolute;inset:0;
+    background:inherit;border:0;transition:transform .25s cubic-bezier(.2,0,.2,1);}
+  @media (hover:hover){
+    .post-card:not(.locked):not(.thumb-panning):hover .post-thumb::after{transform:scale(1.07);}
+  }
   /* ---- 목록 썸네일 위치 조정 ----
      선택 모드에서 ✥ 를 누르면 그 썸네일만 끌어서 보이는 자리를 옮길 수 있습니다
      (글 순서가 아니라 이 이미지의 어느 부분을 보여줄지만 바뀝니다). */
