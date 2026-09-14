@@ -3645,8 +3645,31 @@ function decorateContent(el){
 }
 
 /* navigator.clipboard 는 https / localhost 에서만 동작합니다.
-   막히면 화면 밖 textarea 를 만들어 예전 방식으로 복사합니다. */
+   막히면 화면 밖 textarea 를 만들어 예전 방식으로 복사합니다.
+
+   **1순위가 writeText 가 아니라 ClipboardItem('text/plain') 인 까닭** —
+   아이폰에서 'OOC: RP 중단…' 처럼 **'영문자:' 로 시작하는 글**을 복사하면,
+   그 글이 주소 모양(ooc 라는 이름의 주소)으로도 읽혀서 클립보드에 '글'과
+   '주소' 두 가지로 함께 올라갑니다. 붙여넣는 앱이 어느 쪽을 고르느냐에 따라
+   카카오톡·사파리 주소창은 글을, 트위터·엘린챗은 주소를 가져가서
+   '%20RP%20%EC%A4%91…' 처럼 퍼센트 부호로 바뀐 글이 붙었습니다.
+   (실제 데이터에서 문제가 난 복사 칸 16개가 전부 'OOC:' 로 시작했고,
+    나머지 61개는 하나도 주소로 읽히지 않았습니다.)
+   writeText 와 textarea 복사는 브라우저가 글을 넘겨줄 때 주소인지 스스로
+   살피는 길을 지나고, ClipboardItem 은 '이건 text/plain 한 가지'라고 형식을
+   못박아 넘기므로 주소로 따로 올라가지 않는 쪽입니다.
+   글 내용은 한 글자도 바꾸지 않습니다 — 보이지 않는 문자를 끼워 주소로
+   안 읽히게 하는 방법도 있지만, 그러면 붙여넣은 프롬프트가 원문과 달라집니다.
+   ClipboardItem 을 못 쓰거나 실패하면 예전 두 길로 차례로 내려갑니다. */
 async function copyText(text){
+  try{
+    if(navigator.clipboard && window.isSecureContext && navigator.clipboard.write
+       && typeof ClipboardItem !== 'undefined'){
+      const item = new ClipboardItem({ 'text/plain': new Blob([text], { type:'text/plain' }) });
+      await navigator.clipboard.write([item]);
+      return true;
+    }
+  }catch(e){ /* 아래 writeText 로 넘어갑니다 */ }
   try{
     if(navigator.clipboard && window.isSecureContext){
       await navigator.clipboard.writeText(text);
