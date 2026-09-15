@@ -731,38 +731,121 @@ function thumbRemember(src, bucket, val){
   return val;
 }
 
+/* ---- 폰에서 썸네일이 까맣게 보이던 것 ----
+   축소본은 캔버스에 그린 뒤 JPEG 로 굽습니다. **JPEG 에는 투명이 없어서, 아무것도
+   안 그려진(전부 투명한) 캔버스를 구우면 새까만 그림이 나옵니다.**
+   아이폰 사파리는 한 페이지가 쓸 수 있는 캔버스 메모리에 상한이 있고, 넘으면
+   캔버스를 만들어 주긴 하되 그리기가 **조용히** 실패합니다(오류도 안 납니다).
+   예전 코드는 절반씩 줄일 때마다 새 캔버스를 만들고 하나도 돌려주지 않아서
+   (1800px 사진이면 첫 단계만 약 4MB), 갤러리 한 장에 사진 9~15장이 한꺼번에
+   오면 금방 상한에 닿았습니다. 그렇게 나온 까만 축소본이 캐시에 남아 새로고침
+   전까지 계속 까맣게 보였고, 누르면 뜨는 큰 사진은 원본이라 멀쩡했습니다.
+   '보다 보면' 생기는 까닭도 이것입니다 — 메모리가 쌓여야 터집니다.
+
+   고친 것 셋:
+   1. 다 쓴 캔버스는 곧바로 돌려줍니다(freeCanvas — 폭·높이를 0 으로 두면 사파리가
+      그 메모리를 즉시 놓습니다).
+   2. 한 번에 두 장씩만 줄입니다(runThumbJob). 한꺼번에 살아 있는 캔버스 수가 줄어듭니다.
+   3. 굽기 전에 **정말 그려졌는지 확인합니다**(thumbCanvasState). 비어 있으면 원본을
+      쓰고, 그 실패는 캐시에 남기지 않아 다음에 다시 시도합니다. */
+const THUMB_JOBS_MAX = 2;
+let thumbJobsRunning = 0;
+const thumbJobQueue = [];
+function runThumbJob(job){
+  return new Promise(resolve=>{
+    thumbJobQueue.push({ job, resolve });
+    pumpThumbJobs();
+  });
+}
+function pumpThumbJobs(){
+  while(thumbJobsRunning < THUMB_JOBS_MAX && thumbJobQueue.length){
+    const next = thumbJobQueue.shift();
+    thumbJobsRunning++;
+    Promise.resolve().then(next.job).catch(()=> null).then(v=>{
+      thumbJobsRunning--;
+      next.resolve(v);
+      pumpThumbJobs();
+    });
+  }
+}
+function freeCanvas(cv){ if(cv && cv.width !== undefined){ cv.width = 0; cv.height = 0; } }
+/* 캔버스가 실제로 그려졌는지 봅니다. 사진은 어느 점이든 불투명(알파 255)입니다.
+   · 'blank' — 전부 투명: 그리기가 조용히 실패한 것. 원본을 쓰고 기억하지 않습니다.
+   · 'alpha' — 일부만 투명: 뚫린 그림(누끼 딴 그림 등). JPEG 로 구우면 뚫린 자리가
+               까매지므로 원본을 씁니다(이건 매번 같으니 기억합니다).
+   · 'ok'    — 굽습니다.
+   16x16 으로 줄여 256 점만 봅니다. 불투명한 점끼리 섞으면 여전히 255 라,
+   사진 가장자리 때문에 잘못 걸리는 일은 없습니다. */
+function thumbCanvasState(cv){
+  const probe = document.createElement('canvas');
+  probe.width = 16; probe.height = 16;
+  const pc = probe.getContext('2d');
+  if(!pc){ freeCanvas(probe); return 'blank'; }
+  let data;
+  try{
+    pc.drawImage(cv, 0, 0, 16, 16);
+    data = pc.getImageData(0, 0, 16, 16).data;
+  }catch(e){ freeCanvas(probe); return 'blank'; }
+  freeCanvas(probe);
+  let opaque = 0;
+  for(let i = 3; i < data.length; i += 4){ if(data[i] === 255) opaque++; }
+  if(opaque === 0) return 'blank';
+  if(opaque < 256) return 'alpha';
+  return 'ok';
+}
+
 function downscaleThumb(src, wantPx){
   // 실제 필요한 픽셀 = 표시 폭 × 화면 배율, 여기에 창 크기 변화 대비 25% 여유
   const need = wantPx * (window.devicePixelRatio||1) * 1.25;
   const bucket = Math.max(THUMB_BUCKET, Math.ceil(need/THUMB_BUCKET)*THUMB_BUCKET);
   const per = thumbCache.get(src);
   if(per && per.has(bucket)) return Promise.resolve(per.get(bucket));
-  return new Promise(resolve=>{
+  return runThumbJob(()=> new Promise(resolve=>{
+    /* 줄을 서 있는 사이에 같은 사진·같은 크기가 먼저 끝났을 수 있습니다 */
+    const again = thumbCache.get(src);
+    if(again && again.has(bucket)){ resolve(again.get(bucket)); return; }
     const img = new Image();
+    const done = (v)=>{
+      img.onload = img.onerror = null;
+      img.removeAttribute('src');   // 풀어 둔 원본도 빨리 놓아 줍니다
+      resolve(v);
+    };
     img.onload = ()=>{
       let w = img.naturalWidth, h = img.naturalHeight;
       // 축소 폭이 크지 않으면 원본이 더 낫다
-      if(Math.min(w,h) <= bucket*1.25){ resolve(thumbRemember(src, bucket, null)); return; }
-      let cur = img;
+      if(Math.min(w,h) <= bucket*1.25){ done(thumbRemember(src, bucket, null)); return; }
+      let cur = img, ok = true;
       const step = (tw,th)=>{
         const cv = document.createElement('canvas');
         cv.width = tw; cv.height = th;
         const cx = cv.getContext('2d');
+        if(!cx){ freeCanvas(cv); ok = false; return; }
         cx.imageSmoothingEnabled = true;
         cx.imageSmoothingQuality = 'high';
         cx.drawImage(cur, 0, 0, tw, th);
+        if(cur !== img) freeCanvas(cur);   // 앞 단계 캔버스는 곧바로 돌려줍니다
         cur = cv; w = tw; h = th;
       };
-      while(Math.min(w,h)/2 >= bucket) step(Math.round(w/2), Math.round(h/2));
+      while(ok && Math.min(w,h)/2 >= bucket) step(Math.round(w/2), Math.round(h/2));
       const ratio = bucket/Math.min(w,h);
-      if(ratio < 1) step(Math.max(1,Math.round(w*ratio)), Math.max(1,Math.round(h*ratio)));
+      if(ok && ratio < 1) step(Math.max(1,Math.round(w*ratio)), Math.max(1,Math.round(h*ratio)));
+      /* remember 가 거짓이면 캐시에 남기지 않습니다 — 메모리가 모자라 실패한 것은
+         나중에 다시 하면 되므로, 원본으로 한 번 넘기고 잊습니다. */
+      const finish = (v, remember)=>{
+        if(cur !== img) freeCanvas(cur);
+        done(remember ? thumbRemember(src, bucket, v) : v);
+      };
+      if(!ok){ finish(null, false); return; }
+      const state = thumbCanvasState(cur);
+      if(state === 'blank'){ finish(null, false); return; }
+      if(state === 'alpha'){ finish(null, true); return; }
       let out;
-      try{ out = cur.toDataURL('image/jpeg', 0.9); }catch(e){ resolve(thumbRemember(src, bucket, null)); return; }
-      resolve(thumbRemember(src, bucket, out));
+      try{ out = cur.toDataURL('image/jpeg', 0.9); }catch(e){ finish(null, true); return; }
+      finish(out, true);
     };
-    img.onerror = ()=> resolve(null);
+    img.onerror = ()=> done(null);
     img.src = src;
-  });
+  }));
 }
 
 /* 원본을 먼저 깔고, 축소본이 준비되면 교체한다(첫 렌더만 비동기, 이후 캐시 즉시 반영)
@@ -3647,20 +3730,17 @@ function decorateContent(el){
 /* navigator.clipboard 는 https / localhost 에서만 동작합니다.
    막히면 화면 밖 textarea 를 만들어 예전 방식으로 복사합니다.
 
-   **1순위가 writeText 가 아니라 ClipboardItem('text/plain') 인 까닭** —
-   아이폰에서 'OOC: RP 중단…' 처럼 **'영문자:' 로 시작하는 글**을 복사하면,
-   그 글이 주소 모양(ooc 라는 이름의 주소)으로도 읽혀서 클립보드에 '글'과
-   '주소' 두 가지로 함께 올라갑니다. 붙여넣는 앱이 어느 쪽을 고르느냐에 따라
-   카카오톡·사파리 주소창은 글을, 트위터·엘린챗은 주소를 가져가서
-   '%20RP%20%EC%A4%91…' 처럼 퍼센트 부호로 바뀐 글이 붙었습니다.
-   (실제 데이터에서 문제가 난 복사 칸 16개가 전부 'OOC:' 로 시작했고,
-    나머지 61개는 하나도 주소로 읽히지 않았습니다.)
-   writeText 와 textarea 복사는 브라우저가 글을 넘겨줄 때 주소인지 스스로
-   살피는 길을 지나고, ClipboardItem 은 '이건 text/plain 한 가지'라고 형식을
-   못박아 넘기므로 주소로 따로 올라가지 않는 쪽입니다.
-   글 내용은 한 글자도 바꾸지 않습니다 — 보이지 않는 문자를 끼워 주소로
-   안 읽히게 하는 방법도 있지만, 그러면 붙여넣은 프롬프트가 원문과 달라집니다.
-   ClipboardItem 을 못 쓰거나 실패하면 예전 두 길로 차례로 내려갑니다. */
+   1순위는 ClipboardItem('text/plain') 이고, 못 쓰거나 실패하면 writeText →
+   textarea 로 차례로 내려갑니다.
+
+   ※ **'OOC:' 로 시작하는 글이 아이폰의 트위터·엘린챗에서 %20RP%20%EC… 로
+     붙는 문제는 이 함수로 고칠 수 없습니다.** 처음에는 writeText 가 글을 주소로도
+     올려서 생기는 줄 알고 ClipboardItem 으로 형식을 못박았는데, 아이폰에서
+     그대로였습니다. 글을 퍼센트로 바꾸는 것은 **붙여넣는 앱**입니다 — '영문자:'
+     로 시작하는 글을 링크로 보고 주소로 바꿉니다(카카오톡·사파리 검색창은
+     안 바꿉니다). 복사 방식을 또 바꿔 보는 것은 헛수고입니다.
+     막으려면 복사되는 글 자체가 달라져야 하고(보이지 않는 글자를 끼우거나
+     원문을 고치거나), 주인은 그대로 두기로 했습니다(2026-09-14). */
 async function copyText(text){
   try{
     if(navigator.clipboard && window.isSecureContext && navigator.clipboard.write
