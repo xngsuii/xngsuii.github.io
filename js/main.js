@@ -5490,10 +5490,73 @@ function paintGalleryLightbox(){
      (말풍선 사진)는 되돌려 적을 데가 없습니다. */
   const ttBtn = document.getElementById('lbTitleEdit');
   if(ttBtn) ttBtn.style.display = (isLoggedIn && galleryLbFolder) ? '' : 'none';
+  paintLbCoverBtn();
   paintLbTitle();
   peekLbCount();
   markGalleryLbThumb();
 }
+/* ---- 대표사진 ----
+   갤러리에서 보고 있는 사진을 그 글의 대표사진으로 정합니다. 대표사진은
+   headerImage 한 칸이고, 상세 화면의 배너와 PAIR·OC 목록 썸네일이 둘 다 이것을
+   씁니다(주인이 '배너까지 같이'를 골랐습니다). 예전에는 배너 칸에 파일을 따로
+   올려야만 썸네일이 생겼습니다.
+
+   · 사진은 새로 올리지 않습니다 — 갤러리에 이미 있는 blob:// 참조를 그대로
+     가리키므로 저장 공간을 더 쓰지 않습니다.
+   · 배너 위치·확대와 목록 썸네일 위치(thumbPos)는 가운데로 되돌립니다. 앞 사진에
+     맞춰 옮겨 둔 값이라 새 사진에는 뜻이 없습니다. 필요하면 배너 위젯과 ✥ 로
+     다시 맞춥니다.
+   · **지금 배너 사진이 그 글의 다른 어디에도 없으면 먼저 묻습니다.** 아무도
+     가리키지 않는 사진은 저장소 정리(collectGarbage)가 지우므로, 바꾸는 순간 그
+     사진은 되돌릴 수 없게 사라집니다. 갤러리에서 올린 사진이 아니라 배너 칸에
+     직접 올렸던 사진이 그 경우입니다.
+   · 말풍선 사진처럼 폴더가 없는 크게보기에서는 단추를 숨깁니다(돌아가 적을 글을
+     모릅니다). */
+function lbCoverPost(){
+  if(!isLoggedIn || !galleryLbFolder || !galleryHost || !galleryHost.getPost) return null;
+  return galleryHost.getPost() || null;
+}
+function paintLbCoverBtn(){
+  const btn = document.getElementById('lbCoverSet');
+  if(!btn) return;
+  const post = lbCoverPost();
+  btn.style.display = post ? '' : 'none';
+  if(!post) return;
+  const on = !!(post.headerImage && post.headerImage.src && post.headerImage.src === galleryLbImages[galleryLbIndex]);
+  btn.classList.toggle('on', on);
+  btn.title = on ? '대표사진' : '대표사진으로';
+}
+/* 대표 칸(headerImage)을 뺀 나머지 글 안에 이 사진이 쓰이고 있는지.
+   blob:// 참조는 사진 내용의 해시라 같은 사진이면 같은 글자라, 글을 통째로
+   글자로 펼쳐 찾아보면 됩니다(데이터에는 data URL 이 아니라 참조만 들어 있어 짧습니다). */
+function postUsesPhotoElsewhere(post, src){
+  if(!src) return false;
+  const rest = Object.assign({}, post, { headerImage: null });
+  try{ return JSON.stringify(rest).includes(src); }catch(e){ return true; }
+}
+document.getElementById('lbCoverSet')?.addEventListener('click', async (e)=>{
+  e.stopPropagation();
+  const post = lbCoverPost();
+  if(!post) return;
+  const host = galleryHost;
+  const src = galleryLbImages[galleryLbIndex];
+  if(!src) return;
+  const old = post.headerImage && post.headerImage.src;
+  if(old === src) return;
+  if(old && !postUsesPhotoElsewhere(post, old)){
+    const ok = await siteConfirm('지금 배너 사진은 이 글의 갤러리에 없는 사진이에요.\n대표사진을 바꾸면 그 사진은 저장소에서 지워져 되돌릴 수 없어요. 바꿀까요?', '바꾸기');
+    if(!ok) return;
+  }
+  /* 묻는 사이 다른 글로 옮겨 갔으면 그만둡니다 */
+  if(host.getPost() !== post) return;
+  post.headerImage = { src, scale:100, x:50, y:50 };
+  post.thumbPos = { x:50, y:50 };
+  paintLbCoverBtn();
+  if(host === PAIR_GALLERY_HOST){ if(pdHeaderImgAdj) pdHeaderImgAdj.paint(); renderPairPosts(); }
+  else { if(ocHeaderAdj) ocHeaderAdj.paint(); renderOcPosts(); }
+  await host.save();
+});
+
 /* ---- 사진 제목 ----
    폴더 격자에는 제목을 내보내지 않습니다(썸네일이 작아 글자 자리가 없습니다).
    크게보기에서만, 사진 아래에 얇은 띠로 늘 띄웁니다 — 제목은 도구가 아니라

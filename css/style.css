@@ -2715,7 +2715,7 @@
   /* 마우스가 없는 기기는 올려둘 수가 없으므로 늘 띄웁니다 */
   @media (hover:none){ .lb-count{opacity:1;} }
   /* ---- 사진 위 오른쪽 단추 줄 ----
-     [스택] [제목] [크게보기]. 한 줄로 묶어 두었으므로 가운데 단추가 없어지면
+     [대표] [스택] [제목] [크게보기]. 한 줄로 묶어 두었으므로 가운데 단추가 없어지면
      남은 것이 저절로 붙습니다 — 자리를 px 로 박아 두던 때처럼 세 값을 함께
      고칠 일이 없습니다. */
   .lb-tools{position:absolute;right:10px;top:10px;z-index:2;
@@ -2843,6 +2843,8 @@
     outline-offset:-1px;cursor:text;}
   .lb-title.editing:empty:before{content:'사진 제목';color:rgba(255,255,255,.45);}
   .lb-stack-edit,.lb-title-edit{position:relative;}
+  /* 대표사진 단추 — 지금 사진이 이미 대표면 별을 채웁니다(색은 다른 단추와 같은 흰색) */
+  .lb-cover-set.on .lb-zoom-ico{fill:currentColor;}
   .stack-edit{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
     background:rgba(0,0,0,.6);z-index:10;padding:16px;}
   .stack-edit.open{display:flex;}
