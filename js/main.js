@@ -5437,6 +5437,8 @@ function openGalleryLightbox(entries, entryIdx, stackIdx, folder){
   const lb = document.getElementById('lightbox');
   lb.classList.remove('zoomed');   // 확대는 매번 보통 크기에서 시작합니다
   lb.classList.add('open');
+  /* 열린 뒤에야 줄의 크기를 잴 수 있습니다 — 위 centerLbThumb 설명 참고 */
+  centerLbThumb();
 }
 /* 스택을 고친 뒤 다시 셈합니다. keep 은 계속 보고 싶은 낱장 번호입니다.
    폴더가 비면 크게보기를 닫습니다. */
@@ -5779,10 +5781,31 @@ function markGalleryLbThumb(){
   }
   const wrap = document.getElementById('lbThumbs');
   if(!wrap) return;
-  /* 줄이 화면보다 넓은 좁은 기기에서 지금 보는 것을 가운데로 끌어옵니다.
-     block:'nearest' 라 뒤에 있는 화면이 세로로 딸려 움직이지 않습니다. */
+  centerLbThumb();
+}
+/* 줄이 화면보다 넓은 좁은 기기(폰)에서 지금 보는 칸을 줄 가운데로 끌어옵니다.
+   데스크톱은 아홉 칸이 다 들어가(644px 줄에 640px) 스크롤할 것이 없으므로
+   아무 일도 일어나지 않습니다 — 그래서 이 문제는 폰에서만 보였습니다.
+
+   **크게보기가 열린 뒤에 불러야 합니다.** 예전에는 scrollIntoView 를
+   markGalleryLbThumb 안에서만 불렀는데, openGalleryLightbox 는 줄을 다 그린
+   **다음에** .open 을 붙입니다. 그 순간 크게보기는 아직 display:none 이라
+   레이아웃이 없고, 스크롤은 조용히 아무 일도 안 합니다. 줄이 맨 앞(scrollLeft 0)에
+   남아서, 15번째 사진으로 열면 11~15번만 보이고 지금 사진은 오른쪽 끝에 붙어
+   있었습니다(393px 에서 가운데보다 122px 오른쪽). 사진을 넘길 때는 이미 열려
+   있으므로 제대로 됐습니다 — 문제는 열 때만이었습니다.
+
+   scrollIntoView 대신 scrollLeft 를 직접 계산하는 까닭: scrollIntoView 는 줄뿐
+   아니라 바깥의 스크롤 상자까지 함께 움직일 수 있고, 줄에만 쓰면 되는 일입니다.
+   브라우저가 범위 밖 값은 알아서 잘라 주므로 처음·끝 칸도 그대로 맞습니다. */
+function centerLbThumb(){
+  const wrap = document.getElementById('lbThumbs');
+  if(!wrap || !wrap.clientWidth) return;          // 닫혀 있으면(레이아웃 없음) 할 수 없습니다
+  if(wrap.scrollWidth <= wrap.clientWidth) return; // 다 들어가면 옮길 것이 없습니다
   const cur = wrap.querySelector('.lb-thumb.active');
-  if(cur) cur.scrollIntoView({ block:'nearest', inline:'center' });
+  if(!cur) return;
+  const wr = wrap.getBoundingClientRect(), cr = cur.getBoundingClientRect();
+  wrap.scrollLeft = wrap.scrollLeft + (cr.left - wr.left) - (wr.width - cr.width) / 2;
 }
 /* 양 끝 화살표 — 보고 있는 사진은 그대로 두고 썸네일 줄만 아홉 칸씩 넘깁니다.
    그래서 다음에 사진을 넘길 때까지는 줄이 가운데로 되돌아오지 않습니다. */
@@ -5793,6 +5816,11 @@ function stepGalleryLbThumbs(dir){
   if(want === lbThumbStart) return;
   lbThumbStart = want;
   renderGalleryLbThumbs();
+  /* 폰에서는 줄이 아홉 칸보다 좁아 옆으로 스크롤됩니다. 새 아홉 칸을 그려도
+     스크롤 자리는 그 전 그대로라, 넘긴 줄의 가운데쯤부터 보였습니다.
+     넘긴 줄은 첫 칸부터 보이게 되돌립니다(데스크톱은 스크롤이 없어 영향 없음). */
+  const wrap = document.getElementById('lbThumbs');
+  if(wrap) wrap.scrollLeft = 0;
 }
 /* 썸네일 줄은 paintGalleryLightbox 안의 markGalleryLbThumb 이 그리므로
    여기서 따로 부르지 않습니다 (부르면 두 번 그립니다). */

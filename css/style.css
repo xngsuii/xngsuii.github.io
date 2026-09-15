@@ -2323,7 +2323,15 @@
   /* 말풍선: 인덱스 탭(INFO/GALLERY/LOG)과 동일한 오렌지 #EF3921 + 흰 글자 */
   .meta-row{display:flex;align-items:baseline;gap:8px;padding:2px 0;font-size:11px;line-height:1.4;}
   .meta-drag{cursor:grab;color:var(--text-muted);font-size:10px;flex:none;user-select:none;}
-  .meta-label{font-weight:700;color:var(--accent);min-width:54px;flex:none;outline:none;}
+  /* 라벨 칸 너비 72px = 영문 대문자 열 글자가 한 줄에 들어가는 폭(11px 굵게로 잰 값 —
+     OCCUPATION 70.9 · BIRTHPLACE 66.9 · ABCDEFGHIJ 68.2). 예전 54px 에서 넓혀 라벨과 값
+     사이를 띄웠습니다. 짧은 라벨(AGE·HEIGHT)도 모두 이 폭을 차지해 값이 한 세로줄에
+     섭니다. 열 글자를 넘는 라벨은 flex:none 이라 그만큼 늘어납니다.
+     폰은 62px 입니다(폰 규칙에 따로 있습니다) — OC 프로필의 라벨 상자가 폰에서 195px 뿐이라
+     폭마다 값의 줄 수가 달라집니다(루카 포마로로 잰 값: 56px 까지는 예전과 같고,
+     58~62px 는 TEAM 만 1→2줄, 64px 부터는 BASIC 도 2→3줄). 주인이 62px 를 골랐습니다.
+     글자 크기를 바꾸면 둘 다 다시 재세요. */
+  .meta-label{font-weight:700;color:var(--accent);min-width:72px;flex:none;outline:none;}
   .meta-value{color:var(--text);flex:1;outline:none;}
   .meta-del{border:none;background:none;color:var(--text-muted);font-size:10px;flex:none;padding:0 2px;}
   .meta-del:hover{color:var(--accent);}
@@ -3263,6 +3271,8 @@
        (여기 있던 margin-top:0 은 ︾ 단추와 부딪히던 시절의 잔재라 지웠습니다 —
         지금 .postcard-btn 에는 margin 을 주는 규칙이 없습니다.) */
     .postcard-btn{height:48px;font-size:16px;padding:0 14px;}
+    /* 라벨 칸 — 데스크톱 72px 보다 좁게. 이유는 데스크톱 .meta-label 설명 참고 */
+    .meta-label{min-width:62px;}
     /* 좁은 화면에서는 엽서가 이미 화면 폭을 거의 다 쓰므로 키우지 않고
        엽서와 같은 자리·같은 크기로 되돌립니다 */
     .login-sheet{left:0;right:0;top:0;bottom:0;padding:0 24px;}
