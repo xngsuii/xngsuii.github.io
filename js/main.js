@@ -9729,8 +9729,29 @@ function initLightboxKeys(){
 }
 
 /* ---- 화면 크기가 바뀌면 한 페이지 장수가 달라지므로 다시 그립니다 ---- */
+/* ---- ARCHIVE 검색줄의 자리 ----
+   데스크톱: 머리줄의 폴더 고르개 왼쪽(마크업 그대로).
+   폰: 목록 아래, 쪽 번호 밑 — #archiveBody 의 **바로 뒤 형제**로 옮깁니다.
+   #archiveBody 안은 renderArchive 가 통째로 다시 쓰므로 거기 넣으면 사라집니다.
+   요소를 옮기기만 하므로 걸어 둔 이벤트(검색·분류 고르개)는 그대로 따라갑니다.
+   화면 폭이 바뀔 때마다 initResponsiveWatch 가 다시 부릅니다. */
+function placeArcSearch(){
+  const bar = document.getElementById('arcSearchBar');
+  const view = document.getElementById('view-archive');
+  const body = document.getElementById('archiveBody');
+  const folderDD = document.getElementById('arcFolderDD');
+  if(!bar || !view || !body || !folderDD) return;
+  if(isMobileWidth()){
+    if(bar.previousElementSibling !== body) body.after(bar);
+  }else if(bar.nextElementSibling !== folderDD){
+    folderDD.before(bar);
+  }
+}
+placeArcSearch();
+
 function initResponsiveWatch(){
   const onChange = ()=>{
+    placeArcSearch();
     galleryPage = 1;
     /* LOG 는 폰에서 줄 목록, PC 에서 카드로 아예 다르게 그리므로 함께 다시 그립니다.
        (host 는 지금 열려 있는 창 기준으로 이미 맞춰져 있습니다 — 창은 한 번에 하나뿐) */

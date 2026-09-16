@@ -3251,6 +3251,61 @@
        커진 버튼(min-height:40px)이 들어가도록 위아래 여백을 9px 로 줄입니다
        (60 - 보더 1 - 여백 18 = 41px). */
     .topbar{padding:9px 0 9px 32px;}
+    /* ---- PAIR · OC · ARCHIVE 목록의 머리줄 ----
+       ☰(왼쪽 4px, 폭 40px → 오른쪽 끝 44px)와 제목 사이가 2px 뿐이었고 제목도
+       10px 라 작았습니다. 왼쪽 여백을 46px 로 늘려 ☰ 와 16px 띄우고(.main 의
+       14px + 46px = 60px 에서 제목 시작), 제목을 12px 로 키웁니다.
+       목록 화면의 머리줄만 고릅니다 — .topbar 는 ARCHIVE 글 화면(.arc-detail-bar)
+       도 쓰는데, 거기는 ☰ 대신 ← 가 같은 자리에 있어 여백을 따로 둡니다. */
+    #view-pair > .topbar,
+    #view-oc > .topbar,
+    #view-archive > .topbar{padding-left:46px;}
+    #view-pair > .topbar h2,
+    #view-oc > .topbar h2,
+    #view-archive > .topbar h2{font-size:12px;letter-spacing:.14em;white-space:nowrap;
+      min-width:0;overflow:hidden;text-overflow:ellipsis;}
+    /* 머리줄 단추(선택 · 글쓰기 · 폴더)는 폰에서 한 단계 작게 — 주인 판단("전체적으로
+       좀 크다"). 제목을 12px 로 키우자 편집 모드의 'ARCHIVE · PROMPT' 가 단추에 밀려
+       잘렸는데(제목 135px, 단추와 간격 합 189px, 남는 폭 319px), 이걸로 풀립니다.
+       사이트 전체의 폰 단추 규칙(.btn-primary,.btn-ghost{min-height:40px})은 창·모달이
+       함께 쓰므로 그대로 두고, 목록 머리줄 안의 단추만 고릅니다. */
+    #view-pair > .topbar .btn-ghost, #view-pair > .topbar .btn-primary,
+    #view-oc > .topbar .btn-ghost, #view-oc > .topbar .btn-primary,
+    #view-archive > .topbar .btn-ghost, #view-archive > .topbar .btn-primary{
+      display:inline-flex;align-items:center;justify-content:center;
+      height:32px;min-height:0;padding:0 9px;font-size:10.5px;line-height:1;}
+    #view-oc > .topbar .folder-dd-btn,
+    #view-archive > .topbar .folder-dd-btn{height:32px;min-height:0;padding:0 7px 3px;font-size:10px;}
+    /* 잠긴 폴더의 🔒 — 데스크톱 규칙(.folder-dd-btn .gf-lock{top:-.5px})은 11.5px 폴더
+       이름에 맞춘 값이라, 폰의 10px 이름 옆에서는 자물쇠가 1.2px 떠 보였습니다(글자를
+       캔버스에 10배로 그려 칠해진 픽셀로 잰 값 — 가운데끼리 비교). 폰에서만 1.2px
+       내려 가운데를 맞춥니다. 데스크톱은 그대로 0.05px 차이입니다. */
+    #view-oc > .topbar .folder-dd-btn .gf-lock,
+    #view-archive > .topbar .folder-dd-btn .gf-lock{top:.7px;}
+    /* **세 단추의 글자 높이를 맞추는 것이 위 display·height·padding 입니다.** 예전에는
+       단추마다 놓이는 방식이 달라 글자가 제각각이었습니다 — 선택은 display:flex 인데
+       세로 가운데 맞춤이 없어 위로 3.7px 떠 있었고, 글쓰기는 block(단추 기본 가운데
+       맞춤)이라 0.9px 위, 폴더는 inline-flex 가운데 맞춤이라 1.0px 아래였습니다.
+       셋 다 높이 32px · 위아래 여백 0 · 가운데 맞춤 · line-height:1 로 같은 틀에 넣습니다.
+       JS 가 선택 단추에 인라인 display 를 줘도 align-items 는 flex 에 그대로 먹습니다.
+       폴더 단추만 아래 여백 3px — 같은 틀에 넣어도 폴더 이름(10px, .fdd-name 블록)의
+       한글이 선택·글쓰기보다 1.4px 낮게 앉아서(한글 잉크 가운데 43.5 대 42.1), 내용
+       전체를 1.5px 올립니다. ▾ 도 함께 올라가 이름과 나란히 섭니다. */
+    /* ---- ARCHIVE 검색줄: 폰에서는 목록 아래(쪽 번호 밑) ----
+       머리줄에 두면 제목이 커진 만큼 자리가 모자라 제목이 세 줄로 접혔습니다.
+       main.js 의 placeArcSearch() 가 폰에서만 이 줄을 #archiveBody 바로 뒤로
+       옮깁니다(#archiveBody 안에 넣으면 목록을 다시 그릴 때마다 지워집니다).
+       · 폭 전체를 씁니다 — 입력칸이 남은 폭을 다 가져갑니다(펼치기 애니메이션 없음).
+       · 분류(제목/내용) 목록은 **위로** 펼칩니다 — 화면 맨 아래라 아래로 펼치면
+         .app-window 가 잘라 버립니다(검색줄을 예전에 목록 아래에서 머리줄로
+         올렸던 까닭이 바로 이것이었습니다).
+       · 이 줄이 차지한 높이만큼 목록 칸이 줄어들고, OOC·ETC 의 한 쪽 줄 수는
+         fitArchiveRows 가 그 높이로 다시 재서 저절로 줄어듭니다. */
+    #view-archive > .archive-search{flex:none;justify-content:flex-start;width:100%;
+      padding:2px 0 12px;}
+    #view-archive > .archive-search input[type=text],
+    #view-archive > .archive-search:focus-within input[type=text]{flex:1 1 auto;width:auto;min-width:0;}
+    #view-archive > .archive-search .sf-pick-menu{top:auto;bottom:calc(100% + 5px);}
     /* 다른 화면의 머리줄과 똑같이 둡니다 — 왼쪽 56px 은 ☰ 자리입니다.
        예전에는 왼쪽 끝에 ❣ 정사각형 칸이 있어서 왼쪽 여백을 비워 두었는데,
        그 칸을 없앤 뒤로는 ☰ 가 제목 위를 덮고 있었습니다. */
@@ -3290,7 +3345,15 @@
     .ls-rule{display:none;}
     /* iOS 는 16px 미만 입력칸에 포커스하면 화면을 확대합니다.
        글자가 커진 만큼 줄 높이도 올립니다 — 26px 에는 16px 글자가 들어가지 않습니다. */
-    .ls-input{font-size:16px;height:34px;padding:0 2px;}
+    /* 입력칸 34px → 28px — 폰의 로그인 상자는 소개글 칸(약 135px) 크기 그대로라,
+       칸 두 개(글자 12 + 5 + 입력 34, 사이 14 = 116px)가 들어가면 위아래가 10px 씩밖에
+       남지 않아 빠듯했습니다. 28px 로 줄이고 칸 사이를 12px 로 좁혀 위아래를 약 17px 씩
+       비웁니다. 16px 글자는 28px 안에 넉넉히 들어갑니다(줄 상자 약 19px). */
+    .ls-input{font-size:16px;height:28px;padding:0 2px;}
+    /* 칸 사이 12px 는 **두 번째 칸 위**에 둡니다. 아래 여백으로 두면 마지막 칸의 여백까지
+       상자에 들어가, 가운데로 세울 때 위가 아래보다 넓어졌습니다(18 : 15). */
+    .ls-field{margin-bottom:0;}
+    .ls-field + .ls-field{margin-top:12px;}
 
     /* ---------- Home ---------- */
     #home-intro-page{padding:20px 2px 56px;}
