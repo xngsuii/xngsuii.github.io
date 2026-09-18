@@ -3803,6 +3803,19 @@ function copyBoxText(box){
 
 /* 본문은 열 때마다 새로 그려지므로 문서에 한 번만 걸어둡니다 */
 function initContentBlocks(){
+  /* ---- 복사 단추는 커서를 빼앗지 않습니다 ----
+     메모 칸은 커서가 빠질 때(blur) 화면을 다시 그리고, 커서가 들어올 때
+     (mousedown) 원문으로 되돌립니다. 그 사이에 단추 요소가 새로 만들어지므로,
+     그냥 두면 mousedown 을 받은 단추가 click 이 오기 전에 사라져 **복사가 아무
+     일도 하지 않습니다**(편집 모드에서 코드블록 복사 단추가 안 눌리던 것도
+     같은 까닭입니다). mousedown 의 기본 동작을 막으면 커서가 그대로 있어
+     다시 그릴 일이 없고, click 은 제대로 도착합니다.
+     툴바 단추들이 고른 구간을 지키려고 쓰는 것과 같은 방법입니다. */
+  document.addEventListener('mousedown', (e)=>{
+    if(!(e.target instanceof Element)) return;
+    if(e.target.closest('.cb-copy, .code-block-copy')) e.preventDefault();
+  }, true);
+
   document.addEventListener('click', async (e)=>{
     if(!(e.target instanceof Element)) return;
 
@@ -7889,6 +7902,7 @@ function bindFreeToolbar(toolbar, editorId, save){
   on('sizeUp',   ()=> stepFontSize(editorId, 1));
   on('sizeDown', ()=> stepFontSize(editorId, -1));
   on('fold',     ()=> insertFoldBlock(editorId));
+  on('copybox',  ()=> insertCopyBox(editorId));
   on('divider',  ()=>{ editor.focus(); document.execCommand('insertHTML', false, '<hr><br>'); });
   initFoldEnter(editorId);
   initCopyBoxKeys(editorId);
@@ -7914,7 +7928,12 @@ function fillMemoBox(editorId, obj, field, persist){
   paint();
   el.contentEditable = isLoggedIn ? 'true' : 'false';
   el._toRaw = ()=>{ if(isLoggedIn && isDecorated()) showRaw(); };
-  el.onmousedown = el._toRaw;
+  /* 복사 단추를 누른 것이면 그대로 둡니다 — 되돌리면 그 단추가 사라져
+     복사가 되지 않습니다(위 initContentBlocks 의 설명과 한 쌍입니다). */
+  el.onmousedown = (e)=>{
+    if(e && e.target instanceof Element && e.target.closest('.cb-copy, .code-block-copy')) return;
+    el._toRaw();
+  };
   el.onfocus = el._toRaw;
   /* 저장은 언제나 이 함수로만 합니다 — 꾸며진(코드 블록이 만들어진) 화면을
      그대로 저장하면 원문의 ``` 이 사라져 다시는 고칠 수 없게 됩니다. */

@@ -1168,8 +1168,12 @@
   .timeline-list .empty-note{font-size:10.5px;}
   /* 메모 장 — 제목·테두리·바탕 없이 글자만 놓습니다. 글이 길어지면 이 안에서만
      스크롤되고, 아래 26px 은 점이 앉을 자리라 비웁니다. */
-  /* 좁은 칸(PAIR 244px)에 한 줄로 들어가야 해서 밑줄·취소선은 빼두었습니다.
-     남은 것으로 8×24 + 구분선 9 + 사이 여백 32 = 233px 입니다. */
+  /* 밑줄·취소선은 빼두었습니다 — 좁은 칸에 한 줄로 들어가야 해서입니다.
+     지금은 단추 9개(24px) + 구분선 9 + 사이 여백 36 = 261px 이고, 가운데 칸은
+     297px 이라 데스크톱에서는 한 줄에 들어갑니다(RELATIONSHIP 이 빠지면서
+     244 → 297 로 넓어졌습니다. flex-wrap:nowrap 은 뒤에 오는 .rt-toolbar 의
+     wrap 에 밀려 처음부터 적용되지 않고 있었고, 그대로 둡니다 — 폰에서는
+     38px 단추 9개가 어차피 한 줄에 못 들어가 두 줄로 접히는 편이 낫습니다). */
   .rt-toolbar-memo{flex:none;margin-bottom:8px;flex-wrap:nowrap;}
   .side-memo-box{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
     padding-bottom:26px;scrollbar-width:none;}
@@ -2042,6 +2046,19 @@
   .cb-title:empty{display:none;}
   body.logged-in .arc-editor .cb-title:empty,
   body.logged-in .log-editor .cb-title:empty{display:block;}
+  /* 메모 칸과 OC 자유 글 칸은 보기와 편집이 **같은 요소**라, 위처럼 로그인만
+     보고 가르면 그냥 읽는 중에도 빈 제목 자리에 '제목'이 떠 있습니다.
+     그래서 그 칸에 커서가 있을 때만(:focus-within) 자리를 보여줍니다 —
+     넣은 직후 커서가 제목에 있으므로 어디에 적는지 보이고, 칸을 떠나면
+     제목 없는 상자로 깔끔하게 접힙니다. */
+  body.logged-in .side-memo:focus-within .cb-title:empty,
+  body.logged-in .oc-free:focus-within .cb-title:empty{display:block;}
+  body.logged-in .side-memo:focus-within .cb-title:empty::after,
+  body.logged-in .oc-free:focus-within .cb-title:empty::after{content:'제목';
+    color:var(--text-muted);opacity:.7;font-weight:400;}
+  body.logged-in .side-memo:focus-within .cb-body:empty::before,
+  body.logged-in .oc-free:focus-within .cb-body:empty::before{
+    content:'여기에 붙여넣을 글을 적어보세요';color:var(--text-muted);opacity:.7;}
   /* ::before 는 네모가 쓰므로 자리표시 글자는 ::after 로 답니다 —
      '▪ 제목' 으로 나란히 보입니다. */
   body.logged-in .arc-editor .cb-title:empty::after,
@@ -2580,7 +2597,14 @@
   .log-table tr{cursor:pointer;}
   .log-table tr:hover td{background:var(--surface);}
   .log-table th:first-child, .log-table td:first-child{width:44px;text-align:center;padding-right:20px;font-size:9px;color:var(--text-muted);}
-  .log-table th:last-child{text-align:right;}
+  /* ---- 칸 폭은 **머리줄(th)** 에 적어야 합니다 ----
+     table-layout:fixed 는 첫 줄(여기서는 thead 한 줄)만 보고 칸 폭을 정합니다.
+     날짜 폭 70px 이 td 에만 적혀 있어서 머리줄의 Date 칸은 '알아서'로 남았고,
+     그러면 브라우저는 남은 폭을 폭이 안 적힌 칸들끼리 **똑같이** 나눠 줍니다 —
+     Title 과 Date 가 반씩 가져가, 날짜는 70px 만 쓰고 뒤를 비워 두는데 제목은
+     그 절반에서 잘렸습니다(표 832px 이면 제목 394px, 오른쪽 320px 이 빈 채로).
+     Date 를 머리줄에도 못박으면 남는 폭을 제목이 전부 가져갑니다. */
+  .log-table th:last-child{width:70px;text-align:right;}
   .log-table td:last-child{width:70px;text-align:right;font-size:9px;color:var(--text-muted);}
   /* ARCHIVE 선택 모드에서는 맨 앞에 체크 칸이 하나 더 붙습니다. 그러면 위의
      :first-child 규칙(44px 가운데 정렬)이 그 칸에 걸리므로, 원래 그 모양이어야 할
@@ -2592,9 +2616,15 @@
      위아래 여백은 0 으로 둡니다 — 체크 상자(18px)가 글자(15px)보다 커서
      그대로 두면 줄 높이가 3px 씩 늘어나고, 한 쪽 15줄이 안 들어갑니다. */
   .log-table th.arc-th-check, .log-table td.arc-td-check{padding-right:6px;}
+  /* 체크 칸도 머리줄에 폭을 적어 둡니다 — 안 적으면 위와 같은 까닭으로 제목과
+     폭을 반씩 나눠 갑니다(상자 16px + 여백 6px 이면 넉넉합니다). */
+  .log-table th.arc-th-check{width:24px;}
   .log-table td.arc-td-check{padding-top:0;padding-bottom:0;vertical-align:middle;}
   .log-table td.arc-td-check .gallery-check{position:static;margin:0 auto;}
   .log-td-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  /* 긴 제목이 날짜에 바로 닿지 않게 오른쪽을 조금 비워 둡니다. .log-table td 의
+     8px 을 덮어써야 하므로 td 를 함께 적어 규칙 힘(0,2,1)을 올려 둡니다. */
+  .log-table td.log-td-title{padding-right:24px;}
   /* ---- 쪽 번호 ----
      상자를 두르지 않고 숫자만 늘어놓습니다. 지금 보고 있는 쪽만 오렌지입니다.
      PAIR·OC 는 이 줄이 상단바 오른쪽에 있고(index.html), ARCHIVE·LOG 는
@@ -2911,6 +2941,14 @@
     display:flex;align-items:center;justify-content:center;font-size:12px;line-height:1;
     border:1px solid var(--border);background:var(--border);color:var(--bg);}
   .an-eye:hover{background:#3d3933;}
+  /* ---- 위치 조정(✥)은 보기(👁) 단추 아래에 ----
+     둘 다 오른쪽 위에 있어(👁 4~28px, ✥ 14~34px) 흐림 폴더를 선택 모드로 보면
+     서로 겹쳐 있었습니다. 크기를 👁 와 같은 24px 로 맞추고, 👁 가 있을 때만 그
+     아래(32px, 사이 4px)로 내립니다 — ✥ 는 나중에 붙으므로(addThumbPanControl 이
+     칸 맨 뒤에 append) 형제 선택자로 그 경우만 가려낼 수 있습니다.
+     PAIR·OC 목록의 ✥ 는 위에 겹칠 것이 없어 20px 그대로입니다. */
+  .arc-nai-thumb .thumb-pan-btn{top:4px;right:4px;width:24px;height:24px;font-size:12px;}
+  .arc-nai-thumb .an-eye ~ .thumb-pan-btn{top:32px;}
   /* 이미지가 없는 마지막 페이지의 빈 자리 (잠긴 폴더 표시용) */
   .arc-nai-slot{visibility:hidden;pointer-events:none;}
   /* 잠김 안내는 본문 영역 정중앙에 */
@@ -3553,7 +3591,10 @@
     /* 선택 모드에서는 맨 앞이 체크 칸이므로, 그 다음 칸(No)에 같은 폭을 줍니다 */
     .log-table th.arc-th-check + th,.log-table td.arc-td-check + td{width:30px;padding-right:8px;}
     .log-table td.arc-td-check .gallery-check{width:22px;height:22px;font-size:12px;}
-    .log-table td:last-child{width:60px;}
+    /* 데스크톱과 같은 까닭으로 머리줄에도 적습니다(위 설명 참고) */
+    .log-table th:last-child,.log-table td:last-child{width:60px;}
+    .log-table th.arc-th-check{width:28px;}
+    .log-table td.log-td-title{padding-right:12px;}
     .log-table td{padding:12px 4px;}
     .archive-search{margin:0 0 14px;}
 
@@ -3764,9 +3805,24 @@
        아래 :has(.rt-ico) 는 그래도 필요합니다(그림은 이미 정확하므로 0). */
     .rt-toolbar button{width:38px;height:38px;font-size:14px;}
     .rt-toolbar button:has(.rt-ico){padding-top:0;}
-    /* 메모 툴바는 PC 에서만 한 줄입니다 — 손가락 크기(38px)로 커지면 어차피
-       한 줄에 못 들어가고, nowrap 인 채로 두면 칸 밖으로 삐져나갑니다. */
-    .rt-toolbar-memo{flex-wrap:wrap;}
+    /* ---- 메모 서식 줄은 폰에서도 한 줄 ----
+       복사 칸 단추가 늘어 단추가 9개가 되면서, 손가락 크기(38px) 그대로는
+       393px 화면의 363px 칸에 396px 이 필요해 두 줄로 접혔습니다. 두 줄이 되면
+       메모 칸이 그만큼 짧아져서, 주인이 단추를 줄여 한 줄로 두는 쪽을 골랐습니다.
+       34px + 여백 4px → 9×34 + 구분선 9 + 여백 36 = 351px.
+       폭을 flex 기준값으로 준 것이 중요합니다 — 더 좁은 기기(375px 화면의
+       345px 칸)에서는 아홉 개가 알아서 한 뼘씩(33.3px) 줄어 넘치지 않습니다.
+       늘어나지는 않습니다(flex-grow 0), 그래서 넓은 폰에서도 34px 그대로입니다.
+       OC 자유 글 칸(.rt-toolbar-ocfree)은 손대지 않습니다 — 단추가 11개라 한
+       줄에 넣으려면 28px 까지 줄여야 하고, 거기는 전부터 두 줄이었습니다. */
+    .rt-toolbar-memo{flex-wrap:nowrap;gap:4px;}
+    .rt-toolbar-memo button,
+    .rt-toolbar-memo .rt-color{flex:0 1 34px;width:34px;height:34px;min-width:0;}
+    /* 글자색은 단추가 아니라 고르개 위젯(.rt-cpick)이라 규칙 힘이 한 단 높습니다 —
+       같이 줄여 주지 않으면 이 칸만 38px 로 남아 줄 높이를 혼자 끌어올립니다.
+       .rt-cpick 은 flex:none 이라, 좁은 기기에서 줄어드는 몫은 나머지 여덟 개가
+       나눠 집니다(375px 화면에서 33.3px). */
+    .rt-toolbar-memo .rt-cpick .rt-cpick-btn{width:34px;height:34px;padding:4px;}
     .rt-color{width:38px;height:38px;}
     .rt-cpick .rt-cpick-btn{width:38px;height:38px;padding:5px;}
     .rt-colorbar .rt-colorcell{min-width:52px;}
