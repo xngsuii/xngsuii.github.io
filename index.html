@@ -69,7 +69,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
-<link rel="stylesheet" href="css/style.css?v=207" />
+<link rel="stylesheet" href="css/style.css?v=215" />
 </head>
 <body>
 <div class="app-window">
@@ -105,6 +105,17 @@
         <button class="nav-sub-item" data-archivesub="ooc">OOC</button>
         <button class="nav-sub-item" data-archivesub="etc">ETC</button>
       </div>
+      <!-- PORTAL — 다른 사이트로 나가는 문. 위의 메뉴들과 달리 **화면이 아니라서
+           data-view 가 없습니다**(main.js 가 그것으로 갈라봅니다). 누르면 목록만
+           펴지고, 항목을 누르면 새 탭으로 나갑니다. 링크가 하나도 없고 보기
+           모드이면 renderPortalSub 가 이 줄을 통째로 감춥니다.
+           (위에 얇은 구분선을 한 번 넣어 봤다가 주인 판단으로 뺐습니다 —
+            다른 메뉴와 같은 간격으로 그냥 이어집니다.) -->
+      <div class="nav-item-row" id="portalRow">
+        <button class="nav-item" id="portalBtn" type="button">Portal</button>
+        <button class="nav-cat-add" data-editonly id="portalAddBtn" title="사이트 추가">＋</button>
+      </div>
+      <div class="nav-sub" id="portalSub"></div>
     </nav>
 
     <!-- 스티커 서랍 — 사이드바 바닥, 뮤직 위젯 바로 위에 놓인 얇은 손잡이입니다.
@@ -367,9 +378,15 @@
     <section class="view" id="view-pair">
       <div class="topbar">
         <h2 id="pairTitle">Pair · 전체</h2>
-        <div class="pair-header-actions" data-editonly>
-          <button class="btn-ghost" id="selectPairBtn">선택</button>
-          <button class="btn-primary" id="writePairBtn">＋ 글쓰기</button>
+        <!-- 선택 · 글쓰기 · 폴더 순 (OC 와 같은 차례). 폴더는 보기 모드에도
+             있어야 하므로 편집 전용 묶음 바깥에 둡니다. '전체'를 보고 있을
+             때는 고를 폴더가 없어 renderPairPosts 가 통째로 감춥니다. -->
+        <div class="topbar-actions">
+          <div class="pair-header-actions" data-editonly>
+            <button class="btn-ghost" id="selectPairBtn">선택</button>
+            <button class="btn-primary" id="writePairBtn">＋ 글쓰기</button>
+          </div>
+          <div class="folder-dd" id="pairFolderDD"></div>
         </div>
       </div>
       <div class="pair-select-bar" id="pairSelectBar" style="display:none;">
@@ -964,14 +981,24 @@
           <button type="button" id="arcInsertImageBtn" title="사진 삽입">🖼</button>
           <button type="button" id="arcInsertFileBtn" title="파일 삽입">📎</button>
         </div>
-        <label class="arcd-cat">
+        <!-- 폴더 · 카테고리 — 이 둘만 오른쪽 끝에 따로 섭니다.
+             폴더 목록은 카테고리마다 다르므로 JS 가 채웁니다(fillArcFolderSelect). -->
+        <!-- <label> 이 아니라 <div> 인 까닭: 고르개는 이제 숨겨 둔 <select> 를
+             값만 들고 있게 하고 화면에는 우리 드롭다운(.pick-dd)을 그립니다.
+             <label> 로 두면 그 안을 누를 때마다 브라우저가 숨은 <select> 로
+             클릭을 한 번 더 넘겨 드롭다운이 열렸다 닫힙니다. -->
+        <div class="arcd-cat arcd-folder">
+          <span>폴더</span>
+          <select id="arcFolderInput" class="pick-dd-src"></select>
+        </div>
+        <div class="arcd-cat">
           <span>카테고리</span>
-          <select id="arcCategoryInput">
+          <select id="arcCategoryInput" class="pick-dd-src">
             <option value="ooc">OOC</option>
             <option value="nai">PROMPT</option>
             <option value="etc">ETC</option>
           </select>
-        </label>
+        </div>
       </div>
 
       <!-- 스크롤되는 것은 이 칸뿐입니다 — 위 제목줄과 단추줄은 그대로 서 있습니다.
@@ -1122,6 +1149,26 @@
       <span class="gf-actions-spacer"></span>
       <button class="btn-ghost" data-close>취소</button>
       <button class="btn-primary" id="clSaveBtn">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- PORTAL 사이트 추가/수정 — 이름과 주소 두 줄뿐입니다.
+     주소 검사는 LOVE INTEREST 카드 링크와 같은 함수(normalizeCardLink)를 씁니다. -->
+<div class="modal-overlay" id="modalPortal">
+  <div class="modal gf-modal">
+    <button class="modal-close" data-close>✕</button>
+    <h3 id="plHeading">사이트 추가</h3>
+    <div class="form-row"><label for="plName">이름</label>
+      <input type="text" id="plName" placeholder="예: 블로그" autocomplete="off" /></div>
+    <div class="form-row"><label for="plUrl">주소</label>
+      <input type="url" id="plUrl" placeholder="https://" autocomplete="off" spellcheck="false" /></div>
+    <div class="login-error" id="plError">http 나 https 로 된 주소만 걸 수 있어요.</div>
+    <div class="form-actions gf-actions">
+      <button class="btn-ghost gf-danger" id="plDeleteBtn" style="display:none;">삭제</button>
+      <span class="gf-actions-spacer"></span>
+      <button class="btn-ghost" data-close>취소</button>
+      <button class="btn-primary" id="plSaveBtn">저장</button>
     </div>
   </div>
 </div>
@@ -1303,7 +1350,7 @@
        (그 목록을 만드는 것도 JS인데 새 CSS 가 감싸이지 않은 select 를 폭 0 으로
        접습니다), 스티커 서랍이 엉뚱한 자리에 놓였습니다.
        **CSS 와 JS 를 함께 고쳤으면 번호도 함께 올리세요.** -->
-<script src="js/main.js?v=207"></script>
-<script type="module" src="js/firebase-store.js?v=115"></script>
+<script src="js/main.js?v=215"></script>
+<script type="module" src="js/firebase-store.js?v=116"></script>
 </body>
 </html>

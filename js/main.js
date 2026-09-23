@@ -33,6 +33,9 @@ function applyEditMode(){
   });
   // ＋·✎ 와 끌어서 옮기기는 편집 모드에서만 달리므로 다시 그립니다
   safely('사이드바 분류', renderNavSubs);
+  /* PORTAL 도 같은 이유로 — 보기 모드에서는 ＋·✎ 가 빠지고, 링크가 하나도
+     없으면 줄째 사라집니다(빈 메뉴를 남기지 않습니다). */
+  safely('PORTAL', renderPortalSub);
   safely('PAIR 목록', renderPairPosts);
   safely('카드', renderCards);
   safely('OC 목록', renderOcPosts);
@@ -295,7 +298,9 @@ let state = {
   /* 사이드바 뮤직 위젯의 재생 목록 — [{id, title, artist, videoId 또는 src}] */
   musicList:[],
   /* 화면에 붙여 두는 스티커 — [{id, src, lines, w, x, y, out}] */
-  stickers:[]
+  stickers:[],
+  /* PORTAL — 사이드바 맨 아래의 바깥 사이트 목록 [{id, name, url}] */
+  portalLinks:[]
 };
 
 /* ---- PROMPT 폴더 ----
@@ -330,15 +335,20 @@ function normalizeArcFolders(list, defaultId){
   });
   return out;
 }
-/* ---- OC 폴더 ----
+/* ---- PAIR · OC 폴더 ----
    PROMPT 폴더와 같은 모양이지만 '썸네일 흐리게'는 쓰지 않고 비밀 폴더만 씁니다.
-   카테고리마다 다른 폴더를 가질 수 있어(아래 normalizeOcCats 참고),
-   이 목록은 전역이 아니라 카테고리 객체 하나(cat.folders)에 딸립니다. */
+   카테고리마다 다른 폴더를 가질 수 있어(아래 normalizeOcCats·normalizePairCats),
+   이 목록은 전역이 아니라 카테고리 객체 하나(cat.folders)에 딸립니다.
+   **기본 폴더의 id 는 곳마다 달라야 합니다** — 이번에 연 비밀 폴더를 기억하는
+   unlockedFolders 가 폴더 id 하나로만 적혀 있어서, 같은 id 를 쓰면 PAIR 의 기본
+   폴더를 푸는 순간 OC 의 기본 폴더까지 함께 풀립니다(ARCHIVE 가 카테고리마다
+   다른 기본 id 를 쓰는 것과 같은 까닭입니다). */
 const OC_DEFAULT_FOLDER = 'ocdefault';
-function normalizeOcFolders(list){
+const PAIR_DEFAULT_FOLDER = 'pairdefault';
+function normalizeCatFolders(list, defaultId){
   const out = Array.isArray(list) ? list.slice() : [];
   if(!out.length){
-    out.push({ id:OC_DEFAULT_FOLDER, name:'기본' });
+    out.push({ id:defaultId, name:'기본' });
   }
   out.forEach(f=>{
     if(f.secret == null) f.secret = false;
@@ -367,9 +377,18 @@ function normalizeCats(list, fallback){
 function normalizeOcCats(list, legacyFolders){
   const out = normalizeCats(list, []);
   if(!out.length){
-    out.push({ id:OC_DEFAULT_CAT, name:'기본', folders: normalizeOcFolders(legacyFolders) });
+    out.push({ id:OC_DEFAULT_CAT, name:'기본', folders: normalizeCatFolders(legacyFolders, OC_DEFAULT_FOLDER) });
   }
-  out.forEach(c=>{ if(!Array.isArray(c.folders)) c.folders = normalizeOcFolders(null); });
+  out.forEach(c=>{ if(!Array.isArray(c.folders)) c.folders = normalizeCatFolders(null, OC_DEFAULT_FOLDER); });
+  return out;
+}
+/* PAIR 도 카테고리마다 폴더를 갖습니다. OC 와 다른 점은 카테고리가 **하나도
+   없어도 된다**는 것뿐입니다(PAIR 은 카테고리를 지우면 그 안의 글이 분류 없이
+   남아 '전체'에서만 보입니다). 그런 글은 폴더도 없는 셈이라, 폴더로 가르는 일은
+   카테고리를 고른 동안에만 일어납니다. */
+function normalizePairCats(list){
+  const out = normalizeCats(list, PAIR_DEFAULT_CATS);
+  out.forEach(c=>{ if(!Array.isArray(c.folders)) c.folders = normalizeCatFolders(null, PAIR_DEFAULT_FOLDER); });
   return out;
 }
 /* 글이 가리키는 카테고리 이름. 지워진 카테고리를 가리키고 있으면 빈 문자열 */
@@ -377,12 +396,34 @@ function catName(list, id){
   const c = list.find(x=> x.id === id);
   return c ? c.name : '';
 }
+/* PAIR 은 카테고리가 0개일 수 있어(지울 수 있습니다) 없으면 null 입니다 —
+   OC 처럼 첫 카테고리로 물러나면, 지워진 분류의 글이 엉뚱한 카테고리의 폴더에
+   속한 것처럼 보입니다. */
+function pairCatOf(id){
+  return state.pairCats.find(c=>c.id===id) || null;
+}
+function pairFoldersOf(catId){
+  const cat = pairCatOf(catId);
+  if(!cat) return [];
+  if(!Array.isArray(cat.folders)) cat.folders = normalizeCatFolders(null, PAIR_DEFAULT_FOLDER);
+  return cat.folders;
+}
+/* 글이 든 폴더. 적혀 있지 않거나(예전 글) 지워진 폴더를 가리키면 그 카테고리의
+   **첫 폴더**로 읽습니다 — 예전 글에 folderId 를 적어 넣지 않는 까닭이 이것입니다.
+   적어 넣으면 글 하나하나가 '달라진 것'이 되어 전부 다시 저장됩니다. */
+function pairFolderIdOf(p){
+  const folders = pairFoldersOf(p.type);
+  if(!folders.length) return '';
+  const fallback = folders[0].id;
+  const id = p.folderId || fallback;
+  return folders.some(f=>f.id===id) ? id : fallback;
+}
 function ocCatOf(id){
   return state.ocCats.find(c=>c.id===id) || state.ocCats[0];
 }
 function ocFoldersOf(catId){
   const cat = ocCatOf(catId);
-  if(!Array.isArray(cat.folders)) cat.folders = normalizeOcFolders(null);
+  if(!Array.isArray(cat.folders)) cat.folders = normalizeCatFolders(null, OC_DEFAULT_FOLDER);
   return cat.folders;
 }
 function ocFolderIdOf(item){
@@ -653,7 +694,8 @@ async function loadState(){
      OC 는 카테고리가 하나 있어야 하므로, 카테고리 개념이 생기기 전
      전역으로 저장돼 있던 OC 폴더 목록(ocFolders)을 그 첫 카테고리가 이어받습니다 —
      그래야 이미 만들어둔 폴더가 사라지지 않습니다. */
-  state.pairCats = normalizeCats(await storageGet('pairCats', null), PAIR_DEFAULT_CATS);
+  state.pairCats = normalizePairCats(await storageGet('pairCats', null));
+  state.portalLinks = normalizePortalLinks(await storageGet('portalLinks', null));
   state.ocCats = normalizeOcCats(await storageGet('ocCats', null), await storageGet('ocFolders', null));
   state.ocPosts = (await storageGet('ocPosts', [])).map(migrateOcPost);
   /* 카테고리가 이제 필수라, 없어졌거나 유효하지 않은 카테고리를 가리키는 글은
@@ -694,6 +736,7 @@ function renderAll(){
   syncDocTitle();
   document.getElementById('homeIntro').innerText = state.homeIntro;
   renderNavSubs();
+  renderPortalSub();
   renderCards();
   renderPairPosts();
   renderOcPosts();
@@ -1196,12 +1239,17 @@ const ocSub = document.getElementById('ocSub');
 const archiveSub = document.getElementById('archiveSub');
 navItems.forEach(btn=>{
   btn.addEventListener('click', ()=>{
+    /* PORTAL 은 화면이 아니라 링크 목록이라 data-view 가 없습니다 —
+       여기서는 아무 일도 하지 않고, 자기 단추의 처리기가 목록만 폅니다.
+       '지금 여기'(.active)도 받지 않습니다: 머무는 곳이 아니기 때문입니다. */
+    if(!btn.dataset.view) return;
     navItems.forEach(b=>b.classList.remove('active')); btn.classList.add('active');
     activateView(btn.dataset.view);
     markCurrentView(btn.dataset.view);
     pairSub.classList.toggle('open', btn.dataset.view==='pair');
     ocSub.classList.toggle('open', btn.dataset.view==='oc');
     archiveSub.classList.toggle('open', btn.dataset.view==='archive');
+    portalSub?.classList.remove('open');   // 한 번에 한 목록만 펼칩니다
     /* 큰 메뉴를 누르면 하위 카테고리는 늘 첫 항목으로 돌아갑니다 */
     if(btn.dataset.view==='pair'){
       currentPairFilter=defaultCatId(PAIR_CAT_NAV);
@@ -1265,6 +1313,7 @@ const PAIR_CAT_NAV = {
   posts: ()=> state.pairPosts,
   savePosts: ()=> storageSet('pairPosts', state.pairPosts),
   newId: ()=> 'pc'+Date.now(),
+  newExtra: ()=> ({ folders: normalizeCatFolders(null, PAIR_DEFAULT_FOLDER) }),   // OC 와 같이 카테고리마다 폴더 목록
   title: (name)=>{ document.getElementById('pairTitle').innerText = 'Pair · ' + name; },
   get: ()=> currentPairFilter,
   set: (id)=>{ currentPairFilter = id; pairPage = 1; },
@@ -1284,7 +1333,7 @@ const OC_CAT_NAV = {
   posts: ()=> state.ocPosts,
   savePosts: ()=> saveOc(),
   newId: ()=> 'occ'+Date.now(),
-  newExtra: ()=> ({ folders: normalizeOcFolders(null) }),   // 카테고리마다 자기 폴더 목록을 갖습니다
+  newExtra: ()=> ({ folders: normalizeCatFolders(null, OC_DEFAULT_FOLDER) }),   // 카테고리마다 자기 폴더 목록을 갖습니다
   title: (name)=>{ const el=document.getElementById('ocTitle'); if(el) el.innerText = 'OC · ' + name; },
   get: ()=> currentOcFilter,
   set: (id)=>{ currentOcFilter = id; ocPage = 1; },
@@ -1326,7 +1375,7 @@ function openNavSection(nav){
   document.querySelector(`.nav-item[data-view="${nav.view}"]`).classList.add('active');
   activateView(nav.view);
   markCurrentView(nav.view);
-  [pairSub, ocSub, archiveSub].forEach(el=> el.classList.toggle('open', el===nav.subEl()));
+  [pairSub, ocSub, archiveSub, portalSub].forEach(el=> el?.classList.toggle('open', el===nav.subEl()));
 }
 
 function renderNavSub(nav){
@@ -1435,10 +1484,164 @@ function startAddCat(nav){
   renderNavSub(nav);
   setTimeout(()=>{ const inp = nav.subEl().querySelector('.ns-add-input'); if(inp) inp.focus(); }, 0);
 }
-document.querySelectorAll('.nav-cat-add').forEach(btn=>{
+/* [data-nav] 로 좁힙니다 — PORTAL 의 ＋ 도 같은 모양(.nav-cat-add)이지만
+   카테고리가 아니라 사이트를 추가하므로 아래에서 따로 겁니다. */
+document.querySelectorAll('.nav-cat-add[data-nav]').forEach(btn=>{
   btn.addEventListener('click', (e)=>{
     e.stopPropagation();
     startAddCat(btn.dataset.nav==='oc' ? OC_CAT_NAV : PAIR_CAT_NAV);
+  });
+});
+
+/* ============================================================
+   PORTAL — 다른 사이트로 나가는 문
+   ------------------------------------------------------------
+   사이드바 맨 아래 메뉴입니다. 다른 큰 메뉴와 **다른 점이 두 가지**입니다:
+   화면을 바꾸지 않고(눌러도 보고 있던 화면 그대로, 목록만 펴집니다),
+   항목을 누르면 새 탭으로 나갑니다. 편집 모드에서도 그대로 나갑니다 —
+   새 탭이라 쓰던 글은 이 화면에 남아 있고, 그래서 '저장 안 됨' 도 묻지
+   않습니다(위 .nav 가드에서 PORTAL 을 지나보냅니다).
+   목록은 한 번에 하나만 펴 둡니다 — 사이드바가 길어져 스스로 스크롤이
+   생기면 보기 나쁘기 때문입니다(주인 요청).
+   저장은 SCALAR_KEYS 의 portalLinks 하나: [{id, name, url}].
+   ============================================================ */
+function normalizePortalLinks(list){
+  if(!Array.isArray(list)) return [];
+  return list.filter(x=> x && x.url).map(x=>({
+    id: String(x.id || ('pl' + Date.now() + Math.random().toString(36).slice(2,6))),
+    name: String(x.name || '').trim() || String(x.url),
+    url: String(x.url)
+  }));
+}
+const portalSub = document.getElementById('portalSub');
+const portalRow = document.getElementById('portalRow');
+let draggedPortalId = null;
+let portalTarget = null;
+
+function closeOtherNavSubs(){
+  [pairSub, ocSub, archiveSub].forEach(el=> el?.classList.remove('open'));
+}
+function renderPortalSub(){
+  if(!portalSub || !portalRow) return;
+  const links = state.portalLinks || [];
+  /* 링크가 없으면 보는 사람에게는 빈 메뉴일 뿐이라 줄째 감춥니다.
+     편집 모드에서는 ＋ 를 눌러야 하므로 남깁니다. */
+  const show = links.length > 0 || isLoggedIn;
+  portalRow.style.display = show ? '' : 'none';
+  if(!show) portalSub.classList.remove('open');
+  portalSub.innerHTML = '';
+  links.forEach(link=>{
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'nav-sub-item portal-item';
+    btn.dataset.plid = link.id;
+    btn.title = link.url;
+    /* ↗ 는 이름 **안**에 둡니다 — .nav-sub-item 은 space-between 이라 형제로
+       두면 ✎ 자리인 오른쪽 끝까지 밀려가 '여기를 누르면 나간다'로 안 읽힙니다. */
+    btn.innerHTML = `<span class="ns-name">${escapeHtml(link.name)}<span class="ns-ext">↗</span></span>`
+      + `<span class="ns-edit" data-editonly title="이름·주소 수정">✎</span>`;
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      if(e.target.closest('.ns-edit')){
+        if(!isLoggedIn) return;
+        openPortalModal(link);
+        return;
+      }
+      /* noopener 는 새 탭이 이쪽 창을 건드리지 못하게 합니다(카드 링크와 같습니다) */
+      window.open(link.url, '_blank', 'noopener');
+    });
+    if(isLoggedIn){
+      /* 순서 바꾸기 — 카테고리 목록과 같은 방식입니다. 끌고 있는 요소를
+         다시 그려 없애면 dragend 가 오지 않아 순서가 저장되지 않으므로,
+         여기서도 요소만 옮깁니다. */
+      btn.draggable = true;
+      btn.addEventListener('dragstart', ()=>{ draggedPortalId = link.id; btn.classList.add('dragging'); });
+      btn.addEventListener('dragend', async ()=>{
+        btn.classList.remove('dragging');
+        if(!draggedPortalId) return;
+        draggedPortalId = null;
+        await savePortalLinks();
+      });
+      btn.addEventListener('dragover', (e)=>{
+        if(!draggedPortalId || draggedPortalId===link.id) return;
+        e.preventDefault();
+        const list = state.portalLinks;
+        const from = list.findIndex(x=>x.id===draggedPortalId);
+        const to   = list.findIndex(x=>x.id===link.id);
+        if(from<0 || to<0) return;
+        const play = flipByKey(portalSub, '.nav-sub-item', 'plid');
+        list.splice(to, 0, list.splice(from, 1)[0]);
+        const dragEl = portalSub.querySelector(`.nav-sub-item[data-plid="${draggedPortalId}"]`);
+        if(dragEl) portalSub.insertBefore(dragEl, from < to ? btn.nextSibling : btn);
+        play();
+      });
+    }
+    portalSub.appendChild(btn);
+  });
+  if(isLoggedIn && !links.length){
+    const hint = document.createElement('div');
+    hint.className = 'ns-hint';
+    hint.setAttribute('data-editonly', '');
+    hint.innerText = '＋ 로 사이트를 더해보세요';
+    portalSub.appendChild(hint);
+  }
+}
+function savePortalLinks(){ return storageSet('portalLinks', state.portalLinks); }
+
+document.getElementById('portalBtn')?.addEventListener('click', (e)=>{
+  e.stopPropagation();
+  const open = !portalSub.classList.contains('open');
+  closeOtherNavSubs();
+  portalSub.classList.toggle('open', open);
+});
+document.getElementById('portalAddBtn')?.addEventListener('click', (e)=>{
+  e.stopPropagation();
+  if(!isLoggedIn) return;
+  closeOtherNavSubs();
+  portalSub.classList.add('open');
+  openPortalModal(null);
+});
+
+function openPortalModal(link){
+  portalTarget = link;
+  document.getElementById('plHeading').innerText = link ? '사이트 수정' : '사이트 추가';
+  document.getElementById('plName').value = link ? link.name : '';
+  document.getElementById('plUrl').value  = link ? link.url  : '';
+  document.getElementById('plError').style.display = 'none';
+  document.getElementById('plDeleteBtn').style.display = link ? '' : 'none';
+  openModal('modalPortal');
+  setTimeout(()=>{ try{ document.getElementById('plName').focus(); }catch(_){} }, 30);
+}
+document.getElementById('plSaveBtn')?.addEventListener('click', async ()=>{
+  if(!isLoggedIn) return;
+  const name = document.getElementById('plName').value.trim();
+  /* 주소 검사는 카드 링크와 같은 것을 씁니다 — http/https 만, 'naver.com' 처럼
+     적으면 https:// 를 붙여 줍니다. */
+  const url = normalizeCardLink(document.getElementById('plUrl').value);
+  if(!url){ document.getElementById('plError').style.display = 'block'; return; }
+  const link = portalTarget;
+  portalTarget = null;
+  closeModal('modalPortal');
+  /* 창이 떠 있는 사이 지워졌으면 저장할 곳이 없습니다 */
+  if(link && !state.portalLinks.includes(link)) return;
+  if(link){ link.name = name || url; link.url = url; }
+  else state.portalLinks.push({ id:'pl'+Date.now(), name: name || url, url });
+  renderPortalSub();
+  portalSub.classList.add('open');
+  await savePortalLinks();
+});
+document.getElementById('plDeleteBtn')?.addEventListener('click', async ()=>{
+  const link = portalTarget;
+  portalTarget = null;
+  closeModal('modalPortal');
+  if(!link || !isLoggedIn) return;
+  state.portalLinks = state.portalLinks.filter(x=> x!==link);
+  renderPortalSub();
+  await savePortalLinks();
+});
+['plName','plUrl'].forEach(id=>{
+  document.getElementById(id)?.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter' && !e.isComposing){ e.preventDefault(); document.getElementById('plSaveBtn').click(); }
   });
 });
 
@@ -2556,6 +2759,10 @@ document.getElementById('clUrl')?.addEventListener('keydown', (e)=>{
    PAIR
    ============================================================ */
 let currentPairFilter='all';
+/* 지금 보고 있는 폴더. 카테고리를 옮기면 renderPairPosts 가 그 카테고리의 첫
+   폴더로 스스로 고쳐 잡습니다(OC 와 같은 방식 — 폴더 기억은 카테고리별이 아닙니다). */
+let currentPairFolderId = PAIR_DEFAULT_FOLDER;
+let draggedPairId = null;
 let currentOcFilter = 'all';        // PAIR 과 마찬가지로 '전체'부터 보여줍니다
 let currentArchiveCategory='nai';   // ARCHIVE 첫 진입은 PROMPT
 let selectMode=false;
@@ -2584,7 +2791,13 @@ bindOnce(document.getElementById('writePairBtn'), async ()=>{
   if(!isLoggedIn) return;
   /* 이름·부제목은 비워 둡니다 — 입력칸의 안내 문구(placeholder)만 보이고,
      쓰는 사람이 예시 글자를 지울 필요가 없습니다. */
-  const post = migratePost({ id:Date.now(), type: newPostType(PAIR_CAT_NAV), title:'' });
+  /* 새 글은 지금 보고 있는 분류의 **보고 있는 폴더**로 들어갑니다. '전체'를
+     보고 있으면 고른 폴더가 없으므로 그 분류의 첫 폴더로 넣습니다(OC 와 같습니다). */
+  const type = newPostType(PAIR_CAT_NAV);
+  const folders = pairFoldersOf(type);
+  const folderId = (currentPairFilter !== 'all' && folders.some(f=>f.id===currentPairFolderId))
+    ? currentPairFolderId : (folders[0] ? folders[0].id : PAIR_DEFAULT_FOLDER);
+  const post = migratePost({ id:Date.now(), type, title:'', folderId });
   // 새 글은 맨 앞에 쌓입니다 — 첫 페이지 왼쪽 위에서 바로 보입니다
   state.pairPosts.unshift(post);
   await storageSet('pairPosts', state.pairPosts);
@@ -2617,11 +2830,111 @@ document.getElementById('deleteSelectedBtn').addEventListener('click', async ()=
 function pairPerPage(){ return isMobileWidth() ? 4 : 8; }
 let pairPage = 1;
 
+/* ---- PAIR 폴더 ----
+   OC 와 같은 모양입니다(폴더는 카테고리에 딸리고, 상단바 드롭다운으로 고릅니다).
+   다른 점은 카테고리가 없을 수도 있다는 것 하나뿐이라, 그때는 빈 ctx 를
+   돌려주고 드롭다운 자체를 그리지 않습니다. */
+function pairFolderCtx(catId){
+  const cat = pairCatOf(catId);
+  if(!cat) return { getList:()=>[], hideBlur:true, canDelete:()=>false,
+                    save:()=>Promise.resolve(), rerender:()=>renderPairPosts() };
+  const countIn = (f)=> state.pairPosts.filter(x=> x.type===cat.id && pairFolderIdOf(x)===f.id).length;
+  return {
+    getList: ()=> pairFoldersOf(cat.id),
+    hideBlur: true,          // PAIR 도 '썸네일 흐리게'는 쓰지 않습니다
+    blurHint: '',
+    canDelete: ()=> pairFoldersOf(cat.id).length>1,   // 마지막 폴더는 남겨둡니다
+    deleteWarn: (f)=>{
+      const n = countIn(f);
+      if(n===0) return `'${f.name}' 폴더를 삭제합니다.`;
+      const fallbackName = pairFoldersOf(cat.id).find(x=>x!==f).name;
+      return `'${f.name}' 폴더를 삭제합니다. 안에 있는 글 ${n}개는 지워지지 않고 '${fallbackName}' 폴더로 옮겨집니다.`;
+    },
+    newFolder: (base)=> ({ ...base, id:'prf'+Date.now(), blur:false }),
+    onCreate: (f)=>{ currentPairFolderId = f.id; pairPage = 1; },
+    onDelete: async (f)=>{
+      const remaining = pairFoldersOf(cat.id).filter(x=>x!==f);
+      const fallback = remaining[0].id;
+      state.pairPosts.forEach(x=>{ if(x.type===cat.id && x.folderId===f.id) x.folderId = fallback; });
+      cat.folders = remaining;
+      if(currentPairFolderId===f.id){ currentPairFolderId = fallback; pairPage = 1; }
+      await savePair();
+    },
+    save: ()=> storageSet('pairCats', state.pairCats),
+    rerender: ()=> renderPairPosts()
+  };
+}
+const PAIR_FOLDER_DD = {
+  rootId: 'pairFolderDD',
+  folders: ()=> pairFoldersOf(currentPairFilter),
+  currentId: ()=> currentPairFolderId,
+  ctx: ()=> pairFolderCtx(currentPairFilter),
+  select: (f)=>{ currentPairFolderId=f.id; pairPage=1; selectedPairIds.clear(); renderPairPosts(); },
+  draggedId: ()=> draggedPairId,
+  onDrop: async (f)=>{
+    const ids = new Set(selectedPairIds); ids.add(draggedPairId);
+    state.pairPosts.forEach(x=>{ if(ids.has(x.id)) x.folderId = f.id; });
+    draggedPairId=null; selectedPairIds.clear();
+    updateSelectCountLabel();
+    await savePair();
+    renderPairPosts();
+  }
+};
+function renderPairFolderBar(){ renderFolderDropdown(PAIR_FOLDER_DD); }
+
+/* 이 글이 잠긴 비밀 폴더 안에 있으면 그 폴더를, 아니면 null 을 돌려줍니다.
+   '전체' 목록은 카테고리를 가리지 않으므로 글마다 자기 카테고리의 폴더 목록에서
+   찾아야 합니다(OC 의 ocLockedFolderOf 와 같습니다). */
+function pairLockedFolderOf(p){
+  const cat = pairCatOf(p.type);
+  if(!cat) return null;
+  const id = pairFolderIdOf(p);
+  const folder = pairFoldersOf(cat.id).find(f=>f.id===id);
+  return folder && folderLocked(folder) ? folder : null;
+}
+
 function renderPairPosts(){
   const grid=document.getElementById('postGrid'); grid.innerHTML='';
   const pagSlot=document.getElementById('pairPagination');
   if(pagSlot) pagSlot.innerHTML='';
-  const list = byNewest(state.pairPosts.filter(p=> currentPairFilter==='all' || p.type===currentPairFilter));
+  const lockedPanel=document.getElementById('pairLockedPanel');
+  if(lockedPanel) lockedPanel.remove();
+
+  /* 카테고리가 지워졌으면 '전체'로 되돌립니다(OC 와 같은 자기 치유) */
+  if(currentPairFilter!=='all' && !state.pairCats.some(c=>c.id===currentPairFilter)){
+    currentPairFilter = defaultCatId(PAIR_CAT_NAV);
+  }
+  /* 폴더는 카테고리마다 따로라 '전체'에서는 고를 수가 없습니다 — 단추째 감춥니다 */
+  const isAll = currentPairFilter==='all';
+  const folderDD = document.getElementById('pairFolderDD');
+  if(folderDD) folderDD.style.display = isAll ? 'none' : '';
+
+  let list;
+  if(isAll){
+    /* 카테고리·폴더를 가리지 않고 늘어놓습니다. 잠긴 비밀 폴더의 글도 목록에는
+       나오되 아래에서 가려 그립니다(없는 척하면 '여기엔 아무것도 없다'가
+       새어 나갑니다). */
+    list = byNewest(state.pairPosts);
+  }else{
+    const folders = pairFoldersOf(currentPairFilter);
+    const folder = folders.find(f=>f.id===currentPairFolderId) || folders[0];
+    if(!folder){ grid.innerHTML='<div class="empty-note">아직 작성된 글이 없어요.</div>'; return; }
+    currentPairFolderId = folder.id;
+    renderPairFolderBar();
+
+    /* 잠긴 비밀 폴더는 목록을 그리지 않습니다 */
+    if(folderLocked(folder)){
+      const panel=document.createElement('div');
+      panel.className='gallery-locked'; panel.id='pairLockedPanel';
+      panel.innerHTML='<div class="gl-icon">🔒</div><div class="gl-text">비밀 폴더입니다.</div>'
+        + '<button type="button" class="btn-ghost">비밀번호 입력</button>';
+      panel.querySelector('button').addEventListener('click', ()=> openFolderUnlock(folder, ()=> renderPairPosts()));
+      document.querySelector('.pair-body').appendChild(panel);
+      return;
+    }
+    list = byNewest(state.pairPosts.filter(p=>
+      p.type===currentPairFilter && pairFolderIdOf(p)===folder.id));
+  }
   if(list.length===0){ grid.innerHTML='<div class="empty-note">아직 작성된 글이 없어요.</div>'; return; }
 
   const perPage = pairPerPage();
@@ -2632,23 +2945,42 @@ function renderPairPosts(){
   const pageItems = list.slice(start, start+perPage);
 
   pageItems.forEach(p=>{
-    const el=document.createElement('div'); el.className='post-card'+(selectMode?' selectable':'');
+    const el=document.createElement('div');
+    /* 잠긴 비밀 폴더의 글은 '전체'에서만 마주칩니다 — 카테고리 안에서는 폴더째
+       가려지고, 편집 모드에서는 folderLocked() 가 늘 false 이기 때문입니다.
+       빈 줄 두 개(&nbsp;)는 지우면 안 됩니다 — 그 칸만 높이가 달라집니다. */
+    const lockedFolder = pairLockedFolderOf(p);
+    el.className='post-card'+(selectMode?' selectable':'')+(lockedFolder?' locked':'');
     el.dataset.id = p.id;
     const checked = selectedPairIds.has(p.id);
     el.innerHTML = `${selectMode?`<div class="post-check ${checked?'checked':''}">${checked?'✓':''}</div>`:''}
       <div class="post-thumb" style="background-image:url('${(p.headerImage&&p.headerImage.src)||''}')"></div>
-      <div class="post-info"><div class="post-title">${escapeHtml(p.title)}</div>
-        <div class="post-catch">${escapeHtml(p.subtitle||'')}</div></div>`;
+      ${lockedFolder
+        ? `<div class="post-info oc-lock-info"><div class="post-title">&nbsp;</div>
+             <div class="post-catch">&nbsp;</div><span class="oc-lock-mark">LOCKED</span></div>`
+        : `<div class="post-info"><div class="post-title">${escapeHtml(p.title)}</div>
+             <div class="post-catch">${escapeHtml(p.subtitle||'')}</div></div>`}`;
     el.addEventListener('click', ()=>{
       if(selectMode){
         if(selectedPairIds.has(p.id)) selectedPairIds.delete(p.id); else selectedPairIds.add(p.id);
         updateSelectCountLabel();
         renderPairPosts();
+      }else if(lockedFolder){
+        /* 폴더를 직접 열 때와 같은 창입니다. 열어둔 기록은 사이트 전체가 함께
+           쓰므로, 여기서 풀면 그 폴더도 함께 풀립니다. */
+        openFolderUnlock(lockedFolder, ()=>{ renderPairPosts(); openPairDetail(p.id); });
       }else{
         openPairDetail(p.id);
       }
     });
     grid.appendChild(el);
+    /* 선택 모드에서는 카드를 끌어 상단바의 폴더 단추 위로 가져가면 폴더를
+       옮길 수 있습니다(OC·PROMPT 와 같습니다). */
+    if(selectMode && isLoggedIn){
+      el.draggable = true;
+      el.addEventListener('dragstart', ()=>{ draggedPairId=p.id; el.classList.add('dragging'); });
+      el.addEventListener('dragend', ()=>{ el.classList.remove('dragging'); draggedPairId=null; });
+    }
     // 목록 썸네일도 표시용 축소본으로 (박스는 250px 안팎, 원본은 800px대).
     // 붙인 뒤에 호출해야 실제 폭을 잴 수 있다.
     const thumbSrc = p.headerImage && p.headerImage.src;
@@ -2921,8 +3253,10 @@ document.querySelector('.nav')?.addEventListener('click', async (e)=>{
   if(!(arcEditing() || logEditing())) return;         // 고치던 중이 아니면 그냥 흘려보냅니다
   const btn = e.target.closest('.nav-item, .nav-sub-item, .nav-cat-add');
   if(!btn) return;
-  /* ✎ 는 이름 바꾸기·삭제 창을 여는 것이라 화면을 옮기지 않습니다 */
-  if(e.target.closest('.ns-edit')) return;
+  /* ✎ 는 이름 바꾸기·삭제 창을 여는 것이라 화면을 옮기지 않습니다.
+     PORTAL 도 마찬가지입니다 — 목록을 펴거나 **새 탭**을 열 뿐이라 쓰던 글은
+     이 화면에 그대로 남습니다. 물어볼 것이 없습니다. */
+  if(e.target.closest('.ns-edit, #portalRow, #portalSub')) return;
   e.preventDefault(); e.stopPropagation();
   if(!(await allowLeaveEditing())) return;
   btn.click();
@@ -4824,6 +5158,7 @@ function logEditSnapshot(){
 }
 function logEditDirty(){ return logEditBaseline !== null && logEditSnapshot() !== logEditBaseline; }
 function exitLogEdit(){
+  clearImgSelection();   // ARCHIVE 쪽과 같은 이유 — 고른 표시가 남지 않게
   logEditBaseline = null;
   logDetailEl()?.classList.remove('arcd-editing');
 }
@@ -8209,12 +8544,14 @@ function arcEditSnapshot(){
     document.getElementById('arcTitleInput').value,
     document.getElementById('arcSubtitleInput').value,
     document.getElementById('arcCategoryInput').value,
+    document.getElementById('arcFolderInput').value,
     document.getElementById('arcContentEditor').innerHTML,
     arcAttachments
   ]);
 }
 function arcEditDirty(){ return arcEditBaseline !== null && arcEditSnapshot() !== arcEditBaseline; }
 function exitArcEdit(){
+  clearImgSelection();   // 고른 사진 표시와 단추줄이 남지 않게
   arcEditBaseline = null;
   arcDetailEl()?.classList.remove('arcd-editing');
 }
@@ -8234,10 +8571,91 @@ async function leaveArcEdit(){
   return true;
 }
 
+/* ---- 글쓰기 화면의 폴더 고르개 ----
+   카테고리 고르개 왼쪽에 섭니다. 폴더는 카테고리마다 따로라서, 카테고리를
+   바꾸면 그쪽 폴더로 목록을 다시 채웁니다(바꾼 카테고리에 같은 폴더가 없으면
+   그 카테고리의 첫 폴더로 갑니다).
+   비밀 폴더도 그대로 보여줍니다 — 글을 쓰는 사람은 주인뿐이고, 주인에게는
+   folderLocked() 가 늘 false 입니다. 자물쇠는 어느 쪽이 비밀인지 알아볼 수
+   있게 이름 뒤에 붙입니다. */
+function fillArcFolderSelect(wantId){
+  const sel = document.getElementById('arcFolderInput');
+  const catSel = document.getElementById('arcCategoryInput');
+  if(!sel || !catSel) return;
+  const folders = arcFoldersOf(catSel.value);
+  sel.innerHTML = folders.map(f=>
+    `<option value="${escapeHtml(f.id)}">${escapeHtml(f.name)}${f.secret?' 🔒':''}</option>`).join('');
+  sel.value = folders.some(f=>f.id===wantId) ? wantId : folders[0].id;
+  syncPickDDs();   // 화면에 보이는 드롭다운도 새 목록으로 맞춥니다
+}
+document.getElementById('arcCategoryInput')?.addEventListener('change', ()=> fillArcFolderSelect(''));
+
+/* ---- 고르개를 사이트 모양으로 ----
+   브라우저 기본 <select> 는 기기마다 생김새가 달라 이 화면에서만 튀었습니다.
+   상단바의 폴더 단추와 같은 모양으로 직접 그리되, **값은 그대로 <select> 가
+   들고 있게** 둡니다(화면에서만 숨김). 그래서 저장·비교(arcEditSnapshot)·
+   목록 채우기(fillArcFolderSelect)는 한 줄도 바뀌지 않았습니다.
+   고른 값을 넣은 뒤에는 change 를 직접 울려 줍니다 — 사람이 고른 것과
+   똑같이 보이게 해야 카테고리를 바꿨을 때 폴더 목록이 따라옵니다. */
+const PICK_DDS = [];
+function bindPickDD(sel){
+  if(!sel || sel._pdd) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'pick-dd';
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'pick-dd-btn';
+  btn.innerHTML = '<span class="pdd-name"></span><span class="pdd-caret">▾</span>';
+  const menu = document.createElement('div');
+  menu.className = 'pick-dd-menu';
+  wrap.appendChild(btn); wrap.appendChild(menu);
+  sel.after(wrap);
+  const sync = ()=>{
+    const cur = sel.options[sel.selectedIndex];
+    btn.querySelector('.pdd-name').innerText = cur ? cur.text : '';
+    btn.title = cur ? cur.text : '';
+    menu.innerHTML = '';
+    Array.from(sel.options).forEach((op, i)=>{
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'pick-dd-item' + (i === sel.selectedIndex ? ' active' : '');
+      item.innerText = op.text;
+      item.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        wrap.classList.remove('open');
+        if(sel.value === op.value) return;
+        sel.value = op.value;
+        sel.dispatchEvent(new Event('change', { bubbles:true }));
+        sync();
+      });
+      menu.appendChild(item);
+    });
+  };
+  btn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    document.querySelectorAll('.pick-dd.open').forEach(o=>{ if(o!==wrap) o.classList.remove('open'); });
+    wrap.classList.toggle('open');
+  });
+  sel._pdd = { sync };
+  PICK_DDS.push(sel);
+  sync();
+}
+function syncPickDDs(){ PICK_DDS.forEach(sel=> sel._pdd && sel._pdd.sync()); }
+/* 바깥을 누르거나 Escape 로 닫습니다 (폴더 드롭다운과 같은 방식) */
+document.addEventListener('click', ()=>{
+  document.querySelectorAll('.pick-dd.open').forEach(o=> o.classList.remove('open'));
+});
+document.addEventListener('keydown', (e)=>{
+  if(e.key === 'Escape') document.querySelectorAll('.pick-dd.open').forEach(o=> o.classList.remove('open'));
+});
+bindPickDD(document.getElementById('arcFolderInput'));
+bindPickDD(document.getElementById('arcCategoryInput'));
+
 /* enterLogEdit 과 같은 이유로, 사진·첨부가 다 온 뒤에 채웁니다 */
 async function enterArcEdit(existingItem){
   editingArcId = existingItem ? existingItem.id : null;
   document.getElementById('arcCategoryInput').value = existingItem ? (existingItem.category||'ooc') : currentArchiveCategory;
+  /* 고치던 글은 그 글이 든 폴더, 새 글은 지금 보고 있는 폴더에서 시작합니다 */
+  fillArcFolderSelect(existingItem ? arcFolderIdOf(existingItem) : curArcFolderId(currentArchiveCategory));
   document.getElementById('arcTitleInput').value = existingItem ? existingItem.title : '';
   /* 부제목은 없어도 되는 칸입니다. 예전에 쓴 글에는 이 값 자체가 없으므로
      항상 || '' 로 받습니다. */
@@ -8365,6 +8783,23 @@ document.getElementById('arcInsertImageBtn').addEventListener('click', ()=>{
    그래야 편집기가 안쪽 칸 사이에 커서를 끼워 넣거나 칸을 쪼개지 않습니다.
    ============================================================ */
 function removeImgToolbar(){ const t=document.querySelector('.img-toolbar'); if(t) t.remove(); }
+/* ---- 지금 고른 사진 ----
+   단추줄은 예전에 **사진 위에 커서를 올리면** 떴습니다. 그런데 단추는 사진
+   바깥(위쪽)에 뜨다 보니, 손이 느리면 사진을 벗어나는 순간 줄이 사라져 누르기
+   어려웠습니다(주인 지적). 이제 **누르면** 뜨고, 그 사진에 주황 테두리를
+   둘러 어느 것의 단추줄인지 보이게 합니다. 다른 곳을 누르면 풀립니다. */
+let selectedEditorImg = null;
+function clearImgSelection(){
+  if(selectedEditorImg) selectedEditorImg.classList.remove('img-selected');
+  selectedEditorImg = null;
+  removeImgToolbar();
+}
+function selectEditorImg(img){
+  clearImgSelection();
+  selectedEditorImg = img;
+  img.classList.add('img-selected');
+  showImgToolbar(img);
+}
 
 /* 사진 하나를 고르게 하고 data URL 로 돌려줍니다 (툴바의 '변경' 이 씁니다) */
 function pickImageFile(){
@@ -8415,6 +8850,26 @@ function unwrapImagePair(block, keepSrc){
   block.remove();
 }
 
+/* ---- 이 사진이 '실제로 보이는' 네모 ----
+   화면(뷰포트)에서 시작해, 조상 가운데 넘치는 것을 잘라내는 상자
+   (overflow 가 visible 이 아닌 것 — ARCHIVE 는 .arc-detail-body, LOG 글은
+   .log-editor)의 네모와 차례로 겹쳐 나갑니다. 사진이 굴러 올라가 이 범위를
+   벗어나면 단추줄도 같이 사라져야 합니다 — 단추줄은 화면 고정(fixed)이라
+   가만두면 글 쓰는 줄이나 아래 여백 위에 혼자 떠 있습니다(주인 지적). */
+function visibleClipRect(el){
+  let top = 0, left = 0, right = window.innerWidth, bottom = window.innerHeight;
+  let n = el.parentElement;
+  while(n && n.nodeType === 1){
+    const cs = getComputedStyle(n);
+    if(cs.overflow !== 'visible' || cs.overflowY !== 'visible' || cs.overflowX !== 'visible'){
+      const b = n.getBoundingClientRect();
+      top = Math.max(top, b.top); left = Math.max(left, b.left);
+      right = Math.min(right, b.right); bottom = Math.min(bottom, b.bottom);
+    }
+    n = n.parentElement;
+  }
+  return { top, left, right, bottom };
+}
 function showImgToolbar(img){
   removeImgToolbar();
   const cell = img.parentElement && img.parentElement.classList.contains('img-pair-cell')
@@ -8425,15 +8880,28 @@ function showImgToolbar(img){
   const rect = (cell || img).getBoundingClientRect();
   const toolbar=document.createElement('div');
   toolbar.className='img-toolbar';
+  /* '변경'은 두 칸 블록 안이든 한 장짜리든 똑같이 씁니다 — 사진을 바꾸는 데
+     블록을 만들었다 풀 이유가 없습니다(주인 요청). 고르는 파일은 같은 길
+     (pickImageFile → fileToDataUrl)을 지나므로 크기 줄이기·blob 추출도 그대로입니다.
+     ⇄(좌우 바꾸기)만 두 칸일 때의 것입니다. */
   toolbar.innerHTML =
-      (cell ? `<button type="button" data-act="swap-img" title="이 칸 사진 변경">변경</button>`
-            + `<button type="button" data-act="flip" title="좌우 바꾸기">⇄</button>` : '')
+      `<button type="button" data-act="swap-img" title="${cell?'이 칸 사진 변경':'사진 변경'}">변경</button>`
+    + (cell ? `<button type="button" data-act="flip" title="좌우 바꾸기">⇄</button>` : '')
     + `<button type="button" data-act="up" title="위로">↑</button>`
     + `<button type="button" data-act="down" title="아래로">↓</button>`
     + `<button type="button" data-act="del" title="${cell?'이 칸 사진 삭제':'삭제'}">✕</button>`;
   document.body.appendChild(toolbar);
+  /* 자리는 언제나 사진 위 28px 입니다 — 옮기지 않습니다.
+     보이는 범위(visibleClipRect)를 벗어나면 그냥 감춥니다. */
+  const clip = visibleClipRect(cell || img);
+  const TB_H = 26;                                   // 단추 24px + 테두리 2px
+  const top = rect.top - 28;
+  const hidden = top < clip.top || top + TB_H > clip.bottom
+              || rect.bottom <= clip.top || rect.top >= clip.bottom
+              || rect.right <= clip.left || rect.left >= clip.right;
+  toolbar.style.display = hidden ? 'none' : '';
   toolbar.style.left = rect.left+'px';
-  toolbar.style.top = Math.max(0, rect.top-28)+'px';
+  toolbar.style.top = top+'px';
   toolbar.addEventListener('mousedown', e=> e.preventDefault());
   const act = (name, fn)=>{
     const btn = toolbar.querySelector(`[data-act="${name}"]`);
@@ -8450,27 +8918,32 @@ function showImgToolbar(img){
     }else{
       img.remove();
     }
-    removeImgToolbar();
+    clearImgSelection();
   });
+  /* 옮기고 나서도 **고른 채로 두고 단추줄만 새 자리에 다시 답니다** —
+     ↑ 를 여러 번 눌러 한 칸씩 올리는 것이 자연스러운 쓰임이기 때문입니다. */
   act('up', ()=>{
     const prev=unit.previousElementSibling;
     if(prev) unit.parentNode.insertBefore(unit, prev);
-    removeImgToolbar();
+    showImgToolbar(img);
   });
   act('down', ()=>{
     const next=unit.nextElementSibling;
     if(next) unit.parentNode.insertBefore(next, unit);
-    removeImgToolbar();
+    showImgToolbar(img);
   });
   act('flip', ()=>{
     const cells = Array.from(block.children);
     if(cells.length===2) block.insertBefore(cells[1], cells[0]);
-    removeImgToolbar();
+    showImgToolbar(img);
   });
   act('swap-img', async ()=>{
     removeImgToolbar();
     const url = await pickImageFile();
-    if(url) img.setAttribute('src', url);
+    if(!url){ if(selectedEditorImg===img) showImgToolbar(img); return; }
+    img.setAttribute('src', url);
+    /* 새 사진은 크기가 다를 수 있으니, 다 그려진 뒤에 단추줄을 다시 답니다 */
+    img.addEventListener('load', ()=>{ if(selectedEditorImg===img) showImgToolbar(img); }, { once:true });
   });
 }
 
@@ -8479,13 +8952,16 @@ let draggedEditorImg = null;
 function initEditorImageTools(editorId){
   const editor = document.getElementById(editorId);
   if(!editor) return;
-  editor.addEventListener('mouseover', (e)=>{
-    const img = e.target.closest('img');
-    if(img) showImgToolbar(img);
-  });
-  editor.addEventListener('mouseout', (e)=>{
-    const img = e.target.closest('img');
-    if(img && (!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest('.img-toolbar'))) removeImgToolbar();
+  /* 사진을 누르면 고릅니다. **같은 사진을 다시 누르면 풀립니다**(껐다 켜기).
+     편집기 안의 다른 곳을 눌러도 풀립니다. */
+  editor.addEventListener('click', (e)=>{
+    const img = e.target.closest ? e.target.closest('img') : null;
+    if(img && editor.contains(img)){
+      if(selectedEditorImg === img) clearImgSelection();
+      else selectEditorImg(img);
+    }else{
+      clearImgSelection();
+    }
   });
 
   /* 사진을 다른 사진 위로 끌어다 놓으면 두 칸 블록이 됩니다.
@@ -8533,11 +9009,96 @@ function initEditorImageTools(editorId){
     editor.querySelectorAll('.img-drop-target').forEach(el=> el.classList.remove('img-drop-target'));
     draggedEditorImg = null;
   });
+
+  /* ---- 바깥에서 사진 파일을 끌어다 놓기 ----
+     위의 '사진끼리 끌기'와는 **끌고 온 것이 파일인지**로 갈립니다
+     (dataTransfer.types 에 'Files' — 갤러리의 파일 드롭과 같은 기준).
+     반드시 가로채야 합니다: 그냥 두면 브라우저가 그 파일로 페이지를 떠나거나,
+     편집기가 제멋대로 blob: 주소의 사진을 꽂아 넣습니다. blob: 는 이 탭에서만
+     사는 주소라 새로고침하면 끊기고, 저장해도 사진이 따라오지 않습니다.
+     그래서 파일 고르기 단추(🖼)와 똑같이 fileToDataUrl 을 지나게 합니다 —
+     거기서 크기를 줄이고, 저장할 때 blob:// 참조로 빠집니다.
+     떨어뜨린 자리에 넣습니다(caretRangeFromPoint). 여러 장을 한 번에 끌어다
+     놓으면 놓은 자리부터 차례로 들어갑니다. */
+  const dropHasFiles = (e)=> !!(e.dataTransfer && Array.from(e.dataTransfer.types||[]).includes('Files'));
+  editor.addEventListener('dragover', (e)=>{
+    if(!dropHasFiles(e)) return;
+    e.preventDefault();
+    if(e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    editor.classList.add('img-file-dragover');
+  });
+  editor.addEventListener('dragleave', (e)=>{
+    /* 안쪽 요소를 지날 때도 dragleave 가 오므로, 편집기 자신을 떠날 때만 끕니다 */
+    if(e.target === editor) editor.classList.remove('img-file-dragover');
+  });
+  editor.addEventListener('drop', async (e)=>{
+    if(!dropHasFiles(e)) return;
+    e.preventDefault(); e.stopPropagation();
+    editor.classList.remove('img-file-dragover');
+    const files = Array.from((e.dataTransfer && e.dataTransfer.files) || [])
+      .filter(f=> f.type && f.type.indexOf('image/') === 0);
+    if(!files.length) return;
+    let range = caretRangeAtPoint(e.clientX, e.clientY);
+    if(!range || !editor.contains(range.commonAncestorContainer)){
+      /* 글자가 없는 자리에 놓았으면 맨 끝에 붙입니다 */
+      range = document.createRange();
+      range.selectNodeContents(editor);
+      range.collapse(false);
+    }
+    for(const f of files){
+      const url = await fileToDataUrl(f);
+      if(!url) continue;
+      /* 읽어 오는 사이에 커서가 움직일 수 있으므로, 첫 장은 기억해 둔 자리에
+         꽂고 그 다음부터는 방금 넣은 사진 뒤에서 이어갑니다. */
+      editor.focus({preventScroll:true});
+      if(range){
+        const sel = window.getSelection();
+        sel.removeAllRanges(); sel.addRange(range);
+        range = null;
+      }
+      document.execCommand('insertHTML', false, `<img src="${url}" /><br>`);
+    }
+  });
+}
+/* 화면 좌표를 그 자리의 커서 위치로 바꿉니다. 표준 이름이 둘이라 둘 다 봅니다
+   (크롬·사파리는 caretRangeFromPoint, 파이어폭스는 caretPositionFromPoint). */
+function caretRangeAtPoint(x, y){
+  if(document.caretRangeFromPoint) return document.caretRangeFromPoint(x, y);
+  if(document.caretPositionFromPoint){
+    const pos = document.caretPositionFromPoint(x, y);
+    if(!pos) return null;
+    const r = document.createRange();
+    r.setStart(pos.offsetNode, pos.offset);
+    r.collapse(true);
+    return r;
+  }
+  return null;
 }
 const arcEditorEl = document.getElementById('arcContentEditor');
 initEditorImageTools('arcContentEditor');
 initEditorImageTools('logContent');
-arcEditorEl.addEventListener('click', (e)=>{
+/* 편집기 바깥을 눌러도 풀립니다. 단추줄 자신과 **방금 고른 그 사진**은
+   지나보냅니다 — 클릭은 사진에서 문서까지 올라오므로, 그러지 않으면 고르는
+   바로 그 클릭이 곧바로 풀어 버립니다. */
+document.addEventListener('click', (e)=>{
+  if(!selectedEditorImg) return;
+  const t = e.target;
+  if(t && t.closest && (t.closest('.img-toolbar') || t.closest('img') === selectedEditorImg)) return;
+  clearImgSelection();
+});
+/* 단추줄은 화면 좌표에 고정(position:fixed)이라, 글을 굴리면 사진만 움직이고
+   줄은 제자리에 남습니다. 굴릴 때마다 다시 답니다 — 고른 사진이 없으면 아무
+   일도 하지 않고, 지워진 사진이면 그때 풉니다.
+   capture 로 듣는 까닭: 굴러가는 것은 window 가 아니라 안쪽 상자(.arc-detail-body)라
+   그 scroll 이벤트는 위로 올라오지 않습니다. */
+document.addEventListener('scroll', ()=>{
+  if(!selectedEditorImg) return;
+  if(selectedEditorImg.isConnected) showImgToolbar(selectedEditorImg);
+  else clearImgSelection();
+}, true);
+/* 글 쓰는 중에는 누르는 것이 '고르기'이므로, 크게보기는 **두 번 누르기**로
+   옮겼습니다. 읽는 화면(#arcViewContent)은 예전처럼 한 번 누르면 뜹니다. */
+arcEditorEl.addEventListener('dblclick', (e)=>{
   const img = e.target.closest('img');
   if(img) openArcLightbox(arcEditorEl, img);
 });
@@ -8661,17 +9222,21 @@ bindOnce(document.getElementById('saveArcBtn'), async ()=>{
   const category=document.getElementById('arcCategoryInput').value;
   const content=arcEditorHtml();
   if(!title){ alert('제목을 입력해주세요.'); return; }
-  /* 새 글은 그 카테고리에서 지금 보고 있는 폴더에 들어갑니다.
-     쓰는 도중에 카테고리를 바꿨으면 그쪽 카테고리의 첫 폴더에 넣습니다. */
+  /* 폴더는 위 고르개에서 고른 그대로입니다. 고르개가 없거나(옛 화면) 그 사이에
+     폴더가 지워졌으면, 예전처럼 지금 보고 있는 폴더 → 그 카테고리의 첫 폴더
+     순으로 물러납니다. */
   const catFolders = arcFoldersOf(category);
-  const folderId = (category===currentArchiveCategory && curArcFolderId(category))
-    ? curArcFolderId(category)
-    : catFolders[0].id;
+  const folderSel = document.getElementById('arcFolderInput');
+  const picked = folderSel && catFolders.some(f=>f.id===folderSel.value) ? folderSel.value : '';
+  const folderId = picked
+    || ((category===currentArchiveCategory && curArcFolderId(category)) || catFolders[0].id);
   if(editingArcId){
     const item = state.archive.find(x=>x.id===editingArcId);
     if(item){
       item.title=title; item.subtitle=subtitle; item.category=category; item.content=content; item.files=arcAttachments.slice();
-      if(!item.folderId) item.folderId = folderId;
+      /* 고르개로 고른 폴더를 그대로 씁니다 — 고치면서 폴더를 옮길 수 있습니다.
+         (예전에는 폴더가 비어 있을 때만 채워 넣어, 글을 고쳐도 옮길 수 없었습니다.) */
+      item.folderId = folderId;
     }
   }else{
     state.archiveSeqCounter = (state.archiveSeqCounter||0) + 1;
@@ -8679,6 +9244,12 @@ bindOnce(document.getElementById('saveArcBtn'), async ()=>{
     await storageSet('archiveSeqCounter', state.archiveSeqCounter);
   }
   await storageSet('archive', state.archive);
+  /* 방금 저장한 글이 든 폴더를 목록이 보게 해 둡니다 — 폴더를 옮겨 놓고
+     뒤로 나갔을 때 '글이 사라졌다'로 보이지 않게. 카테고리까지 바꿨다면
+     그 카테고리를 고른 것은 아니므로 목록은 건드리지 않습니다. */
+  if(category===currentArchiveCategory && curArcFolderId(category)!==folderId){
+    setCurArcFolderId(folderId, category);
+  }
   /* 새 글은 목록 첫 쪽으로 (맨 앞에 옵니다). 고친 글은 보던 쪽 그대로 둡니다. */
   if(!editingArcId) arcPage = 1;
   const savedId = editingArcId || state.archive[state.archive.length-1].id;
@@ -9800,6 +10371,27 @@ function initResponsiveWatch(){
   };
   window.matchMedia(MOBILE_MQ).addEventListener('change', onChange);
   window.matchMedia(SHORT_MQ).addEventListener('change', onChange);
+
+  /* ---- 중단점을 넘지 않는 크기 변화 ----
+     위 두 줄은 폰↔PC 처럼 **경계를 넘을 때만** 울립니다. 창을 작게 연 채
+     ARCHIVE 에 들어갔다가 크게 늘리면 경계를 넘지 않는 한 아무 일도 일어나지
+     않아, 화면에 자리가 남는데도 한 쪽에 담기는 글 수가 그대로였습니다
+     (다른 카테고리에 갔다 오면 새로 그리면서 저절로 고쳐졌습니다).
+     fitArchiveRows/fitLogRows 는 **이미 그려진 표를 재서 달라졌을 때만** 다시
+     그리므로 여기서는 부르기만 하면 됩니다 — 줄 수가 같으면 아무 일도
+     일어나지 않고, 볼 수 없는 화면(높이 0)이면 스스로 물러납니다.
+     PROMPT 와 PAIR·OC 격자는 한 쪽 개수가 CSS 의 행×열로 고정이라
+     경계를 넘을 때만 달라집니다 — 여기서 할 일이 없습니다.
+     연달아 오는 resize 는 120ms 로 모읍니다(끌어서 늘리는 동안 매 프레임
+     다시 그리지 않게). */
+  let refitTimer = 0;
+  window.addEventListener('resize', ()=>{
+    clearTimeout(refitTimer);
+    refitTimer = setTimeout(()=>{
+      if(document.getElementById('view-archive')?.classList.contains('active')) fitArchiveRows();
+      fitLogRows();   // 열려 있는 상세 화면의 LOG 표(폰) — 없으면 그냥 돌아옵니다
+    }, 120);
+  });
 }
 
 /* ============================================================

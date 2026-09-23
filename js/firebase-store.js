@@ -22,7 +22,7 @@ import {
   getFirestore, doc, getDoc, setDoc, deleteDoc, deleteField,
   collection, getDocs, writeBatch
 } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
-import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=115';
+import { FIREBASE_CONFIG, ADMIN_UID } from './firebase-config.js?v=116';
 
 const app  = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -53,7 +53,10 @@ const SCALAR_KEYS = ['profile', 'siteName', 'homeIntro', 'homeBanner', 'archiveS
                      'stickerShadow',
                      /* 화면에 붙여 두는 스티커. 그림은 blob:// 로 빠져나가므로
                         남는 것은 자리·크기·문구뿐이라 작습니다. */
-                     'stickers'];
+                     'stickers',
+                     /* PORTAL — 사이드바 맨 아래의 바깥 사이트 목록.
+                        [{id, name, url}] 뿐이라 아주 작습니다. */
+                     'portalLinks'];
 const LIST_KEYS   = ['cards', 'pairPosts', 'archive', 'ocPosts'];
 
 /* Firestore 문서 1개 최대 1MiB. 여유를 두고 자릅니다. */

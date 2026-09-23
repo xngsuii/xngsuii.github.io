@@ -484,7 +484,11 @@
      카테고리가 그보다 많아지면 이 숫자를 올려야 잘리지 않습니다. */
   .nav-sub{display:flex;flex-direction:column;gap:0;margin-left:24px;overflow:hidden;max-height:0;transition:max-height .22s ease;}
   .nav-sub.open{max-height:560px;}
-  .nav-sub-item{padding:0;height:26px;line-height:26px;font-family:var(--mono);font-size:16px;text-transform:none;letter-spacing:-.01em;color:var(--text);border-radius:0;border:none;background:transparent;text-align:left;
+  /* 큰 메뉴는 17px — 하위 메뉴는 **15.5px** 입니다. 16px 이던 시절에는
+     크기 차이가 1px 뿐이라 두 단계가 거의 같아 보였습니다(주인 지적).
+     0.5px 을 더 내려 차이를 1.5px 로 벌렸습니다. 줄 높이(26px)는 그대로라
+     메뉴 간격과 누르는 자리는 달라지지 않습니다. */
+  .nav-sub-item{padding:0;height:26px;line-height:26px;font-family:var(--mono);font-size:15.5px;text-transform:none;letter-spacing:-.01em;color:var(--text);border-radius:0;border:none;background:transparent;text-align:left;
     font-variation-settings:'wght' 300;
     transition:color .22s ease,font-variation-settings .22s ease;}
   .nav-sub-item:hover{color:var(--accent);font-variation-settings:'wght' 800;}
@@ -499,6 +503,27 @@
   .nav-sub-item .ns-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .nav-sub-item .ns-edit{flex:none;font-size:10px;opacity:.45;padding:0 2px;}
   .nav-sub-item .ns-edit:hover{opacity:1;color:var(--accent);}
+  /* ---- PORTAL ----
+     구분선(.nav-sep)을 한 줄 넣어 봤다가 뺐습니다 — 사이드바에 선이 하나
+     더 생기니 메뉴가 두 덩어리로 끊겨 보인다는 주인 판단입니다. 지금은
+     다른 메뉴와 똑같은 간격(.nav > .nav-item-row 의 13px)으로 이어집니다.
+     밖으로 나간다는 표시. ↗ 는 Pretendard 에 없어서 **어느 서체로 그릴지
+     못박아 둡니다** — 안 그러면 기기마다 다른 서체가 나옵니다(이 파일 위쪽
+     .lb-nav 들과 같은 까닭). 이름 바로 뒤에 붙고, 이름이 길어 잘릴 때는
+     함께 잘립니다. */
+  .ns-ext{font-family:system-ui,'Segoe UI Symbol',sans-serif;
+    font-size:9px;margin-left:5px;opacity:.5;vertical-align:1px;}
+  .nav-sub-item:hover .ns-ext{opacity:.9;}
+  /* 아직 아무것도 없을 때의 안내 — 편집 모드에서만 나옵니다 */
+  .ns-hint{height:26px;line-height:26px;font-family:var(--mono);font-size:12px;
+    color:var(--text-muted);opacity:.7;}
+  /* 바깥에서 사진 파일을 끌고 편집기 위로 오면 받을 자리를 알려 줍니다
+     (갤러리의 .gallery-file-dragover 와 같은 뜻입니다).
+     **[contenteditable] 을 함께 적는 것이 중요합니다** — 편집기는
+     .profile-view-text 이기도 한데 그 규칙의 outline:none 이 이 파일에서
+     한참 뒤에 나옵니다. 한 겹(0,1,0)끼리는 뒤에 쓴 쪽이 이기므로, 클래스
+     하나만으로는 점선이 지워져 아무것도 안 보였습니다. */
+  .img-file-dragover[contenteditable]{outline:2px dashed var(--accent);outline-offset:3px;}
   /* 카테고리 추가 — 라벨 옆 '＋' 를 누르면 목록 하단에 이 줄이 뜹니다 */
   .ns-add-row{display:flex;align-items:center;gap:4px;padding:4px 6px 4px 10px;}
   .ns-add-input{flex:1;min-width:0;font-family:var(--mono);font-size:11px;padding:5px 7px;
@@ -1906,6 +1931,25 @@
     vertical-align:top;white-space:pre-wrap;}
   .md-table th{background:var(--surface);font-weight:700;}
   .md-table tbody tr:nth-child(even) td{background:rgba(0,0,0,.02);}
+  /* 고른 사진 — 단추줄이 어느 사진의 것인지 보이게 주황 테두리를 두릅니다.
+     테두리(border)가 아니라 outline 인 까닭: border 는 자리를 차지해서 글이
+     2px 씩 밀립니다. 여기서도 편집기의 outline:none 을 넘기 위해 두 겹으로
+     적습니다(.arc-editor img / .log-editor img = 0,2,1). */
+  /* offset 을 0 으로 둡니다 — 2px 을 띄우면 테두리와 사진 사이에 바탕색
+     흰 줄이 한 겹 끼어 거슬립니다(주인 지적). 0 이면 사진 가장자리에 딱
+     붙어 그려지고, outline 이라 자리는 여전히 차지하지 않습니다. */
+  .arc-editor img.img-selected,
+  .log-editor img.img-selected{outline:2px solid var(--accent);outline-offset:0;}
+  /* ---- 글 맨 앞 사진의 단추줄 자리 ----
+     단추줄은 사진 위 28px 에 뜨고, 보이는 범위를 벗어나면 감춰집니다. 그런데
+     편집기 안쪽 위 여백(8px)에 테두리와 위 간격을 다 더해도 25px 뿐이라,
+     맨 앞 사진은 줄이 늘 범위 밖이어서 단추를 쓸 수 없었습니다.
+     **쓰는 동안에만** 5px 을 더해 30px 로 맞춥니다(28 + 여유 2).
+     · .arcd-editing 안으로 좁혀 읽는 화면의 글 자리는 그대로 둡니다.
+     · body 부터 적는 까닭: body.logged-in .profile-view-text 가 padding 을
+       통째로 다시 적으므로, 그보다 규칙 힘이 높아야 합니다. */
+  body.logged-in .arcd-editing .arc-editor,
+  body.logged-in .arcd-editing .log-editor{padding-top:13px;}
   .img-toolbar{position:fixed;display:flex;gap:2px;background:var(--text);border:1px solid var(--border);z-index:600;}
   .img-toolbar button{background:var(--text);color:#fff;border:none;width:24px;height:24px;font-size:11px;}
   .img-toolbar button:hover{background:var(--accent);}
@@ -2178,9 +2222,37 @@
   .arcd-cat{margin-left:auto;flex:none;display:flex;align-items:center;gap:7px;}
   .arcd-cat span{font-family:var(--mono);font-size:9.5px;font-weight:700;
     letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);}
-  .arcd-cat select{border:0;border-bottom:1px solid var(--rule-soft);border-radius:0;
-    background:transparent;color:var(--text);font-family:var(--mono);font-size:11.5px;
-    padding:0 2px 3px;outline:none;}
+  /* ---- 폴더·카테고리 고르개 ----
+     브라우저 기본 <select> 는 기기마다 생김새가 달라 이 화면에서만 튀었습니다.
+     상단바의 폴더 단추(.folder-dd)와 같은 모양으로 직접 그리고, 값은 여전히
+     숨겨 둔 <select>(.pick-dd-src)가 들고 있습니다 — 저장·비교·목록 채우기
+     코드가 .value / <option> 그대로 돌아갑니다. */
+  .pick-dd-src{display:none;}
+  .pick-dd{position:relative;flex:1 1 auto;min-width:0;}
+  .pick-dd-btn{display:inline-flex;align-items:center;justify-content:space-between;gap:6px;
+    width:100%;max-width:190px;border:1px solid var(--border);background:var(--bg);
+    color:var(--text);font-family:var(--mono);font-size:11.5px;font-weight:500;
+    letter-spacing:0;text-transform:none;padding:5px 9px;line-height:1;}
+  .pick-dd-btn:hover{background:var(--text);color:#fff;}
+  .pick-dd.open .pick-dd-btn{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .pick-dd-btn .pdd-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .pick-dd-btn .pdd-caret{flex:none;font-size:8px;}
+  .pick-dd-menu{display:none;position:absolute;top:calc(100% + 4px);left:0;min-width:100%;
+    max-width:260px;max-height:50vh;overflow-y:auto;background:var(--bg);
+    border:1px solid var(--border);z-index:60;}
+  .pick-dd.open .pick-dd-menu{display:block;}
+  .pick-dd-item{display:block;width:100%;text-align:left;border:none;background:transparent;
+    color:var(--text);font-family:var(--mono);font-size:11.5px;font-weight:400;
+    letter-spacing:0;text-transform:none;padding:7px 9px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .pick-dd-item:hover{background:var(--surface-2);}
+  .pick-dd-item.active{color:var(--accent);font-weight:700;}
+  /* 폴더 고르개가 카테고리 왼쪽에 하나 더 섭니다. 오른쪽 끝으로 미는
+     margin-left:auto 는 **앞선 하나**만 가져야 합니다 — 둘 다 가지면 남는 폭을
+     사이좋게 나눠 갖느라 둘이 갈라섭니다. 폴더 이름은 길 수 있어 폭을 묶고,
+     넘치는 이름은 고르개가 알아서 줄여 그립니다. */
+  .arcd-toolbar .arcd-cat + .arcd-cat{margin-left:0;}
+  .arcd-folder .pick-dd-btn{max-width:150px;}
 
   /* 편집기는 이 칸 안에서 따로 스크롤하지 않습니다 — 글이 길어지면 아래
      본문 칸이 통째로 굴러갑니다(읽을 때와 같은 움직임).
@@ -3312,12 +3384,14 @@
     #view-archive > .topbar .btn-ghost, #view-archive > .topbar .btn-primary{
       display:inline-flex;align-items:center;justify-content:center;
       height:32px;min-height:0;padding:0 9px;font-size:10.5px;line-height:1;}
+    #view-pair > .topbar .folder-dd-btn,
     #view-oc > .topbar .folder-dd-btn,
     #view-archive > .topbar .folder-dd-btn{height:32px;min-height:0;padding:0 7px 3px;font-size:10px;}
     /* 잠긴 폴더의 🔒 — 데스크톱 규칙(.folder-dd-btn .gf-lock{top:-.5px})은 11.5px 폴더
        이름에 맞춘 값이라, 폰의 10px 이름 옆에서는 자물쇠가 1.2px 떠 보였습니다(글자를
        캔버스에 10배로 그려 칠해진 픽셀로 잰 값 — 가운데끼리 비교). 폰에서만 1.2px
        내려 가운데를 맞춥니다. 데스크톱은 그대로 0.05px 차이입니다. */
+    #view-pair > .topbar .folder-dd-btn .gf-lock,
     #view-oc > .topbar .folder-dd-btn .gf-lock,
     #view-archive > .topbar .folder-dd-btn .gf-lock{top:.7px;}
     /* **세 단추의 글자 높이를 맞추는 것이 위 display·height·padding 입니다.** 예전에는
@@ -3654,8 +3728,14 @@
        두 줄 세 줄로 접히면 그만큼 글 쓰는 칸이 짧아지고, 줄마다 단추 자리가
        달라져 손이 기억하지 못합니다. 스크롤 막대는 숨깁니다(폴더 탭과 같은 방식). */
     .arcd-toolbar{flex-wrap:wrap;gap:10px;align-items:center;}
-    .arcd-cat{order:-1;flex:0 0 100%;margin-left:0;}
-    .arcd-cat select{padding:5px 2px 6px;font-size:13px;}
+    /* 폴더와 카테고리가 윗줄을 반씩 나눠 씁니다(각각 한 줄씩 쓰면 글 쓰는
+       칸이 그만큼 짧아집니다). min-width:0 이라야 긴 폴더 이름이 칸을
+       밀어내지 않고 안에서 줄어듭니다. */
+    .arcd-cat{order:-1;flex:1 1 0;min-width:0;margin-left:0;}
+    /* 손가락 크기로 조금 키우고, 폭은 칸을 꽉 채웁니다 */
+    .pick-dd-btn{max-width:none;font-size:12px;padding:8px 9px;}
+    .arcd-folder .pick-dd-btn{max-width:none;}
+    .pick-dd-item{font-size:12.5px;padding:9px 10px;}
     .arcd-toolbar .rt-toolbar{flex:0 0 100%;flex-wrap:nowrap;
       overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-ms-overflow-style:none;}
     .arcd-toolbar .rt-toolbar::-webkit-scrollbar{display:none;height:0;}
