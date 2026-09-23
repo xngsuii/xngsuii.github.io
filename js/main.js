@@ -9020,7 +9020,14 @@ function initEditorImageTools(editorId){
      거기서 크기를 줄이고, 저장할 때 blob:// 참조로 빠집니다.
      떨어뜨린 자리에 넣습니다(caretRangeFromPoint). 여러 장을 한 번에 끌어다
      놓으면 놓은 자리부터 차례로 들어갑니다. */
-  const dropHasFiles = (e)=> !!(e.dataTransfer && Array.from(e.dataTransfer.types||[]).includes('Files'));
+  /* **사진끼리 끄는 중이면 파일 끌기로 보지 않습니다.** 크롬은 페이지 안의
+     <img> 를 끌 때도 dataTransfer.types 에 'Files' 를 함께 담아 줍니다(바탕화면
+     으로 끌어내 저장할 수 있게). 그래서 이 조건이 없으면 아래 dragover 가
+     dropEffect 를 'copy' 로 바꾸는데, 사진끼리 끄는 쪽은 effectAllowed 가
+     'move' 라 둘이 맞지 않아 **브라우저가 드롭을 통째로 취소합니다** —
+     나란히 합치기가 조용히 안 되던 원인이 이것이었습니다. */
+  const dropHasFiles = (e)=> !draggedEditorImg
+    && !!(e.dataTransfer && Array.from(e.dataTransfer.types||[]).includes('Files'));
   editor.addEventListener('dragover', (e)=>{
     if(!dropHasFiles(e)) return;
     e.preventDefault();
@@ -9032,6 +9039,12 @@ function initEditorImageTools(editorId){
     if(e.target === editor) editor.classList.remove('img-file-dragover');
   });
   editor.addEventListener('drop', async (e)=>{
+    /* 위의 '사진끼리 합치기'가 이미 가져간 드롭이면 손대지 않습니다. 그 쪽은
+       처리할 때 preventDefault 를 부르므로 그것으로 알 수 있습니다 — 같은
+       요소에 걸린 처리기라 stopPropagation 으로는 막을 수 없고, 그 쪽이
+       draggedEditorImg 를 먼저 비우기 때문에 아래 dropHasFiles 만으로는
+       한발 늦습니다(합치면서 사진이 한 장 더 붙던 문제). */
+    if(e.defaultPrevented) return;
     if(!dropHasFiles(e)) return;
     e.preventDefault(); e.stopPropagation();
     editor.classList.remove('img-file-dragover');
@@ -9044,6 +9057,19 @@ function initEditorImageTools(editorId){
       range = document.createRange();
       range.selectNodeContents(editor);
       range.collapse(false);
+    }else{
+      /* 두 칸 블록·코드 상자처럼 **고칠 수 없는 덩어리**(contenteditable="false")
+         위에 떨어뜨렸으면 그 안에는 넣을 수 없습니다 — 커서 자리는 잡히는데
+         insertHTML 이 조용히 아무 일도 안 해서 사진이 사라진 것처럼 보였습니다.
+         그 덩어리 **바로 뒤**에 넣습니다(놓은 자리에서 가장 가까운 자리). */
+      const at = range.startContainer;
+      const el = at.nodeType === 1 ? at : at.parentElement;
+      const locked = el && el.closest ? el.closest('[contenteditable="false"]') : null;
+      if(locked && editor.contains(locked) && locked !== editor){
+        range = document.createRange();
+        range.setStartAfter(locked);
+        range.collapse(true);
+      }
     }
     for(const f of files){
       const url = await fileToDataUrl(f);
