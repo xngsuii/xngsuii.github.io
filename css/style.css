@@ -937,7 +937,15 @@
   .pair-select-bar{display:flex;align-items:center;gap:10px;padding:0 0 14px;border-bottom:0;
     font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.14em;
     text-transform:uppercase;color:var(--text-muted);background:transparent;}
-  .pair-select-bar .move-btns{display:flex;flex-wrap:wrap;gap:6px;flex:1;min-width:0;}
+  .pair-select-bar .move-btns{display:flex;flex-wrap:wrap;align-items:center;gap:6px;flex:1;min-width:0;}
+  /* '[ 분류 ▾ ]로 이동' — 예전에는 분류 하나마다 단추를 하나씩 늘어놓았습니다.
+     분류가 네댓 개만 되어도 폰에서 두세 줄로 접혀 선택 줄이 통째로 부풀었고
+     보기에 나빴습니다(주인 지적). 고르개 하나 + '이동' 하나로 줄입니다.
+     생김새는 글쓰기 화면의 고르개(.pick-dd)를 그대로 씁니다 —
+     높이만 옆의 .btn-ghost(11px 글자 + 위아래 7px + 테두리 = 27px)에 맞춥니다. */
+  .move-btns .pick-dd{flex:0 1 auto;}
+  .move-btns .pick-dd-btn{min-width:104px;height:27px;padding:0 11px;font-size:11px;}
+  .move-btns .move-go{flex:none;}
   /* display 를 여기서 정하면 안 됩니다. 이 묶음은 [data-editonly] 라서
      보기 모드에서는 위쪽의 `[data-editonly]{display:none}` 이 감춰야 하는데,
      그 규칙과 우선순위가 같아 **뒤에 오는 이쪽이 이겨 버립니다** —
@@ -1149,14 +1157,25 @@
   /* 오른쪽 칸을 260 -> 297 로 넓혔습니다. PAIR 의 가운데 칸과 같은 폭이고,
      화면이 세로로 길어진 만큼(448 -> 516) 함께 넓혀야 세로 이미지의 비율이
      예전과 비슷하게 남습니다(0.580 -> 0.575). 남는 가로는 왼쪽 글칸이 가져갑니다. */
-  .oc-info-grid{display:grid;grid-template-columns:1fr 297px;gap:20px;flex:1;min-height:0;}
+  /* 오른쪽 칸도 PAIR 의 가운데 칸과 같은 이유로 '297px 이상'입니다 — 고정으로
+     두면 화면이 넓어질 때 늘어난 폭을 왼쪽 글칸이 전부 가져가고, 세로 이미지만
+     297 에 멈춰 혼자 좁아 보입니다. 0.6fr 은 지금 비율(왼쪽:오른쪽 ≒ 1.68:1)을
+     그대로 옮긴 값이라, 최솟값에 걸리는 폭에서 이어붙여도 튀지 않습니다. */
+  .oc-info-grid{display:grid;grid-template-columns:1fr minmax(297px,.6fr);gap:20px;flex:1;min-height:0;}
   .oc-info-main{display:flex;flex-direction:column;min-height:0;}
   /* 사진 - 키워드 - 자유 글 사이 간격을 14px 로 똑같이 맞춥니다
      (원래 프로필 줄이 갖고 있던 32px + 절 여백 22px 을 걷어냅니다) */
   .oc-info-main .pd-section{margin-bottom:0;}
   /* 사진 칸 높이(144px 열에 3:4 이므로 192px)를 바닥으로 두되,
      라벨이 늘면 그만큼 함께 자랍니다 — 라벨 칸에는 스크롤을 두지 않습니다. */
-  .oc-info-main .pd-profile{min-height:192px;margin-bottom:14px;}
+  /* 사진 칸도 '144px 이상'입니다. 고정으로 두었더니 오른쪽 세로 이미지만
+     화면을 따라 커지고 프로필 사진은 그대로라, 큰 화면에서 혼자 작아
+     보였습니다(주인 지적). .43fr 은 오른쪽 칸이 최솟값 297 을 벗어나는
+     그 폭에서 사진이 정확히 144 가 되도록 잡은 값이라, 두 칸이 같은
+     지점에서 함께 늘기 시작하고 이어붙는 자리에서 튀지 않습니다.
+     (이 칸의 남는 폭 = 왼쪽 칸 - 사이 여백 14px 입니다.) */
+  .oc-info-main .pd-profile{grid-template-columns:minmax(144px,.43fr) 1fr;
+    min-height:192px;margin-bottom:14px;}
   /* 라벨이 늘어 칸이 길어져도 사진은 따라 늘어나지 않게 (3:4 비율 그대로) */
   .oc-info-main .pd-profile-img{align-self:start;}
   .oc-info-main .pd-profile-info{display:flex;flex-direction:column;min-height:0;}
@@ -1560,9 +1579,22 @@
 
   .dt-banner{position:relative;height:132px;flex:none;overflow:hidden;}
   .dt-banner-img{position:absolute;inset:0;}
-  /* 글자가 읽히도록 위아래로만 어둡게 덮습니다. 가운데는 사진 그대로입니다. */
+  /* 글자가 읽히도록 사진을 덮습니다. **한 번도 연해지지 않는** 덮개입니다 —
+     위쪽 .25 로 고르게 깔고, 아래 절반만 제목 자리를 받치러 .4 까지 내려갑니다.
+
+     예전 값은 `위 .42 → 40% 지점 .04 → 아래 .62` 였습니다. 진했다가 **연해졌다가**
+     다시 진해지는 모양이라, 배너가 가로로 길던 시절에는 그 변화가 완만해서 눈에
+     띄지 않았는데 지금처럼 132px(폰 92px)로 납작해지자 같은 변화가 짧은 거리에
+     몰려서, 밝은 사진 위에서는 밝은 허리가 위아래를 도려내 검은 띠 두 줄처럼
+     보였습니다(주인 지적). 문제는 그라데이션이 아니라 **중간에 연해지는 것**
+     이었으므로, 한 방향으로만 진해지게 고쳤습니다.
+     · 위 .25 는 ← · 쪽 점 · 📷 단추(모두 흰색)가 기대는 값입니다. 여기를 0 으로
+       두면 배너 위쪽 단추들이 밝은 사진에 묻힙니다.
+     · 아래 .4 는 제목 자리입니다. 제목·부제목은 글자 그림자도 갖고 있어
+       (.pd-title-input 의 0 1px 8px rgba(0,0,0,.45) 등) 둘이 같이 받칩니다.
+       더 필요하면 이 .4 보다 그림자를 먼저 키우세요 — 사진을 덜 가립니다. */
   .dt-scrim{position:absolute;inset:0;z-index:2;pointer-events:none;
-    background:linear-gradient(180deg,rgba(0,0,0,.42) 0%,rgba(0,0,0,.04) 40%,rgba(0,0,0,.62) 100%);}
+    background:linear-gradient(180deg,rgba(0,0,0,.25) 0%,rgba(0,0,0,.25) 45%,rgba(0,0,0,.4) 100%);}
   /* 머리글 칸 자체는 클릭을 받지 않습니다 - 그래야 배너 사진을 끌어
      위치를 맞출 수 있습니다. 실제로 눌리는 것(뒤로/제목칸)만 되살립니다. */
   .dt-head{position:absolute;inset:0;z-index:3;pointer-events:none;
@@ -1786,7 +1818,24 @@
      그대로 올라와 [캐릭터][넘김칸][페르소나] 세 칸이 됩니다.
      폰에서만 진짜 상자가 되어 한 '장'이 됩니다(아래 모바일 규칙). */
   .pd-info-main{display:contents;}
-  .pd-info-grid{display:grid;grid-template-columns:1fr 297px 1fr;
+  /* ---- 가운데 칸은 '297px 고정'이 아니라 '297px 이상'입니다 ----
+     고정이던 시절, 화면이 넓어져 생긴 폭은 **전부 양쪽 프로필이 가져갔습니다**.
+     프로필 사진은 칸 폭의 100% 에 3:4 이라 폭이 늘면 키도 같이 늘어서,
+     2560x1440 에서는 사진이 450x599 까지 부풀고 가운데 칸만 297 로 남아
+     비율이 망가졌습니다(주인 지적 — 사진/가운데 폭비 1920 에서 1.18,
+     2560 에서 1.51). 가운데도 함께 늘어나게 해서 어느 화면에서나 1920 과
+     같은 비율로 보이게 합니다.
+     · 1.2fr 은 **주인 화면에서 잰 비율**입니다 — 주인의 1920 모니터는 화면
+       배율이 100% 가 아니라(사진에서 잰 사진:가운데 = 0.83) 가운데 칸이 최솟값
+       297 에 걸려 있는 상태이고, 그 모습이 기준입니다. 297/0.83 ≒ 358 이 아니라
+       거꾸로 가운데가 사진의 1.2 배라는 뜻이라 1.2fr 입니다.
+       (여기서 100% 배율의 1920 값 352:297 을 기준으로 삼았다가 2560 을
+        1.18 로 맞추는 바람에 한 번 헛짚었습니다 — 기준은 늘 주인 화면입니다.)
+     · 최솟값 297px 은 그대로 둡니다. 메모 서식 줄이 한 줄로 들어가는 최소
+       폭이 233px 이고, 좁은 화면에서는 이 바닥값이 걸려 예전과 똑같이 297 로
+       섭니다 — 가운데가 297 을 넘어서는 것은 격자 폭이 824px 을 넘을 때부터라
+       그보다 좁은 화면은 한 픽셀도 바뀌지 않습니다. */
+  .pd-info-grid{display:grid;grid-template-columns:1fr minmax(297px,1.2fr) 1fr;
     grid-template-rows:1fr;
     grid-template-areas:"char center persona";
     gap:0 16px;align-items:stretch;
@@ -1950,6 +1999,15 @@
        통째로 다시 적으므로, 그보다 규칙 힘이 높아야 합니다. */
   body.logged-in .arcd-editing .arc-editor,
   body.logged-in .arcd-editing .log-editor{padding-top:13px;}
+  /* PAIR·OC 상세 안의 LOG 글은 위 규칙이 닿지 않습니다 — 편집기의 안쪽
+     여백을 0 으로 되돌리는 규칙(body.logged-in .log-detail .arc-detail-col
+     > .log-editor)이 한 겹 더 좁아 이깁니다. 그래서 PAIR·OC 글에서는 맨 앞
+     사진의 단추줄이 계속 범위 밖이었습니다(주인 지적). 그쪽보다 한 겹 더
+     좁혀 다시 적습니다.
+     16px 인 까닭: ARCHIVE 는 글칸 위 여백 8 + 편집기 여백 13 + 테두리 1 +
+     사진 위 간격 8 = 30px 인데, 여기는 글칸 위 여백이 6 이고 테두리가
+     없어서 6 + 16 + 0 + 8 로 똑같은 30px 을 맞춥니다. */
+  body.logged-in .log-detail.arcd-editing .arc-detail-col > .log-editor{padding-top:16px;}
   .img-toolbar{position:fixed;display:flex;gap:2px;background:var(--text);border:1px solid var(--border);z-index:600;}
   .img-toolbar button{background:var(--text);color:#fff;border:none;width:24px;height:24px;font-size:11px;}
   .img-toolbar button:hover{background:var(--accent);}
@@ -2229,10 +2287,12 @@
      코드가 .value / <option> 그대로 돌아갑니다. */
   .pick-dd-src{display:none;}
   .pick-dd{position:relative;flex:1 1 auto;min-width:0;}
+  /* 키를 24px 로 못박습니다 — 이 고르개는 서식 단추(.rt-toolbar button, 24px)와
+     한 줄에 서는데, 글자 크기에 따라 21~23px 로 들쭉날쭉했습니다. */
   .pick-dd-btn{display:inline-flex;align-items:center;justify-content:space-between;gap:6px;
-    width:100%;max-width:190px;border:1px solid var(--border);background:var(--bg);
+    width:100%;max-width:190px;height:24px;border:1px solid var(--border);background:var(--bg);
     color:var(--text);font-family:var(--mono);font-size:11.5px;font-weight:500;
-    letter-spacing:0;text-transform:none;padding:5px 9px;line-height:1;}
+    letter-spacing:0;text-transform:none;padding:0 9px;line-height:1;}
   .pick-dd-btn:hover{background:var(--text);color:#fff;}
   .pick-dd.open .pick-dd-btn{background:var(--accent);color:#fff;border-color:var(--accent);}
   .pick-dd-btn .pdd-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -3603,6 +3663,13 @@
     .post-info{padding:8px 10px;}
     .post-title{font-size:12.5px;}
     .pair-select-bar{flex-wrap:wrap;padding:10px 14px;gap:6px;}
+    /* 선택 줄의 단추·고르개는 **바로 위 머리줄의 단추와 같은 32px**.
+       사이트 전체의 폰 단추 규칙(.btn-primary,.btn-ghost{min-height:40px})을 그대로
+       두었더니 바로 위에 있는 '선택·글쓰기'보다 두툼해 보였습니다(주인 지적).
+       머리줄 단추에 쓴 값을 그대로 가져옵니다. */
+    .pair-select-bar .btn-ghost{display:inline-flex;align-items:center;justify-content:center;
+      height:32px;min-height:0;padding:0 9px;font-size:10.5px;line-height:1;}
+    .move-btns .pick-dd-btn{height:32px;min-height:0;padding:0 9px;font-size:10.5px;}
     .pair-header-actions{gap:6px;}
     /* 폴더 드롭다운 — 좁은 화면에서는 이름을 줄이고 터치 크기를 키웁니다.
        (편집 단추 자리를 비워 두던 .keep-space 규칙은 PC 에서도 없앴으므로
@@ -3732,8 +3799,8 @@
        칸이 그만큼 짧아집니다). min-width:0 이라야 긴 폴더 이름이 칸을
        밀어내지 않고 안에서 줄어듭니다. */
     .arcd-cat{order:-1;flex:1 1 0;min-width:0;margin-left:0;}
-    /* 손가락 크기로 조금 키우고, 폭은 칸을 꽉 채웁니다 */
-    .pick-dd-btn{max-width:none;font-size:12px;padding:8px 9px;}
+    /* 폭은 칸을 꽉 채우고, 키는 이 화면의 다른 단추와 같은 32px 입니다 */
+    .pick-dd-btn{max-width:none;height:32px;padding:0 9px;font-size:11.5px;}
     .arcd-folder .pick-dd-btn{max-width:none;}
     .pick-dd-item{font-size:12.5px;padding:9px 10px;}
     .arcd-toolbar .rt-toolbar{flex:0 0 100%;flex-wrap:nowrap;
@@ -3788,8 +3855,12 @@
        한 장을 통째로 쓰므로 PC 와 똑같이 두면 됩니다 — 사진이 위, 소개 칸이
        남는 높이를 다 가져가고 넘치면 그 안에서만 굴러갑니다.
        그대로 뒀더니 화면 아래 절반이 그냥 비어 있었습니다.
-       사진 비율만 폰에서 조금 낮춥니다(3:4 는 두 장을 나란히 놓기엔 깁니다). */
-    .pd-info-col .pd-profile-img{aspect-ratio:1/1;}
+       사진 비율만 폰에서 조금 낮춥니다(3:4 는 두 장을 나란히 놓기엔 깁니다).
+       1:1 은 너무 납작했습니다 — 소개 칸이 쓰지도 않을 높이를 다 물고
+       있었으므로(주인 지적) 데스크톱과 같은 3:4 로 되돌립니다.
+       소개 칸은 flex:1 이라 남는 높이를 가져가는 쪽이어서, 여기만
+       고치면 알아서 그만큼 짧아집니다(폰 390px 기준 175x233, 소개 칸 317). */
+    .pd-info-col .pd-profile-img{aspect-ratio:3/4;}
     .pd-info-side{margin-bottom:0;}
     /* 직계 자식만 — TIMELINE 의 제목은 .pd-section-head 안에 있고
        아래 여백을 머리줄 쪽이 갖습니다(둘의 값을 같게 맞춥니다). */
@@ -3875,39 +3946,41 @@
     .log-pg-btn{padding:8px 12px;font-size:12px;}
     .add-mini-btn{padding:9px 12px;font-size:12px;}
 
-    /* ---------- 편집 툴바 ---------- */
-    /* 툴바 버튼이 많아 두 줄로 접히지만(flex-wrap), 손가락으로 누르는 게 우선입니다 */
+    /* ---------- 편집 툴바 — 단추는 모두 32px ----------
+       글 쓰는 화면 하나에 키가 네 가지 섞여 있었습니다 — 취소·게시 40px(사이트
+       전체의 폰 단추 규칙), 서식 단추 38px, 메모 줄 34px, 폴더·카테고리 고르개 30px.
+       주인 지적("다 너무 큰 것 같다, 크기 일정하게 맞추고 줄여줘")대로 전부 32px 로
+       맞춥니다. 목록 머리줄의 '선택·글쓰기'와도 같은 값이라 폰에서는 이 한 키만 씁니다.
+
+       메모 서식 줄(단추 9개)은 32px 에서도 한 줄이고 여유는 더 넓습니다 —
+       9×32 + 구분선 9 + 여백 32 = 329px (393px 화면의 칸이 363px).
+       폭을 flex 기준값으로 주는 장치는 그대로 둡니다: 더 좁은 기기(375px 화면의
+       345px 칸)에서 아홉 개가 알아서 조금씩 줄어 넘치지 않게 합니다.
+       OC 자유 글 칸(.rt-toolbar-ocfree)은 단추가 11개라 32px 로도 두 줄입니다 —
+       전부터 두 줄이었으므로 그대로 둡니다. */
     .rt-toolbar{gap:5px;}
-    /* 글자가 커진 만큼 가운데 맞춤 보정도 같은 비율로 키웁니다 (11px→2.5, 14px→3.2) */
-    /* 여기 있던 padding-top:3.2px 은 KoPub 기준이었습니다. 폰(38px/14px)에서
-       Pretendard 가 필요한 값은 0 에 가까워서(잰 값 0.04px) 데스크톱의 0.9px
-       을 그대로 물려받게 둡니다 — 0.36px 차이는 화면에 그려지지 않습니다.
-       아래 :has(.rt-ico) 는 그래도 필요합니다(그림은 이미 정확하므로 0). */
-    .rt-toolbar button{width:38px;height:38px;font-size:14px;}
+    /* 여기 있던 padding-top:3.2px 은 KoPub 기준이었습니다. Pretendard 가 이
+       크기에서 필요로 하는 값은 0 에 가까워서 데스크톱의 0.9px 을 그대로
+       물려받게 둡니다. 아래 :has(.rt-ico) 는 그래도 필요합니다(그림은 이미 정확하므로 0). */
+    .rt-toolbar button{width:32px;height:32px;font-size:12.5px;}
     .rt-toolbar button:has(.rt-ico){padding-top:0;}
-    /* ---- 메모 서식 줄은 폰에서도 한 줄 ----
-       복사 칸 단추가 늘어 단추가 9개가 되면서, 손가락 크기(38px) 그대로는
-       393px 화면의 363px 칸에 396px 이 필요해 두 줄로 접혔습니다. 두 줄이 되면
-       메모 칸이 그만큼 짧아져서, 주인이 단추를 줄여 한 줄로 두는 쪽을 골랐습니다.
-       34px + 여백 4px → 9×34 + 구분선 9 + 여백 36 = 351px.
-       폭을 flex 기준값으로 준 것이 중요합니다 — 더 좁은 기기(375px 화면의
-       345px 칸)에서는 아홉 개가 알아서 한 뼘씩(33.3px) 줄어 넘치지 않습니다.
-       늘어나지는 않습니다(flex-grow 0), 그래서 넓은 폰에서도 34px 그대로입니다.
-       OC 자유 글 칸(.rt-toolbar-ocfree)은 손대지 않습니다 — 단추가 11개라 한
-       줄에 넣으려면 28px 까지 줄여야 하고, 거기는 전부터 두 줄이었습니다. */
     .rt-toolbar-memo{flex-wrap:nowrap;gap:4px;}
     .rt-toolbar-memo button,
-    .rt-toolbar-memo .rt-color{flex:0 1 34px;width:34px;height:34px;min-width:0;}
+    .rt-toolbar-memo .rt-color{flex:0 1 32px;width:32px;height:32px;min-width:0;}
     /* 글자색은 단추가 아니라 고르개 위젯(.rt-cpick)이라 규칙 힘이 한 단 높습니다 —
-       같이 줄여 주지 않으면 이 칸만 38px 로 남아 줄 높이를 혼자 끌어올립니다.
-       .rt-cpick 은 flex:none 이라, 좁은 기기에서 줄어드는 몫은 나머지 여덟 개가
-       나눠 집니다(375px 화면에서 33.3px). */
-    .rt-toolbar-memo .rt-cpick .rt-cpick-btn{width:34px;height:34px;padding:4px;}
-    .rt-color{width:38px;height:38px;}
-    .rt-cpick .rt-cpick-btn{width:38px;height:38px;padding:5px;}
+       같이 줄여 주지 않으면 이 칸만 커져 줄 높이를 혼자 끌어올립니다. */
+    .rt-toolbar-memo .rt-cpick .rt-cpick-btn{width:32px;height:32px;padding:4px;}
+    .rt-color{width:32px;height:32px;}
+    .rt-cpick .rt-cpick-btn{width:32px;height:32px;padding:4px;}
+    /* 색 묶음(LOG 서식 줄)도 같은 32px — 칩 15 + 이름 15 + 위아래 테두리 2 */
     .rt-colorbar .rt-colorcell{min-width:52px;}
-    .rt-colorbar .rt-colorcell input[type=color]{height:18px;}
-    .rt-colorbar .rt-colorcell span{font-size:9.5px;min-height:18px;}
+    .rt-colorbar .rt-colorcell input[type=color]{height:15px;}
+    .rt-colorbar .rt-colorcell span{font-size:9px;min-height:15px;}
+    /* 취소 · 게시. 사이트 전체의 폰 단추 규칙(min-height:40px)을 이 줄에서만
+       푸는 것입니다 — 창·모달 안의 단추는 그대로 40px 입니다. */
+    .arcd-actions .btn-ghost,
+    .arcd-actions .btn-primary{display:inline-flex;align-items:center;justify-content:center;
+      height:32px;min-height:0;padding:0 12px;font-size:10.5px;line-height:1;}
     .arc-attach-item{padding:10px;}
     .arc-attach-item .arc-attach-del{width:30px;height:30px;}
     .meta-del{width:26px;height:26px;}

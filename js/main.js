@@ -837,6 +837,26 @@ function thumbCanvasState(cv){
   return 'ok';
 }
 
+/* ---- 화면에 그릴 축소본을 무엇으로 구울까 ----
+   이 복사본은 **저장되지 않습니다** — 이번 방문 동안 메모리에만 있다가 사라지므로
+   용량을 아낄 이유가 없고, 그만큼 화질을 넉넉히 줘도 저장 용량은 1바이트도 안 늘어납니다.
+   WebP 가 되면 그쪽을 씁니다: 저장본이 이미 한 번 구워진 JPEG 이라 같은 자리에
+   JPEG 를 한 번 더 겹치면 8x8 덩어리가 도드라집니다(연분홍처럼 색이 넓게 깔린
+   그림에서 특히 — 주인이 '깨져 보인다'고 한 바로 그 자국입니다).
+   WebP 를 못 굽는 브라우저에서만 예전처럼 JPEG 로 떨어집니다. */
+let THUMB_MIME = null;
+function thumbMime(){
+  if(THUMB_MIME) return THUMB_MIME;
+  try{
+    const c = document.createElement('canvas');
+    c.width = c.height = 1;
+    THUMB_MIME = c.toDataURL('image/webp').startsWith('data:image/webp') ? 'image/webp' : 'image/jpeg';
+    freeCanvas(c);
+  }catch(e){ THUMB_MIME = 'image/jpeg'; }
+  return THUMB_MIME;
+}
+const THUMB_QUALITY = 0.94;
+
 function downscaleThumb(src, wantPx){
   // 실제 필요한 픽셀 = 표시 폭 × 화면 배율, 여기에 창 크기 변화 대비 25% 여유
   const need = wantPx * (window.devicePixelRatio||1) * 1.25;
@@ -883,7 +903,7 @@ function downscaleThumb(src, wantPx){
       if(state === 'blank'){ finish(null, false); return; }
       if(state === 'alpha'){ finish(null, true); return; }
       let out;
-      try{ out = cur.toDataURL('image/jpeg', 0.9); }catch(e){ finish(null, true); return; }
+      try{ out = cur.toDataURL(thumbMime(), THUMB_QUALITY); }catch(e){ finish(null, true); return; }
       finish(out, true);
     };
     img.onerror = ()=> done(null);
@@ -1671,7 +1691,11 @@ function particleRo(word){
   return '으로';
 }
 
-/* 선택 줄의 '○○로 이동' 단추 */
+/* 선택 줄의 '[ 분류 ]로 이동'
+   예전에는 분류마다 단추를 하나씩 늘어놓았는데, 분류가 네댓 개만 되어도
+   폰에서 두세 줄로 접혀 선택 줄이 통째로 부풀었습니다(주인 지적).
+   고르개 하나에 모으고 '이동' 단추 하나로 옮깁니다.
+   조사는 고른 이름에 맞춰 단추 글자가 '로 이동'/'으로 이동' 으로 바뀝니다. */
 function renderMoveBtns(nav){
   const wrap = nav.moveBtns();
   if(!wrap) return;
@@ -1684,21 +1708,28 @@ function renderMoveBtns(nav){
     ids.clear();
     nav.rerender();
   };
-  nav.cats().forEach(c=>{
-    const b = document.createElement('button');
-    b.type='button'; b.className='btn-ghost';
-    b.innerText = `${c.name}${particleRo(c.name)} 이동`;
-    b.addEventListener('click', ()=> move(c.id));
-    wrap.appendChild(b);
-  });
-  /* OC 는 폴더가 카테고리에 딸려 있어 글이 카테고리 없이 남을 수 없습니다 */
-  if(nav.orphanOnCatDelete && nav.cats().length){
-    const b = document.createElement('button');
-    b.type='button'; b.className='btn-ghost';
-    b.innerText = '카테고리 없음으로';
-    b.addEventListener('click', ()=> move(''));
-    wrap.appendChild(b);
-  }
+  const opts = nav.cats().map(c=> ({ id:c.id, name:c.name }));
+  /* PAIR 은 폴더가 카테고리에 딸려 있지 않아 글이 카테고리 없이 남을 수
+     있습니다 — 그 자리로 되돌리는 항목도 목록에 넣습니다. */
+  if(nav.orphanOnCatDelete && nav.cats().length) opts.push({ id:'', name:'카테고리 없음' });
+  if(!opts.length) return;
+
+  const sel = document.createElement('select');
+  sel.className = 'pick-dd-src';
+  sel.innerHTML = opts.map(o=>
+    `<option value="${escapeHtml(o.id)}">${escapeHtml(o.name)}</option>`).join('');
+  const go = document.createElement('button');
+  go.type = 'button'; go.className = 'btn-ghost move-go';
+  const syncGo = ()=>{
+    const cur = opts.find(o=> o.id === sel.value);
+    go.innerText = `${particleRo(cur ? cur.name : '')} 이동`;
+  };
+  sel.addEventListener('change', syncGo);
+  go.addEventListener('click', ()=> move(sel.value));
+  wrap.appendChild(sel);
+  bindPickDD(sel);        // 숨은 <select> 바로 뒤에 우리 드롭다운을 그립니다
+  wrap.appendChild(go);
+  syncGo();
 }
 
 /* 카테고리 수정·삭제 창은 폴더 창을 그대로 씁니다 (비밀·흐림 항목만 숨김).
@@ -8639,7 +8670,15 @@ function bindPickDD(sel){
   PICK_DDS.push(sel);
   sync();
 }
-function syncPickDDs(){ PICK_DDS.forEach(sel=> sel._pdd && sel._pdd.sync()); }
+/* 화면에서 떨어져 나간 것은 목록에서 걷어냅니다 — 선택 줄의 고르개는
+   분류가 바뀔 때마다 새로 그려지므로, 안 그러면 지난 것들이 계속 쌓입니다. */
+function syncPickDDs(){
+  for(let i = PICK_DDS.length - 1; i >= 0; i--){
+    const sel = PICK_DDS[i];
+    if(!sel.isConnected){ PICK_DDS.splice(i, 1); continue; }
+    if(sel._pdd) sel._pdd.sync();
+  }
+}
 /* 바깥을 누르거나 Escape 로 닫습니다 (폴더 드롭다운과 같은 방식) */
 document.addEventListener('click', ()=>{
   document.querySelectorAll('.pick-dd.open').forEach(o=> o.classList.remove('open'));
