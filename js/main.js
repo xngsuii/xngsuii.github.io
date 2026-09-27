@@ -4106,7 +4106,28 @@ function decorateContent(el){
      안 바꿉니다). 복사 방식을 또 바꿔 보는 것은 헛수고입니다.
      막으려면 복사되는 글 자체가 달라져야 하고(보이지 않는 글자를 끼우거나
      원문을 고치거나), 주인은 그대로 두기로 했습니다(2026-09-14). */
+/* ---- 아이폰에서 'OOC: …' 가 '%20RP%20%EC%A4%91…' 로 붙던 것 ----
+   깨진 자리를 보면 띄어쓰기가 %20, 한글이 %EC%A4%91 입니다. 글자를 **주소(URL)로
+   한 번 바꿨다가 도로 글자로 꺼낸 자국**입니다. 'OOC:' 의 'OOC' 가 주소의
+   이름표(scheme — mailto:, tel: 의 그 자리)로 읽혀서, 아이폰이 붙임판에 주소
+   항목을 함께 만들어 둡니다. X·엘린챗은 붙여넣을 때 글자 항목보다 주소 항목을
+   먼저 봅니다(카카오톡·사파리 검색창은 글자 항목을 봐서 멀쩡했습니다).
+
+   **고치는 자리는 순서입니다.** 같은 증상을 겪지 않는 다른 사이트를 뜯어보니
+   textarea 를 만들어 고른 뒤 execCommand('copy') 를 **먼저** 쓰고, 실패할 때만
+   navigator.clipboard 로 넘어가고 있었습니다(복사되는 글자는 한 글자도 손대지
+   않습니다). 두 길이 붙임판에 올리는 방식이 다릅니다 — clipboard.writeText 쪽은
+   글자를 통째로 건네주는 API 를 타는데 그 자리가 바로 아이폰이 내용을 훑어
+   주소 항목을 덧붙이는 자리이고, 고른 영역을 execCommand 로 복사하면 편집기
+   경로를 타서 그 훑기가 붙지 않습니다.
+   예전에 writeText 를 ClipboardItem 으로 바꿔 봐도 그대로였던 것도 이것으로
+   설명됩니다 — 둘은 같은 계열이라 같은 자리를 지났습니다.
+
+   그래서 차례가 이렇습니다: textarea+execCommand → ClipboardItem → writeText.
+   뒤의 둘은 execCommand 가 없거나 막힌 곳(오래된 웹뷰, 권한 설정)을 위한
+   대비책으로 남겨 둡니다. */
 async function copyText(text){
+  if(copyViaTextarea(text)) return true;
   try{
     if(navigator.clipboard && window.isSecureContext && navigator.clipboard.write
        && typeof ClipboardItem !== 'undefined'){
@@ -4120,15 +4141,46 @@ async function copyText(text){
       await navigator.clipboard.writeText(text);
       return true;
     }
-  }catch(e){ /* 아래 대체 경로로 넘어갑니다 */ }
+  }catch(e){ /* 더 해볼 것이 없습니다 */ }
+  return false;
+}
+
+/* 임시 textarea 를 만들어 그 안을 고른 뒤 복사합니다.
+   · focus() 와 setSelectionRange() 는 아이폰에서 필요합니다. select() 만으로는
+     고른 영역이 잡히지 않는 기기가 있습니다(참고한 사이트도 셋을 다 씁니다).
+   · **고르기 전에 원래 커서 자리를 적어 두었다가 되돌립니다.** 편집 모드의
+     메모·자유 글 칸은 커서가 빠지면(blur) 화면을 다시 그리는데, 여기서 커서를
+     빼앗고 돌려주지 않으면 복사 단추 한 번에 쓰던 칸이 읽기 모양으로 되돌아
+     갑니다. 다시 그려져서 적어 둔 자리가 사라졌을 수 있으므로 되돌리기는
+     통째로 try 로 감쌉니다 — 실패해도 복사는 이미 끝난 뒤입니다.
+   · 자리는 화면 밖(left:-9999px)입니다. position:fixed 라 페이지가 딸려
+     굴러가지 않습니다. */
+function copyViaTextarea(text){
+  if(!document.execCommand) return false;
+  const prevEl = document.activeElement;
+  const sel = window.getSelection();
+  const saved = [];
+  try{ for(let i = 0; i < sel.rangeCount; i++) saved.push(sel.getRangeAt(i).cloneRange()); }catch(e){}
   const ta = document.createElement('textarea');
   ta.value = text;
+  ta.setAttribute('aria-hidden', 'true');
   ta.style.cssText = 'position:fixed;left:-9999px;top:0;';
   document.body.appendChild(ta);
-  ta.select();
   let ok = false;
-  try{ ok = document.execCommand('copy'); }catch(e){ ok = false; }
+  try{
+    ta.focus();
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    ok = document.execCommand('copy');
+  }catch(e){ ok = false; }
   ta.remove();
+  try{
+    if(prevEl && prevEl !== document.body && prevEl.focus) prevEl.focus({ preventScroll:true });
+    if(saved.length){
+      sel.removeAllRanges();
+      saved.forEach(r=> sel.addRange(r));
+    }
+  }catch(e){ /* 그 사이 다시 그려졌으면 되돌릴 자리가 없습니다 */ }
   return ok;
 }
 
