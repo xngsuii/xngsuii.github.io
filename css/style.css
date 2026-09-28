@@ -1577,8 +1577,16 @@
      이 파일은 길어서 순서에 기대면 언젠가 집니다. */
   .view.detail-view.active{display:flex;flex-direction:column;height:100%;min-height:0;}
 
-  .dt-banner{position:relative;height:132px;flex:none;overflow:hidden;}
-  .dt-banner-img{position:absolute;inset:0;}
+  /* --dt-banner-h 는 **배너가 평소 갖는 키**입니다. 배너 자신은 이 값으로
+     그려지고, 안에 겹쳐 놓은 세 겹(사진·덮개·머리글)은 **줄어들 때도 이 키를
+     그대로 유지**합니다. 그래야 배너가 좁아질 때 안의 것들이 따라 움직이지
+     않고 제자리에 선 채로 프레임만 잘립니다 — 예전에는 세 겹이 inset:0 이라
+     배너를 따라 납작해졌고, 그 바람에 아래쪽에 있던 제목이 가운데로 밀려
+     올라와 사라지기 직전에 한 번 스쳤습니다(주인 지적). 가로로 눕힌 폰에서
+     92px 로 낮아지는 것도 이 값 하나만 바꾸면 넷이 함께 따라옵니다. */
+  .dt-banner{--dt-banner-h:132px;position:relative;height:var(--dt-banner-h);
+    flex:none;overflow:hidden;}
+  .dt-banner-img{position:absolute;top:0;left:0;right:0;bottom:auto;height:var(--dt-banner-h);}
   /* 글자가 읽히도록 사진을 덮습니다. **한 번도 연해지지 않는** 덮개입니다 —
      위쪽 .25 로 고르게 깔고, 아래 절반만 제목 자리를 받치러 .4 까지 내려갑니다.
 
@@ -1593,11 +1601,13 @@
      · 아래 .4 는 제목 자리입니다. 제목·부제목은 글자 그림자도 갖고 있어
        (.pd-title-input 의 0 1px 8px rgba(0,0,0,.45) 등) 둘이 같이 받칩니다.
        더 필요하면 이 .4 보다 그림자를 먼저 키우세요 — 사진을 덜 가립니다. */
-  .dt-scrim{position:absolute;inset:0;z-index:2;pointer-events:none;
+  .dt-scrim{position:absolute;top:0;left:0;right:0;bottom:auto;height:var(--dt-banner-h);
+    z-index:2;pointer-events:none;
     background:linear-gradient(180deg,rgba(0,0,0,.25) 0%,rgba(0,0,0,.25) 45%,rgba(0,0,0,.4) 100%);}
   /* 머리글 칸 자체는 클릭을 받지 않습니다 - 그래야 배너 사진을 끌어
      위치를 맞출 수 있습니다. 실제로 눌리는 것(뒤로/제목칸)만 되살립니다. */
-  .dt-head{position:absolute;inset:0;z-index:3;pointer-events:none;
+  .dt-head{position:absolute;top:0;left:0;right:0;bottom:auto;height:var(--dt-banner-h);
+    z-index:3;pointer-events:none;
     padding:11px 14px 12px;display:flex;flex-direction:column;justify-content:space-between;}
   .dt-head-top{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;}
   /* ← 는 Pretendard 에 없습니다. 이름을 지정하지 않으면 기기가 가진 아무
@@ -1651,6 +1661,86 @@
   /* 검색줄은 이 줄의 오른쪽 끝에 섭니다. 편집 모드의 단추들과 같은 자리인데,
      둘은 서로 반대 모드에서만 나오므로 부딪히지 않습니다. */
   .log-pane-toolbar .log-search{flex:none;margin:0;justify-content:flex-start;padding-top:0;border-top:0;}
+  /* 글자 대신 그림입니다(크게보기/작게보기). 옆 단추들과 같은 테두리 모양을
+     쓰되 네모에 가깝게 좁히고, 켜져 있을 때는 속을 채워 상태를 보입니다.
+     그림은 .gf-ico / .rt-ico 와 같은 16 눈금에 그렸습니다. */
+  .log-pane-toolbar .log-wide-btn{flex:none;display:inline-flex;align-items:center;
+    justify-content:center;padding:5px 7px;}
+  .log-wide-btn .lw-ico{width:14px;height:14px;display:block;fill:none;stroke:currentColor;
+    stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;}
+  .log-pane-toolbar .log-wide-btn.active{background:var(--accent);color:#fff;}
+
+  /* ---- LOG 장을 넓게 보기 (.detail-view.log-wide) ----
+     LOG 만 배너 자리까지 쓰고 싶다는 주문입니다. INFO·GALLERY 는 지금 비율이
+     좋으므로 건드리지 않고, 장을 옮기면 자동으로 풀립니다(setPdPage/setOcPage).
+
+     두 단계인 까닭:
+     · **목록**에서는 배너를 36px 짜리 얇은 줄로 줄입니다. 통째로 감추면 배너
+       안에 있는 뒤로 화살표와 쪽 점까지 사라져, 나가려면 단추를 한 번 더 눌러
+       배너를 되살려야 합니다(주인이 그 점을 불편하다고 했습니다). 사진과
+       제목만 빼고 화살표와 점은 남깁니다.
+     · **게시글을 열면** 아예 뺍니다. 그 화면(.log-detail)은 제 상단바를 갖고
+       있어서 — 목록으로 가는 단추, 제목, 더보기 — ARCHIVE 글 화면과 똑같은
+       모양이 됩니다. 나갈 길이 그 안에 있으므로 갇히지 않습니다.
+       :has() 로 고르는 까닭은 JS 로 표시를 하나 더 달지 않기 위해서입니다
+       (사이드바 .nav-item-row 에 이어 이 파일의 두 번째 :has 입니다). */
+  /* 머리글의 안쪽 여백은 건드리지 않습니다 — 여백을 줄이면 ← 가 위로
+     움직여서, 프레임만 좁아지게 하려는 뜻과 어긋납니다. */
+  .detail-view.log-wide .dt-banner{height:36px;}
+  /* 얇은 줄일 때는 **사진을 통째로 비웁니다** — 한 줄로 잘린 그림은 무슨 그림인지
+     알아볼 수 없으면서 자리만 차지합니다(주인 지적). 사진·덮개·제목·📷 를 모두
+     opacity 로 걷습니다. display:none 이 아닌 까닭은 사라지고 나타나는 것이
+     보여야 하기 때문이고, 자리를 계속 차지해도 상관없습니다 — .dt-head 는
+     이 줄보다 커져서 아래로 넘치고, .dt-banner 의 overflow:hidden 이 자릅니다
+     (그래서 ← 와 점은 줄 위쪽에 그대로 남습니다). */
+  .detail-view.log-wide .dt-banner-img,
+  .detail-view.log-wide .dt-scrim,
+  .detail-view.log-wide .dt-titles,
+  .detail-view.log-wide .dt-banner .adj-change,
+  .detail-view.log-wide .dt-banner .adj-empty{opacity:0;pointer-events:none;}
+  /* 흰 바탕 위로 나오므로 ← 와 점은 어두운 색으로 갈아입습니다 */
+  .detail-view.log-wide .dt-back{color:var(--text);}
+  .detail-view.log-wide .dt-back:hover{color:var(--accent);}
+  .detail-view.log-wide .oc-page-dot{background:var(--rule-soft);box-shadow:none;}
+  .detail-view.log-wide .oc-page-dot.active{background:var(--accent);}
+  /* 게시글을 열면 0 까지 줄입니다. display:none 은 줄어드는 모습을 보여줄 수
+     없어서 높이로 없앱니다 — 0 이 되면 안의 것들은 overflow 가 잘라내므로
+     눌리지도 않습니다. */
+  .detail-view.log-wide:has(.log-detail.open) .dt-banner{height:0;}
+  /* ---- 줄어듦과 사라짐은 **차례로** 일어납니다 ----
+     둘을 한꺼번에 돌리면 사진이 찌그러지면서 흐려져 무슨 일이 난 것처럼 보입니다.
+     주문은 "배너 줄어드는 애니메이션 → 사라짐, 나타남 → 넓어지는 애니메이션".
+     차례는 **어느 쪽 상태에 지연을 적는가**로 정합니다(켜고 끌 때가 서로 반대라
+     한 곳에 적을 수 없습니다):
+     · 켤 때  — 높이는 바로 시작(.log-wide 쪽 delay 0), 안의 것들은 .3s 뒤에 흐려짐
+                (.log-wide 쪽 delay .3s). 즉 다 줄어든 뒤에 사라집니다.
+     · 끌 때  — 안의 것들이 먼저 나타나고(기본 쪽 delay 0), 높이는 .2s 뒤에 넓어짐
+                (기본 쪽 delay .2s).
+     게시글을 열고 닫는 36 ↔ 0 은 양쪽 다 .log-wide 안이라 지연 없이 곧바로 움직입니다. */
+  .dt-banner{transition:height .34s cubic-bezier(.22,1,.36,1);transition-delay:.2s;}
+  .dt-banner-img,.dt-scrim,.dt-titles,
+  .dt-banner .adj-change,.dt-banner .adj-empty{transition:opacity .2s ease;transition-delay:0s;}
+  .detail-view.log-wide .dt-banner{transition-delay:0s;}
+  /* 장을 넘기느라 되돌아오는 길은 **한 동작**입니다. 나타났다가 넓어지는 두 박자는
+     단추를 눌러 되돌릴 때는 좋지만, 장이 함께 미끄러지는 동안에는 배너만 뒤늦게
+     따라오는 것처럼 보입니다(주인 지적: 갤러리로 넘어갈 때 부자연스럽다).
+     이 표시가 붙어 있는 동안에는 지연을 모두 0 으로 둡니다 — 배너가 먼저 다
+     열리고, 그 뒤에 장이 밀려 들어옵니다(늦추는 쪽은 setPdPage/setOcPage). */
+  .detail-view.banner-quick .dt-banner,
+  .detail-view.banner-quick .dt-banner-img,
+  .detail-view.banner-quick .dt-scrim,
+  .detail-view.banner-quick .dt-titles,
+  .detail-view.banner-quick .dt-banner .adj-change,
+  .detail-view.banner-quick .dt-banner .adj-empty{transition-delay:0s;}
+  .detail-view.log-wide .dt-banner-img,
+  .detail-view.log-wide .dt-scrim,
+  .detail-view.log-wide .dt-titles,
+  .detail-view.log-wide .dt-banner .adj-change,
+  .detail-view.log-wide .dt-banner .adj-empty{transition-delay:.3s;}
+  @media (prefers-reduced-motion:reduce){
+    .dt-banner,.dt-banner-img,.dt-scrim,.dt-titles,
+    .dt-banner .adj-change,.dt-banner .adj-empty{transition:none;}
+  }
   /* 보기 모드에서는 ＋게시글 추가가 사라져 줄 높이가 탭 높이로 줄고, 가운데 정렬로
      벌던 3.5px 도 함께 사라집니다. 그만큼 위 여백으로 옮겨 담아 탭 위치는 같게,
      위아래 여백 합계(10px)도 같게 둡니다. */
@@ -2117,6 +2207,39 @@
      읽힙니다. 색 이름을 쓰지 않고 값을 직접 적은 까닭 — --surface-2 는
      사이드바·빈 썸네일과 함께 쓰는 색이라 여기 때문에 옮기면 안 됩니다.
      아래 여백 34px 은 상자 **바깥** 아래에 놓인 복사 단추의 자리입니다. */
+  /* ---- 본문 HTML 상자 ----
+     다른 곳에서 만든 HTML 조각을 그대로 넣는 칸입니다. 실제 그림은 격리된
+     칸(iframe) 안에서 그려지므로, 여기 규칙은 그 칸을 두르는 틀과 글 쓸 때만
+     보이는 탭·코드 칸에만 닿습니다 — 안쪽 생김새에는 사이트 CSS 가 전혀
+     가지 않습니다(그게 격리의 목적입니다).
+     탭과 코드 칸은 **글 쓰는 중에만 만들어집니다**(buildHtmlEmbed 의 editing).
+     그래서 읽는 화면을 따로 가릴 필요가 없습니다. */
+  /* 테두리는 **글 쓰는 동안에만** 두릅니다 — 읽는 화면에서는 상자가 어디서
+     끝나는지 알 필요가 없고, 네모가 하나 더 있으면 안의 그림과 부딪힙니다
+     (주인 지적). 이 상자가 놓이는 곳은 편집기 둘과 읽는 칸 둘뿐이라,
+     편집기 쪽만 이름으로 집으면 됩니다. */
+  .html-embed{display:block;margin:12px 0;background:transparent;}
+  .arc-editor .html-embed,
+  .log-editor .html-embed{border:1px solid var(--border);background:var(--bg);}
+  .html-embed .he-stage{display:block;}
+  /* 높이는 칸이 알려 오면 JS 가 다시 적습니다. 여기 60px 은 그 전까지의 자리. */
+  .html-embed .he-frame{display:block;width:100%;height:60px;border:0;background:transparent;}
+  .html-embed .he-tabs{display:flex;align-items:center;border-bottom:1px solid var(--border);
+    background:var(--surface);}
+  .html-embed .he-tab{border:0;background:transparent;color:var(--text-muted);
+    font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.1em;
+    text-transform:uppercase;padding:7px 11px;line-height:1;}
+  .html-embed .he-tab:hover{color:var(--text);}
+  .html-embed .he-tab.active{color:var(--accent);}
+  .html-embed .he-hint{margin-left:auto;padding-right:10px;font-family:var(--mono);font-size:9px;
+    font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);opacity:.65;}
+  .html-embed .he-code{display:none;width:100%;min-height:180px;resize:vertical;border:0;
+    background:var(--bg);color:var(--text);font-size:11.5px;line-height:1.55;padding:10px;
+    outline:none;white-space:pre;overflow-wrap:normal;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+  .html-embed.he-showcode .he-stage{display:none;}
+  .html-embed.he-showcode .he-code{display:block;}
+  .fold-block > .html-embed{margin-left:20px;}
   .copy-box{position:relative;margin:12px 0 34px;padding:13px 15px;
     background-color:#f6f5f2;
     background-repeat:no-repeat;
@@ -4015,6 +4138,10 @@
        손가락으로 누를 것은 복사 단추뿐이라 그것만 키웁니다. */
     .cb-copy{padding:11px 18px;font-size:11px;}
     .copy-box{margin-bottom:40px;padding:12px 13px;}
+    /* 손가락 크기로 조금씩 키우고, 코드 칸은 화면이 좁은 만큼 글자를 올립니다 */
+    .html-embed .he-tab{padding:9px 12px;font-size:11px;}
+    .html-embed .he-hint{display:none;}
+    .html-embed .he-code{font-size:12px;min-height:200px;}
 
     /* ---------- 라이트박스 ---------- */
     /* 화살표를 사진 위에 겹쳐 올리므로 줄 간격은 없애고, 썸네일 줄만 아래에 띄웁니다 */
@@ -4069,7 +4196,7 @@
      그만큼 머리글 여백과 제목도 함께 줄입니다(제목 줄이 배너 밖으로 나가면
      사진 아래 흰 바탕에 흰 글씨가 남습니다). */
   @media (max-width:900px) and (orientation:landscape) and (max-height:520px){
-    .dt-banner{height:92px;}
+    .dt-banner{--dt-banner-h:92px;}
     .dt-head{padding:8px 14px 9px;}
     .pd-title-input{font-size:16px;margin-top:8px;}
     .pd-subtitle-input{font-size:11px;margin-top:2px;}

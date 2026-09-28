@@ -3153,16 +3153,24 @@ function setPdPage(idx, animate){
   const panes = Array.from(document.querySelectorAll('.pd-tab-content .pd-tab-pane'));
   if(!panes.length) return;
   pdPageIdx = clamp(idx, 0, panes.length-1);
-  panes.forEach((el,i)=>{
-    el.style.transition = (animate===false) ? 'none' : '';
-    el.style.transform = `translateY(${(i-pdPageIdx)*100}%)`;
-    el.classList.toggle('active', i===pdPageIdx);
-  });
-  if(animate===false){
-    // 다음 프레임부터 다시 애니메이션이 걸리도록 되돌립니다
-    void panes[0].offsetWidth;
-    panes.forEach(el=>{ el.style.transition=''; });
-  }
+  /* 넓게 보던 중에 다른 장으로 넘어가면 **배너를 먼저 되돌리고** 장은 그만큼
+     늦게 밀어 줍니다 — 자세한 까닭은 leaveLogWide 에 적어 두었습니다. */
+  const cur0 = panes[pdPageIdx];
+  const lead = leaveLogWide(document.getElementById('view-pair-detail'),
+                            !cur0 || cur0.dataset.pdpane !== 'log');
+  const move = ()=>{
+    panes.forEach((el,i)=>{
+      el.style.transition = (animate===false) ? 'none' : '';
+      el.style.transform = `translateY(${(i-pdPageIdx)*100}%)`;
+      el.classList.toggle('active', i===pdPageIdx);
+    });
+    if(animate===false){
+      // 다음 프레임부터 다시 애니메이션이 걸리도록 되돌립니다
+      void panes[0].offsetWidth;
+      panes.forEach(el=>{ el.style.transition=''; });
+    }
+  };
+  if(lead && animate !== false) setTimeout(move, BANNER_LEAD_MS); else move();
   const dots = document.getElementById('pdPageDots');
   if(dots){
     dots.innerHTML = '';
@@ -3758,7 +3766,8 @@ function isLineSeparator(node){
   if(!node || node.nodeType !== 1) return false;
   if(node.tagName === 'BR' || node.tagName === 'IMG') return true;
   if(BLOCK_TAGS.includes(node.tagName)) return true;
-  return node.classList && (node.classList.contains('code-block') || node.classList.contains('copy-box'));
+  return node.classList && (node.classList.contains('code-block')
+    || node.classList.contains('copy-box') || node.classList.contains('html-embed'));
 }
 /* 펜스 글자를 감싼 가장 가까운 블록 요소(el, 예: .fold-body) 안에서, 그 글자가
    속한 '줄'만 골라 경계를 찾습니다 — el 전체가 아닙니다. el 은 흔히 한 줄짜리
@@ -4020,7 +4029,7 @@ function mdBuildHeading(frag, line){
 /* 코드 블록 안의 글은 적은 그대로 보여야 하므로 건드리지 않습니다 */
 function mdInsideCode(point){
   const el = point.container.nodeType === 3 ? point.container.parentNode : point.container;
-  return !!(el && el.closest && el.closest('.code-block, .copy-box'));
+  return !!(el && el.closest && el.closest('.code-block, .copy-box, .html-embed'));
 }
 function applyMarkdownBlocks(root){
   const { text, marks } = flattenForFences(root);
@@ -4090,22 +4099,192 @@ function applyMarkdownBlocks(root){
 function decorateContent(el){
   applyCodeFences(el);
   applyMarkdownBlocks(el);
+  applyHtmlEmbeds(el, false);
 }
 
-/* navigator.clipboard 는 https / localhost 에서만 동작합니다.
-   막히면 화면 밖 textarea 를 만들어 예전 방식으로 복사합니다.
+/* ============================================================
+   본문 HTML 상자 (.html-embed)
+   ------------------------------------------------------------
+   다른 곳에서 만든 HTML 조각(카드·표 같은 것)을 글 안에 그대로 넣습니다.
+   사진으로 찍어 붙이던 것을 대신합니다 — 글자가 선명하고 고를 수 있고,
+   용량도 사진의 몇십 분의 일입니다.
 
-   1순위는 ClipboardItem('text/plain') 이고, 못 쓰거나 실패하면 writeText →
-   textarea 로 차례로 내려갑니다.
+   **저장되는 것은 data-html 하나뿐입니다.** 화면에 보이는 틀(탭·미리보기
+   칸·코드 칸)은 그릴 때마다 새로 만들고, 저장할 때 editorHtml 이 도로
+   비웁니다. 그래서 저장된 글에는 적어 넣은 코드만 남습니다.
 
-   ※ **'OOC:' 로 시작하는 글이 아이폰의 트위터·엘린챗에서 %20RP%20%EC… 로
-     붙는 문제는 이 함수로 고칠 수 없습니다.** 처음에는 writeText 가 글을 주소로도
-     올려서 생기는 줄 알고 ClipboardItem 으로 형식을 못박았는데, 아이폰에서
-     그대로였습니다. 글을 퍼센트로 바꾸는 것은 **붙여넣는 앱**입니다 — '영문자:'
-     로 시작하는 글을 링크로 보고 주소로 바꿉니다(카카오톡·사파리 검색창은
-     안 바꿉니다). 복사 방식을 또 바꿔 보는 것은 헛수고입니다.
-     막으려면 복사되는 글 자체가 달라져야 하고(보이지 않는 글자를 끼우거나
-     원문을 고치거나), 주인은 그대로 두기로 했습니다(2026-09-14). */
+   ---- 왜 iframe 인가 ----
+   남의 HTML 을 본문에 그냥 풀어 놓으면 그 안의 CSS 가 사이트 전체로
+   번집니다(글꼴·색·여백이 통째로 흔들립니다). 격리된 칸에 넣으면 그 안에
+   갇힙니다.
+
+   ---- sandbox 값 ----
+   'allow-scripts allow-popups' 입니다. **allow-same-origin 은 일부러 주지
+   않습니다** — 그 둘을 함께 주면 칸 안의 스크립트가 바깥 문서(이 사이트와
+   로그인 상태)에 손댈 수 있게 되어 격리가 통째로 풀립니다. 주지 않으면 칸은
+   출처 없는 문서가 되어 바깥을 전혀 건드리지 못합니다.
+   · allow-scripts: onclick 같은 것이 돌아야 하므로 필요합니다.
+     (<details>·<summary> 는 스크립트 없이도 열립니다.)
+   · allow-popups + <base target="_blank">: 칸 안의 링크는 새 탭으로 엽니다.
+     없으면 링크가 칸 자신을 딴 사이트로 바꿔 버립니다.
+   · 바깥을 못 보므로 **높이는 칸이 직접 알려 줍니다**(postMessage). 아래
+     HE_REPORTER 가 그 일을 하고, 받는 쪽은 보낸 창(e.source)으로 짝을
+     찾습니다 — 출처가 'null' 이라 출처로는 가릴 수 없습니다.
+   ============================================================ */
+/* 칸 안의 기본 서체는 사이트 본문과 같은 차례로 찾습니다 — 코드가 서체를
+   따로 적지 않았을 때 사이트와 같은 얼굴이 되도록. */
+const HE_FONT = "'Pretendard Variable','Pretendard','Segoe UI Symbol',system-ui,sans-serif";
+/* 높이 알림이 — 다 그려진 뒤·<details> 를 여닫은 뒤·창이 바뀐 뒤에 보냅니다.
+   늘 도는 타이머는 두지 않고 처음 몇 번만 더 보내 마무리합니다. */
+/* **높이는 body 만 보고 재야 합니다.** documentElement 의 scrollHeight 는 칸의 현재
+   높이보다 작아지지 않아서, 한번 키운 칸은 다시 줄이지 못합니다 — <details> 를
+   닫으면 빈 자리만 남습니다. body 는 내용만큼이므로 줄어드는 쪽도 따라옵니다.
+   (위 스타일의 body{display:flow-root} 은 이것과 한 쌍입니다 — 첫 자식의 위 여백이
+   body 밖으로 빠져나가 높이에서 빠지는 것을 막습니다.) */
+const HE_REPORTER = "(function(){var last=-1;"
+  + "function send(){var b=document.body;if(!b)return;"
+  + "var h=Math.max(b.scrollHeight,b.offsetHeight);"
+  + "if(h!==last){last=h;try{parent.postMessage({__he:1,h:h},'*');}catch(e){}}}"
+  + "if(window.ResizeObserver){var ro=new ResizeObserver(send);ro.observe(document.body);}"
+  + "document.addEventListener('toggle',function(){setTimeout(send,0);},true);"
+  + "document.addEventListener('click',function(){setTimeout(send,0);},true);"
+  + "window.addEventListener('load',send);"
+  + "[0,60,200,600,1500].forEach(function(t){setTimeout(send,t);});})()";
+
+function htmlEmbedDoc(code){
+  return '<!doctype html><html><head><meta charset="utf-8">'
+    + '<meta name="viewport" content="width=device-width,initial-scale=1">'
+    + '<base target="_blank">'
+    + '<style>html,body{margin:0;padding:0;background:transparent;}'
+    + 'body{display:flow-root;font-family:' + HE_FONT + ';font-size:12.5px;line-height:1.6;'
+    + 'color:#1b1b1f;overflow-x:auto;overflow-y:hidden;}'
+    + 'img,video,canvas,table{max-width:100%;}</style></head><body>'
+    + (code || '')
+    + '<scr' + 'ipt>' + HE_REPORTER + '</scr' + 'ipt></body></html>';
+}
+
+/* 칸이 알려 온 높이를 그 칸에 씌웁니다 */
+window.addEventListener('message', (e)=>{
+  const d = e.data;
+  if(!d || d.__he !== 1) return;
+  const h = Math.max(20, Math.min(20000, Number(d.h) || 0));
+  document.querySelectorAll('iframe.he-frame').forEach(f=>{
+    if(f.contentWindow === e.source) f.style.height = h + 'px';
+  });
+});
+
+/* 상자 하나를 (다시) 그립니다. editing 이면 탭과 코드 칸까지.
+
+   ---- 미리보기 칸은 '보일 때' 새로 만듭니다 ----
+   숨겨 둔(display:none) iframe 은 화면을 그리지 않으므로 제 높이를 0 으로 알려
+   옵니다. 코드 탭에 있는 동안 그 일이 벌어지고, 다시 미리보기로 돌아왔을 때
+   같은 칸을 그대로 두면 0 인 채로 남습니다(잰 값 20px — 받는 쪽의 최소값).
+   그래서 미리보기로 돌아올 때마다 칸을 새로 만듭니다. 새 칸은 보이는 상태에서
+   불러오므로 처음부터 제 높이를 알려 옵니다. */
+function buildHtmlEmbed(block, editing){
+  block.setAttribute('contenteditable', 'false');
+  const showCode = editing && block.classList.contains('he-showcode');
+  block.innerHTML = '';
+
+  const stage = document.createElement('div');
+  stage.className = 'he-stage';
+  const paint = ()=>{
+    stage.innerHTML = '';
+    const frame = document.createElement('iframe');
+    frame.className = 'he-frame';
+    frame.setAttribute('sandbox', 'allow-scripts allow-popups');
+    frame.setAttribute('scrolling', 'no');
+    frame.setAttribute('title', 'HTML 상자');
+    frame.srcdoc = htmlEmbedDoc(block.dataset.html || '');
+    stage.appendChild(frame);
+  };
+
+  if(!editing){ block.appendChild(stage); paint(); return block; }
+
+  const tabs = document.createElement('div');
+  tabs.className = 'he-tabs';
+  tabs.innerHTML = '<button type="button" class="he-tab" data-he="view">미리보기</button>'
+    + '<button type="button" class="he-tab" data-he="code">코드</button>'
+    + '<span class="he-hint">HTML 상자</span>';
+  const ta = document.createElement('textarea');
+  ta.className = 'he-code';
+  ta.spellcheck = false;
+  ta.value = block.dataset.html || '';
+  ta.placeholder = '여기에 HTML 을 붙여넣으세요';
+  block.appendChild(tabs);
+  block.appendChild(stage);
+  block.appendChild(ta);
+
+  const markTab = ()=>{
+    const code = block.classList.contains('he-showcode');
+    tabs.querySelectorAll('.he-tab').forEach(b=>
+      b.classList.toggle('active', (b.dataset.he === 'code') === code));
+  };
+  markTab();
+  if(!showCode) paint();
+
+  /* 적는 대로 data-html 에 옮겨 둡니다 — 저장은 이 값만 가져갑니다.
+     미리보기는 손을 멈춘 뒤에 다시 그립니다(글자마다 다시 그리면 스크립트가
+     든 코드에서 눈에 띄게 버벅입니다). 코드 탭에 있는 동안에는 그리지 않고,
+     미리보기로 돌아올 때 어차피 새로 만듭니다. */
+  let timer = 0;
+  ta.addEventListener('input', ()=>{
+    block.dataset.html = ta.value;
+    if(block.classList.contains('he-showcode')) return;
+    clearTimeout(timer);
+    timer = setTimeout(paint, 400);
+  });
+  /* 이 칸의 키·붙여넣기를 바깥 편집기가 가로채면 안 됩니다 */
+  ['keydown','keyup','keypress','paste','cut','input','drop'].forEach(ev=>
+    ta.addEventListener(ev, (e)=> e.stopPropagation()));
+  tabs.querySelectorAll('.he-tab').forEach(btn=>{
+    btn.addEventListener('mousedown', e=> e.preventDefault());
+    btn.addEventListener('click', (e)=>{
+      e.preventDefault(); e.stopPropagation();
+      const wantCode = btn.dataset.he === 'code';
+      block.classList.toggle('he-showcode', wantCode);
+      markTab();
+      if(wantCode) setTimeout(()=>{ try{ ta.focus(); }catch(_){} }, 0);
+      else paint();
+    });
+  });
+  return block;
+}
+
+function applyHtmlEmbeds(root, editing){
+  if(!root || !root.querySelectorAll) return;
+  if(root.classList && root.classList.contains('html-embed')) buildHtmlEmbed(root, editing);
+  root.querySelectorAll('.html-embed').forEach(b=> buildHtmlEmbed(b, editing));
+}
+
+/* 서식 줄의 단추 — 커서 자리에 빈 상자를 넣고 코드 쪽을 엽니다
+   (접기·복사 칸을 넣는 방법과 같습니다) */
+function insertHtmlEmbed(editorId){
+  const editor = document.getElementById(editorId);
+  if(!editor) return;
+  editor.focus();
+  const sel = window.getSelection();
+  let range = (sel.rangeCount && editor.contains(sel.getRangeAt(0).commonAncestorContainer))
+    ? sel.getRangeAt(0) : null;
+  if(!range){
+    range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(false);
+  }
+  range.deleteContents();
+  const block = document.createElement('div');
+  block.className = 'html-embed';
+  block.dataset.html = '';
+  const frag = document.createDocumentFragment();
+  frag.appendChild(block);
+  frag.appendChild(document.createElement('br'));
+  range.insertNode(frag);
+  block.classList.add('he-showcode');   // 새 상자는 코드 쪽부터 (buildHtmlEmbed 가 이 표시를 봅니다)
+  buildHtmlEmbed(block, true);
+  const ta = block.querySelector('.he-code');
+  if(ta) setTimeout(()=>{ try{ ta.focus(); }catch(_){} }, 0);
+}
+
 /* ---- 아이폰에서 'OOC: …' 가 '%20RP%20%EC%A4%91…' 로 붙던 것 ----
    깨진 자리를 보면 띄어쓰기가 %20, 한글이 %EC%A4%91 입니다. 글자를 **주소(URL)로
    한 번 바꿨다가 도로 글자로 꺼낸 자국**입니다. 'OOC:' 의 'OOC' 가 주소의
@@ -4673,6 +4852,13 @@ function initBlockquoteKeys(editorId){
 function editorHtml(editorId){
   const copy = document.getElementById(editorId).cloneNode(true);
   copy.querySelectorAll('.fold-block.open').forEach(b=> setFoldOpen(b, false));
+  /* HTML 상자는 화면용으로 만들어 둔 것(탭·미리보기 틀·코드 칸)을 전부 버리고
+     data-html 만 남깁니다. 코드는 적을 때마다 그 속성에 옮겨 두었으므로
+     여기서 잃을 것이 없습니다. */
+  copy.querySelectorAll('.html-embed').forEach(b=>{
+    b.classList.remove('he-showcode');
+    b.innerHTML = '';
+  });
   return copy.innerHTML;
 }
 
@@ -5073,10 +5259,69 @@ function renderLogFolderBar(p, show){
 }
 
 /* ---- LOG 조각 하나에 조작을 붙입니다 (PAIR 상세 / OC 상세가 각각 한 번씩) ---- */
+/* ---- 넓게 보기 ----
+   표시는 상세 화면 뿌리(.detail-view)에 답니다 — 감출 것(배너)이 거기 있고,
+   LOG 목록이든 게시글 화면이든 같은 표시 하나로 둘 다 걸립니다.
+   단추 글자는 상태를 그대로 읽습니다(넓게 ↔ 좁게). */
+/* 크게보기 / 작게보기 — 네 모서리 꺾쇠입니다(바깥을 보면 넓히기, 안을 보면
+   되돌리기). 글자가 아니라 그림인 까닭은 주인 취향이고, 갤러리 ✓/✕ 와 같이
+   innerHTML 로 갈아 끼웁니다(innerText 로는 그림이 들어가지 않습니다). */
+const LW_ICON_OPEN  = '<svg class="lw-ico" viewBox="0 0 16 16" aria-hidden="true">'
+  + '<path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg>';
+const LW_ICON_CLOSE = '<svg class="lw-ico" viewBox="0 0 16 16" aria-hidden="true">'
+  + '<path d="M6 2.5V6H2.5M10 2.5V6h3.5M10 13.5V10h3.5M6 13.5V10H2.5"/></svg>';
+function syncLogWideBtns(){
+  document.querySelectorAll('.log-wide-btn').forEach(b=>{
+    const view = b.closest('.detail-view');
+    const on = !!(view && view.classList.contains('log-wide'));
+    b.innerHTML = on ? LW_ICON_CLOSE : LW_ICON_OPEN;
+    b.title = on ? '본문을 원래대로' : '본문을 넓게';
+    b.classList.toggle('active', on);
+  });
+}
+/* 장을 넘기느라 '넓게 보기'를 되돌릴 때 쓰는 길입니다(단추로 되돌릴 때와 다릅니다).
+   · 단추로 되돌릴 때는 '나타남 → 넓어짐' 두 박자가 보기 좋습니다.
+   · 장을 넘길 때는 장이 함께 미끄러지므로, 배너가 두 박자로 뒤늦게 따라오면
+     따로 노는 것처럼 보입니다(주인 지적). banner-quick 을 붙여 지연을 없애
+     **한 동작으로** 열고, 장 넘김은 BANNER_LEAD_MS 만큼 늦춥니다 — 배너가 먼저
+     그려지고 그 뒤에 아래가 들어옵니다.
+   되돌릴 것이 있었으면 true 를 돌려주어, 부르는 쪽이 장을 늦출지 판단합니다. */
+/* 180 에서 20 씩 내려 가며 주인이 고른 값입니다. 크면 배너가 다 열린 뒤에
+   장이 출발해 '멈췄다 간다'는 티가 나고, 이보다 작으면 둘이 같이 출발해
+   '헤더가 먼저'라는 느낌 자체가 없어집니다. */
+const BANNER_LEAD_MS = 100;
+function leaveLogWide(view, leaving){
+  if(!leaving || !view || !view.classList.contains('log-wide')) return false;
+  view.classList.add('banner-quick');
+  view.classList.remove('log-wide');
+  syncLogWideBtns();
+  afterBannerAnim();
+  setTimeout(()=>{ view.classList.remove('banner-quick'); }, 500);
+  return true;
+}
+/* 배너가 줄었다 늘었다 하는 동안 칸 높이가 계속 달라집니다. 카드 자리와 폰의
+   표 줄 수는 **다 움직인 뒤에** 다시 재야 맞습니다 — 그 전에 재면 아직 옛
+   높이입니다. 380 은 CSS 의 .34s 보다 조금 넉넉하게 잡은 값입니다. */
+function afterBannerAnim(){
+  relayoutLogCards();
+  /* 높이 .34s + 어느 한쪽의 지연 .2~.3s 이 차례로 도니, 다 끝난 뒤에 다시 잽니다 */
+  setTimeout(()=>{ relayoutLogCards(); fitLogRows(); }, 620);
+}
+
 function initLogRoot(host){
   const root = host.root;
   if(!root) return;
   const use = ()=>{ logHost = host; };
+
+  const wideBtn = root.querySelector('.log-wide-btn');
+  if(wideBtn) wideBtn.addEventListener('click', ()=>{
+    use();
+    const view = root.closest('.detail-view');
+    if(!view) return;
+    view.classList.toggle('log-wide');
+    syncLogWideBtns();
+    afterBannerAnim();
+  });
 
   /* 새 글도 읽는 화면과 같은 자리에서 씁니다 — 빈 화면이 수정 모드로 열리고,
      게시를 눌러야 실제로 만들어집니다(ARCHIVE 와 같은 규칙). */
@@ -5169,6 +5414,8 @@ let currentLogViewId = null;
   if(cbBtn2) cbBtn2.addEventListener('click', ()=> insertCopyBox('logContent'));
   const foldBtn = document.getElementById('logFoldBtn');
   if(foldBtn) foldBtn.addEventListener('click', ()=> insertFoldBlock('logContent'));
+  const heBtn = document.getElementById('logHtmlBtn');
+  if(heBtn) heBtn.addEventListener('click', ()=> insertHtmlEmbed('logContent'));
   /* 글자 크기 — OC 자유 글 칸의 단추와 같은 함수를 씁니다.
      mousedown 을 막는 것이 중요합니다: stepFontSize 는 '골라 놓은 글'에
      적용되므로, 단추를 누르며 커서가 옮겨 가면 아무 일도 일어나지 않습니다. */
@@ -5233,7 +5480,7 @@ function logEditSnapshot(){
   return JSON.stringify([
     document.getElementById('logTitle').value,
     document.getElementById('logSubtitle').value,
-    document.getElementById('logContent').innerHTML,
+    editorHtml('logContent'),   /* 화면 그대로가 아니라 저장될 모양으로 — 위 arcEditSnapshot 참고 */
     document.getElementById('logSubColor').value,
     document.getElementById('logParenColor').value,
     document.getElementById('logHighlightColor').value
@@ -5278,6 +5525,7 @@ async function enterLogEdit(entry){
   }
   if(editingLogId !== (entry ? entry.id : null)) return;   // 그 사이 다른 글을 열었으면 그만
   ed.innerHTML = entry ? imgUrl(logContentToHtml(entry.content)) : '';
+  applyHtmlEmbeds(ed, true);
   logEditBaseline = logEditSnapshot();
 }
 
@@ -7701,16 +7949,22 @@ function setOcPage(idx, animate){
   const pages = Array.from(document.querySelectorAll('#ocPages .oc-page'));
   if(!pages.length) return;
   ocPageIdx = clamp(idx, 0, pages.length-1);
-  pages.forEach((el,i)=>{
-    el.style.transition = (animate===false) ? 'none' : '';
-    el.style.transform = `translateY(${(i-ocPageIdx)*100}%)`;
-    el.classList.toggle('active', i===ocPageIdx);
-  });
-  if(animate===false){
-    // 다음 프레임부터 다시 애니메이션이 걸리도록 되돌립니다
-    void pages[0].offsetWidth;
-    pages.forEach(el=>{ el.style.transition=''; });
-  }
+  const cur0 = pages[ocPageIdx];
+  const lead = leaveLogWide(document.getElementById('view-oc-detail'),
+                            !cur0 || cur0.dataset.ocpage !== 'log');
+  const move = ()=>{
+    pages.forEach((el,i)=>{
+      el.style.transition = (animate===false) ? 'none' : '';
+      el.style.transform = `translateY(${(i-ocPageIdx)*100}%)`;
+      el.classList.toggle('active', i===ocPageIdx);
+    });
+    if(animate===false){
+      // 다음 프레임부터 다시 애니메이션이 걸리도록 되돌립니다
+      void pages[0].offsetWidth;
+      pages.forEach(el=>{ el.style.transition=''; });
+    }
+  };
+  if(lead && animate !== false) setTimeout(move, BANNER_LEAD_MS); else move();
   // 지금 몇 번째 장인지 점으로 알려줍니다 (인덱스 탭이 없으므로).
   // 넘기는 것은 스크롤 / 스와이프로만 합니다 — 점은 표시용입니다.
   const dots=document.getElementById('ocPageDots');
@@ -8622,13 +8876,20 @@ function arcEditing(){ return !!arcDetailEl()?.classList.contains('arcd-editing'
    취소·뒤로·Escape 세 곳이 모두 이 함수를 지나가게 했습니다.
    (LOG 글 화면도 같은 방식입니다 — logEditSnapshot / leaveLogEdit) */
 let arcEditBaseline = null;
+/* 견주는 값은 **저장될 모양**(editorHtml)이어야 합니다. 화면에 있는 그대로
+   (innerHTML)를 쓰면, 글쓴이가 아무것도 건드리지 않아도 화면이 저 혼자 달라지는
+   것들 때문에 '고친 것이 있다'로 잡힙니다 — HTML 상자의 미리보기 칸이 제 높이를
+   알려 와 style="height:81px" 가 붙는 것이 그런 경우입니다(주인 지적: 아무것도
+   안 건드렸는데 나갈 때 경고창이 떴습니다). editorHtml 은 저장할 때와 똑같이
+   상자 속을 비우고 접기를 닫으므로, 접기를 펴 보기만 한 것도 이제 '고침'이
+   아닙니다. */
 function arcEditSnapshot(){
   return JSON.stringify([
     document.getElementById('arcTitleInput').value,
     document.getElementById('arcSubtitleInput').value,
     document.getElementById('arcCategoryInput').value,
     document.getElementById('arcFolderInput').value,
-    document.getElementById('arcContentEditor').innerHTML,
+    editorHtml('arcContentEditor'),
     arcAttachments
   ]);
 }
@@ -8766,6 +9027,7 @@ async function enterArcEdit(existingItem){
   }
   if(editingArcId !== (existingItem ? existingItem.id : null)) return;   // 그 사이 다른 글을 열었으면 그만
   editorEl.innerHTML = existingItem ? imgUrl(existingItem.content) : '';
+  applyHtmlEmbeds(editorEl, true);   /* 저장된 HTML 상자에 탭·코드 칸을 세웁니다 */
   arcAttachments = existingItem && existingItem.files ? existingItem.files.slice() : [];
   renderArcAttachList();
   arcEditBaseline = arcEditSnapshot();
@@ -8815,6 +9077,11 @@ document.getElementById('arcColorInput').addEventListener('input', (e)=>{
 initBlockquoteKeys('arcContentEditor');
 /* 구분선 삽입 (LOG 편집기와 같은 방식) */
 document.getElementById('arcCopyBoxBtn')?.addEventListener('click', ()=> insertCopyBox('arcContentEditor'));
+const arcHtmlBtn = document.getElementById('arcHtmlBtn');
+if(arcHtmlBtn){
+  arcHtmlBtn.addEventListener('mousedown', e=> e.preventDefault());
+  arcHtmlBtn.addEventListener('click', ()=> insertHtmlEmbed('arcContentEditor'));
+}
 const arcDividerBtn = document.getElementById('arcDividerBtn');
 if(arcDividerBtn){
   arcDividerBtn.addEventListener('mousedown', e=> e.preventDefault());
@@ -11005,6 +11272,7 @@ async function boot(){
   initGalleryRoot(OC_GALLERY_HOST);
   initLogRoot(PAIR_LOG_HOST);
   initLogRoot(OC_LOG_HOST);
+  syncLogWideBtns();   // 단추 글자는 상태에서 읽으므로 처음 한 번 채워 둡니다
   initOcDetail();
   /* PAIR 상세도 OC 와 같은 방식으로 장을 넘깁니다 */
   bindPageGestures(document.querySelector('#view-pair-detail .pd-tab-content'),
