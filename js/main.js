@@ -2792,7 +2792,21 @@ document.getElementById('clUrl')?.addEventListener('keydown', (e)=>{
 let currentPairFilter='all';
 /* 지금 보고 있는 폴더. 카테고리를 옮기면 renderPairPosts 가 그 카테고리의 첫
    폴더로 스스로 고쳐 잡습니다(OC 와 같은 방식 — 폴더 기억은 카테고리별이 아닙니다). */
-let currentPairFolderId = PAIR_DEFAULT_FOLDER;
+/* ---- '전체' 폴더 ----
+   카테고리 안의 모든 폴더 내용을 한 번에 보는 자리입니다. 진짜 폴더가 아니라
+   목록 맨 위에 끼워 넣는 **가짜 한 줄**이라 저장된 데이터에는 없습니다 —
+   글의 folderId 는 늘 진짜 폴더를 가리킵니다. 그래서 이름 바꾸기·지우기·
+   끌어다 놓기·순서 바꾸기가 모두 막혀 있습니다(renderFolderDropdown 의 f.all).
+   기본값이기도 합니다: 고른 것이 없으면 목록의 첫 줄이 열리는데 그 첫 줄이
+   이제 '전체'입니다. */
+const ALL_FOLDER_ID = '__all';
+const ALL_FOLDER_LABEL = '전체';
+function withAllFolder(list){
+  return [{ id:ALL_FOLDER_ID, name:ALL_FOLDER_LABEL, all:true }].concat(list || []);
+}
+function isAllFolderId(id){ return id === ALL_FOLDER_ID; }
+
+let currentPairFolderId = ALL_FOLDER_ID;
 let draggedPairId = null;
 let currentOcFilter = 'all';        // PAIR 과 마찬가지로 '전체'부터 보여줍니다
 let currentArchiveCategory='nai';   // ARCHIVE 첫 진입은 PROMPT
@@ -2897,7 +2911,7 @@ function pairFolderCtx(catId){
 }
 const PAIR_FOLDER_DD = {
   rootId: 'pairFolderDD',
-  folders: ()=> pairFoldersOf(currentPairFilter),
+  folders: ()=> withAllFolder(pairFoldersOf(currentPairFilter)),
   currentId: ()=> currentPairFolderId,
   ctx: ()=> pairFolderCtx(currentPairFilter),
   select: (f)=>{ currentPairFolderId=f.id; pairPage=1; selectedPairIds.clear(); renderPairPosts(); },
@@ -2946,6 +2960,12 @@ function renderPairPosts(){
        나오되 아래에서 가려 그립니다(없는 척하면 '여기엔 아무것도 없다'가
        새어 나갑니다). */
     list = byNewest(state.pairPosts);
+  }else if(isAllFolderId(currentPairFolderId)){
+    /* '전체' 폴더 — 카테고리 안의 폴더를 가리지 않고 모읍니다. 잠긴 비밀
+       폴더의 글도 목록에는 나오되 아래에서 가려 그립니다(카테고리 '전체'와
+       같은 규칙이고, 카드를 그리는 쪽은 손대지 않아도 됩니다). */
+    renderPairFolderBar();
+    list = byNewest(state.pairPosts.filter(p=> p.type===currentPairFilter));
   }else{
     const folders = pairFoldersOf(currentPairFilter);
     const folder = folders.find(f=>f.id===currentPairFolderId) || folders[0];
@@ -7654,7 +7674,7 @@ document.getElementById('addTimelineBtn').addEventListener('click', async ()=>{
 /* PAIR 목록과 같은 규칙 — PC 8개, 모바일 4개 */
 function ocPerPage(){ return isMobileWidth() ? 4 : 8; }
 let ocPage = 1;
-let currentOcFolderId = OC_DEFAULT_FOLDER;
+let currentOcFolderId = ALL_FOLDER_ID;
 let ocSelectMode = false;
 let ocSelectedIds = new Set();
 let draggedOcId = null;
@@ -7748,7 +7768,8 @@ function renderFolderDropdown(host){
       const open = ()=>{ close(); host.select(f); };
       if(folderLocked(f)) openFolderUnlock(f, open); else open();
     });
-    if(isLoggedIn){
+    /* '전체'는 진짜 폴더가 아니므로 설정·드롭·순서 바꾸기를 달지 않습니다 */
+    if(isLoggedIn && !f.all){
       const renameBtn=document.createElement('button');
       renameBtn.type='button'; renameBtn.className='gallery-folder-rename';
       renameBtn.innerText='✎'; renameBtn.title='폴더 설정';
@@ -7791,7 +7812,7 @@ document.addEventListener('keydown', (e)=>{
 
 const OC_FOLDER_DD = {
   rootId: 'ocFolderDD',
-  folders: ()=> ocFoldersOf(currentOcFilter),
+  folders: ()=> withAllFolder(ocFoldersOf(currentOcFilter)),
   currentId: ()=> currentOcFolderId,
   ctx: ()=> ocFolderCtx(currentOcFilter),
   select: (f)=>{ currentOcFolderId=f.id; ocPage=1; ocSelectedIds.clear(); renderOcPosts(); },
@@ -7846,6 +7867,10 @@ function renderOcPosts(){
     /* 카테고리·폴더를 가리지 않고 늘어놓습니다.
        잠긴 비밀 폴더의 글도 목록에는 나오되 아래에서 가려 그립니다. */
     list = byNewest(state.ocPosts);
+  }else if(isAllFolderId(currentOcFolderId)){
+    /* '전체' 폴더 — PAIR 과 같은 규칙입니다(잠긴 폴더의 글도 잠긴 카드로 나옵니다) */
+    renderOcFolderBar(currentOcFilter);
+    list = byNewest(state.ocPosts.filter(x=> x.type===currentOcFilter));
   }else{
     const folders = ocFoldersOf(currentOcFilter);
     const folder = folders.find(f=>f.id===currentOcFolderId) || folders[0];
@@ -9706,7 +9731,20 @@ let currentArcViewId=null;
 /* 지금 보고 있는 폴더는 세부 카테고리마다 따로 기억합니다 —
    OOC 를 보다 ETC 로 갔다 돌아와도 아까 보던 폴더가 그대로 열립니다. */
 const currentArcFolderIds = { ooc:null, nai:null, etc:null };
-function curArcFolderId(cat){ return currentArcFolderIds[cat || currentArchiveCategory]; }
+/* 이 글이 잠긴 비밀 폴더에 있나 — 있으면 그 폴더를 돌려줍니다.
+   '전체' 폴더에서 한 줄씩 가려 그릴 때 씁니다(ocLockedFolderOf 와 같은 짝). */
+function arcLockedFolderOf(item){
+  const cat = item.category || 'ooc';
+  const f = arcFoldersOf(cat).find(x=> x.id === arcFolderIdOf(item));
+  return (f && folderLocked(f)) ? f : null;
+}
+function curArcFolderId(cat){
+  const id = currentArcFolderIds[cat || currentArchiveCategory];
+  /* **null 도 '고른 적 없음'입니다** — 이 표는 { ooc:null, nai:null, etc:null } 로
+     시작합니다. undefined 만 보고 넘기면 목록 단추는 '전체'를 가리키는데(첫 줄이라)
+     거르는 쪽은 첫 폴더를 쓰는, 화면과 속이 어긋난 상태가 됩니다. */
+  return id == null ? ALL_FOLDER_ID : id;
+}
 function setCurArcFolderId(id, cat){ currentArcFolderIds[cat || currentArchiveCategory] = id; }
 /* PROMPT 전용 상태 */
 let arcSelectMode = false;
@@ -10008,7 +10046,7 @@ function rtRememberColor(hex){
    세부 카테고리(OOC·PROMPT·ETC)마다 목록이 다르므로 지금 보고 있는 것을 따라갑니다. */
 const ARC_FOLDER_DD = {
   rootId: 'arcFolderDD',
-  folders: ()=> arcFoldersOf(currentArchiveCategory),
+  folders: ()=> withAllFolder(arcFoldersOf(currentArchiveCategory)),
   currentId: ()=> curArcFolderId(),
   ctx: ()=> archiveFolderCtx(),
   select: (f)=>{
@@ -10102,12 +10140,17 @@ function renderArchive(){
      '기본' 한 개뿐입니다. 그 id 를 기억해버리면 진짜 목록이 온 뒤에도 그 폴더가
      골라진 것으로 남아, 맨 위가 아닌 폴더가 늘 먼저 열렸습니다.
      기억은 사람이 직접 고를 때(ARC_FOLDER_DD.select)만 합니다. */
-  const folder = folders.find(f=>f.id===curArcFolderId()) || folders[0];
+  /* '전체' 폴더에서는 폴더로 거르지 않습니다. 잠긴 비밀 폴더의 글도 목록에
+     나오되 제목을 흐리고 자물쇠를 답니다(PAIR·OC 가 잠긴 카드로 보여주는 것과
+     같은 뜻입니다 — 없는 척하면 '여기엔 아무것도 없다'가 새어 나갑니다). */
+  const allFolder = isAllFolderId(curArcFolderId());
+  const folder = allFolder ? null : (folders.find(f=>f.id===curArcFolderId()) || folders[0]);
   let catItems = state.archive.filter(x=>
-    (x.category||'ooc')===currentArchiveCategory && arcFolderIdOf(x)===folder.id);
+    (x.category||'ooc')===currentArchiveCategory
+    && (allFolder || arcFolderIdOf(x)===folder.id));
 
   /* 잠긴 비밀 폴더는 내용을 아예 그리지 않습니다 */
-  if(folderLocked(folder)){
+  if(folder && folderLocked(folder)){
     wrap.innerHTML = folderBarHtml
       + (isGallery ? `<div class="arc-nai-grid">${'<div class="arc-nai-slot"></div>'.repeat(perPage)}</div>` : '')
       + '<div class="gallery-locked"><div class="gl-icon">🔒</div>'
@@ -10158,19 +10201,24 @@ function renderArchive(){
     let cells='';
     pageItems.forEach((item,i)=>{
       const thumb = extractFirstImage(item.content);
-      const blurred = folderBlur && !arcUnblurred.has(item.id);
+      /* '전체'에서 마주치는 잠긴 폴더의 글 — 흐리게 덮고 LOCKED 만 보입니다.
+         흐림 해제(👁)는 달지 않습니다. 그건 '흐리게' 폴더를 잠깐 들여다보는
+         장치이지 비밀 폴더를 여는 열쇠가 아닙니다. */
+      const lockedF = allFolder ? arcLockedFolderOf(item) : null;
+      const blurred = !lockedF && folderBlur && !arcUnblurred.has(item.id);
       const checked = arcSelectedIds.has(item.id);
       /* 이미지는 안쪽 레이어에 깝니다 — 흐림 효과가 제목/버튼까지 번지지 않게 */
-      cells += `<div class="arc-nai-thumb${blurred?' blurred':''}" data-abs="${start+i}">
+      cells += `<div class="arc-nai-thumb${blurred?' blurred':''}${lockedF?' blurred arc-nai-locked':''}" data-abs="${start+i}">
         <div class="an-img"${thumb?` style="background-image:url('${imgUrl(thumb)}')"`:''}></div>
-        ${(item.pinned && !arcSelectMode)?'<span class="arc-nai-pin">📌︎</span>':''}
-        ${folderBlur?'<button type="button" class="an-eye" title="흐림 해제">👁︎</button>':''}
-        ${arcSelectMode?`<div class="gallery-check${checked?' checked':''}">${checked?'✓':''}</div>`:''}
+        ${(item.pinned && !arcSelectMode && !lockedF)?'<span class="arc-nai-pin">📌︎</span>':''}
+        ${(folderBlur && !lockedF)?'<button type="button" class="an-eye" title="흐림 해제">👁︎</button>':''}
+        ${(arcSelectMode && !lockedF)?`<div class="gallery-check${checked?' checked':''}">${checked?'✓':''}</div>`:''}
+        ${lockedF?'<span class="oc-lock-mark">LOCKED</span>':''}
         <div class="arc-nai-overlay ${thumb?'':'arc-nai-overlay-static'}"><div class="arc-nai-cap">
-          <div class="arc-nai-no">${displayNo.get(item)||''}</div>
+          ${lockedF?'' :`<div class="arc-nai-no">${displayNo.get(item)||''}</div>
           <div class="arc-nai-title">${escapeHtml(item.title)}</div>
           ${(item.subtitle||'').trim()?`<div class="arc-nai-sub">${escapeHtml(item.subtitle)}</div>`:''}
-          ${item.date?`<div class="arc-nai-date">${escapeHtml(item.date)}</div>`:''}
+          ${item.date?`<div class="arc-nai-date">${escapeHtml(item.date)}</div>`:''}`}
         </div></div>
       </div>`;
     });
@@ -10202,6 +10250,10 @@ function renderArchive(){
       });
 
       el.addEventListener('click', ()=>{
+        /* '전체'에서 마주친 잠긴 폴더의 글 — 글 대신 비밀번호 창을 엽니다
+           (폴더를 직접 열 때와 같은 창이라, 여기서 풀면 그 폴더가 함께 풀립니다) */
+        const lk0 = allFolder ? arcLockedFolderOf(item) : null;
+        if(lk0){ openFolderUnlock(lk0, ()=> renderArchive()); return; }
         if(arcSelectMode){
           if(arcSelectedIds.has(item.id)) arcSelectedIds.delete(item.id);
           else arcSelectedIds.add(item.id);
@@ -10248,7 +10300,11 @@ function renderArchive(){
       const checked = arcSelectedIds.has(item.id);
       rows += `<tr data-abs="${start+i}"${checked?' class="selected"':''}>`
         + (arcSelectMode?`<td class="arc-td-check"><div class="gallery-check${checked?' checked':''}">${checked?'✓':''}</div></td>`:'')
-        + `<td>${displayNo.get(item)||''}</td><td class="log-td-title">${item.pinned?'<span class="arc-pin-tag">📌</span> ':''}${escapeHtml(item.title)}</td><td>${item.date||''}</td></tr>`;
+        + `<td>${displayNo.get(item)||''}</td>`
+        + `<td class="log-td-title">${(allFolder && arcLockedFolderOf(item))
+              ? `<span class="arc-lk-mark" title="비밀 폴더">🔒</span><span class="arc-lk-txt">${escapeHtml(item.title)}</span>`
+              : `${item.pinned?'<span class="arc-pin-tag">📌</span> ':''}${escapeHtml(item.title)}`}</td>`
+        + `<td>${item.date||''}</td></tr>`;
     });
     wrap.innerHTML = `<div class="archive-table-scroll"><table class="log-table"><thead><tr>${arcSelectMode?'<th class="arc-th-check"></th>':''}<th>No</th><th>Title</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table></div>`
       + `<div class="log-pagination-slot">${totalPages>1?`<div class="log-pagination">${pag}</div>`:''}</div>`;
@@ -10256,6 +10312,8 @@ function renderArchive(){
     wrap.querySelectorAll('tr[data-abs]').forEach(tr=>{
       const item = items[Number(tr.dataset.abs)];
       tr.addEventListener('click', ()=>{
+        const lk0 = allFolder ? arcLockedFolderOf(item) : null;
+        if(lk0){ openFolderUnlock(lk0, ()=> renderArchive()); return; }
         if(arcSelectMode){
           if(arcSelectedIds.has(item.id)) arcSelectedIds.delete(item.id);
           else arcSelectedIds.add(item.id);

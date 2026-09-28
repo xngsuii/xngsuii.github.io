@@ -2928,6 +2928,19 @@
     align-content:stretch;flex:1;min-height:0;}
   .pd-tab-pane-gallery .gallery-thumb,
   .oc-page-gallery .gallery-thumb{aspect-ratio:auto;width:100%;height:100%;min-height:0;}
+  /* ---- 빈 자리의 1:1 은 이 격자에서 꺼야 합니다 ----
+     `1fr` 은 사실 `minmax(auto, 1fr)` 이라, 줄에 든 것의 **최소 크기보다 작아질
+     수 없습니다**. .gallery-slot 은 1:1 이므로 최소 높이가 칸 너비(151.6px)이고,
+     줄에 돌아갈 몫(147.7px)보다 큽니다. 그래서 빈 자리가 섞인 줄만 151.6 으로
+     불어나고 남은 줄들이 그만큼 쪼그라들어, **사진 장 수에 따라 썸네일 크기가
+     들쭉날쭉했습니다**(주인 지적). 실측: 15장 148 / 10장 146 / 5장 140 /
+     4장 이하 152 — 첫 줄에 빈 자리가 들어오는 4장에서 가장 커집니다.
+     빈 자리는 어차피 보이지 않고, 이 격자의 줄 높이는 격자 자신의 높이가
+     정하므로(3줄 1fr) 비율이 필요 없습니다. 끄면 몇 장이든 148 로 같습니다.
+     **폰에서는 반대로 이 1:1 이 줄 높이를 만드는 유일한 근거라 되살립니다**
+     (아래 폰 블록 참고 — 끄면 사진으로 꽉 찬 쪽이 납작해집니다). */
+  .pd-tab-pane-gallery .gallery-slot,
+  .oc-page-gallery .gallery-slot{aspect-ratio:auto;min-height:0;}
   /* 실제 썸네일과 같은 크기의 빈 자리 (.gallery-thumb 선택자에는 걸리지 않게 별도 클래스) */
   .gallery-slot{aspect-ratio:1/1;visibility:hidden;pointer-events:none;}
   /* 이미지가 없을 때: 썸네일 영역 정중앙에 한 줄로 */
@@ -3185,6 +3198,18 @@
      오른쪽 위 👁 를 눌러야 풀립니다 — 커서를 올리면 제목이 뜨는 기능과 겹치기 때문입니다.
      살짝 확대해두면 흐림이 가장자리를 갉아먹어 생기는 테두리 얼룩이 보이지 않습니다. */
   .arc-nai-thumb.blurred .an-img{filter:blur(12px);transform:scale(1.14);}
+  /* ---- '전체' 폴더에서 마주치는 잠긴 비밀 폴더의 글 ----
+     PAIR·OC 는 카드를 통째로 가리지만(.post-card.locked) ARCHIVE 는 표와
+     썸네일 격자라 다르게 가립니다. 표에서는 **제목 글자만 흐리고 앞에 자물쇠**를
+     답니다(주인 주문) — 자물쇠까지 흐려지면 무엇 때문에 안 보이는지 알 수가
+     없으므로 흐림은 글자 span 에만 겁니다. 격자에서는 이미 있는 흐림 규칙을
+     그대로 쓰고 LOCKED 만 얹습니다. 어느 쪽이든 누르면 비밀번호 창이 열립니다. */
+  .log-table .arc-lk-mark{margin-right:6px;font-size:10px;vertical-align:1px;}
+  .log-table .arc-lk-txt{display:inline-block;max-width:68%;vertical-align:bottom;
+    overflow:hidden;filter:blur(3.5px);user-select:none;pointer-events:none;}
+  .arc-nai-thumb.arc-nai-locked{cursor:pointer;}
+  .arc-nai-thumb.arc-nai-locked .oc-lock-mark{z-index:3;color:#fff;
+    text-shadow:0 1px 6px rgba(0,0,0,.6);}
   .an-img{transition:filter .18s ease, transform .35s cubic-bezier(.2,0,.2,1);}
   /* 마우스를 올렸을 때 사진을 1.06배로 키우던 효과는 뺐습니다 —
      PAIR·OC 목록에서 뺀 것과 같은 이유입니다(여덟 칸이 저마다 들썩이면
@@ -4017,6 +4042,10 @@
        빈 칸과 똑같이 1:1 을 돌려주어 줄 높이를 못박습니다. */
     .pd-tab-pane-gallery .gallery-thumb,
     .oc-page-gallery .gallery-thumb{aspect-ratio:1/1;height:auto;}
+    /* 빈 자리도 같이 되살립니다 — 데스크톱에서는 껐지만(위 설명) 여기서는
+       이것과 썸네일의 1:1 이 줄 높이를 만드는 근거 전부입니다. */
+    .pd-tab-pane-gallery .gallery-slot,
+    .oc-page-gallery .gallery-slot{aspect-ratio:1/1;}
     /* PC 는 격자가 남은 높이를 거의 채우지만 폰에서는 남는 높이가 커서,
        flex:1 로 두면 화살표가 가장자리로 밀려 이미지와 100px 넘게 벌어집니다.
        내용 높이만큼만 차지하게 하고 위아래 auto 여백으로 가운데 정렬합니다. */
