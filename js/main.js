@@ -3465,6 +3465,17 @@ function bindRichTextToolbars(){
       });
       const colorInput = tb.querySelector('.rt-color');
       if(colorInput) colorInput.oninput = (e)=>{ targetEl.focus(); document.execCommand('foreColor', false, e.target.value); };
+      /* 글자 크기 — ARCHIVE·LOG·OC 자유 글 칸과 같은 함수(stepFontSize)를 씁니다.
+         골라 둔 구간에만 걸리므로 mousedown 을 막아 선택이 풀리지 않게 합니다.
+         저장을 따로 부르지 않는 것도 B·I·색과 같습니다 — 커서가 칸을 빠져나갈
+         때 onblur 가 innerHTML 을 통째로 담아 갑니다(bindBodyText). */
+      tb.querySelectorAll('button[data-rt="sizeUp"],button[data-rt="sizeDown"]').forEach(btn=>{
+        btn.onmousedown = (e)=> e.preventDefault();
+        btn.onclick = ()=>{
+          targetEl.focus();
+          stepFontSize(tb.dataset.target, btn.dataset.rt === 'sizeUp' ? 1 : -1);
+        };
+      });
     }
     const addRowBtn = tb.querySelector('.rt-add-row');
     if(addRowBtn && metaEl){
@@ -5447,16 +5458,13 @@ let currentLogViewId = null;
   });
   initFoldEnter('logContent');
   initCopyBoxKeys('logContent');
-  /* 사진 삽입 — ARCHIVE 편집기와 같은 방식(본문 안에 data URL 로 넣습니다) */
+  /* 사진 삽입 — ARCHIVE 편집기와 같은 방식(본문 안에 data URL 로 넣습니다).
+     여러 장을 한 번에 고를 수 있습니다. */
   const imgBtn = document.getElementById('logInsertImageBtn');
   if(imgBtn) imgBtn.addEventListener('click', ()=>{
-    const input=document.createElement('input'); input.type='file'; input.accept='image/*';
-    input.addEventListener('change', async ()=>{
-      const f=input.files[0]; if(!f) return;
-      const url=await fileToDataUrl(f);
-      editor.focus();
-      document.execCommand('insertHTML', false, `<img src="${url}" /><br>`);
-    });
+    const input=document.createElement('input');
+    input.type='file'; input.accept='image/*'; input.multiple = true;
+    input.addEventListener('change', ()=> insertEditorImages('logContent', input.files, null));
     input.click();
   });
 })();
@@ -6742,14 +6750,18 @@ function isMobileWidth(){ return window.matchMedia(MOBILE_MQ).matches; }
    좁은 화면에서는 번호를 다섯 개까지만 그리고, 지금 쪽을 가운데 두는 창을
    씌워 그 언저리만 보여 줍니다 — 스무 쪽짜리 목록이면 번호 스무 개가 한 줄에
    들어가지 않아 줄이 접히고 그 아래 내용이 통째로 밀려납니다.
-   창은 양 끝에서 끝에 붙습니다(1~5 / 16~20), 그래서 개수는 늘 다섯입니다.
-   PC 는 자리가 넉넉하므로 예전처럼 전부 보여 줍니다. */
+   창은 양 끝에서 끝에 붙습니다(1~5 / 16~20), 그래서 개수는 늘 같습니다.
+   PC 도 같은 창을 씁니다 — 열 개까지만. 글이 쌓일수록 번호가 끝도 없이
+   늘어나서(주인 지적: ARCHIVE 가 스무두 쪽), 쪽 줄 하나가 본문만큼 길어졌습니다.
+   열은 넣어도 PC 폭에서 줄이 접히지 않는 개수입니다. */
 const PAGER_MAX_MOBILE = 5;
+const PAGER_MAX_DESKTOP = 10;
 function pagerRange(total, cur){
-  if(!isMobileWidth() || total <= PAGER_MAX_MOBILE) return [1, total];
-  const half = Math.floor(PAGER_MAX_MOBILE / 2);
-  const from = Math.min(Math.max(cur - half, 1), total - PAGER_MAX_MOBILE + 1);
-  return [from, from + PAGER_MAX_MOBILE - 1];
+  const max = isMobileWidth() ? PAGER_MAX_MOBILE : PAGER_MAX_DESKTOP;
+  if(total <= max) return [1, total];
+  const half = Math.floor(max / 2);
+  const from = Math.min(Math.max(cur - half, 1), total - max + 1);
+  return [from, from + max - 1];
 }
 function pagerHtml(total, cur){
   const [from, to] = pagerRange(total, cur);
@@ -6874,7 +6886,11 @@ function renderGallery(p){
     const key = folder.id+'::'+idx;
     const src = entryCover(entry);
     const el=document.createElement('div');
-    el.className='gallery-thumb'+(folder.blur?' blurred':'')+(isStack(entry)?' stacked':'');
+    /* 흐림 폴더라도 **고르는 동안에는 선명하게** 둡니다 — 뭐가 뭔지 보이지
+       않으면 고를 수가 없습니다(주인 지적). 선택 모드를 켜고 끌 때
+       renderGallery 가 다시 불리므로, 끌 때 저절로 다시 흐려집니다. */
+    const blurNow = folder.blur && !gallerySelectMode;
+    el.className='gallery-thumb'+(blurNow?' blurred':'')+(isStack(entry)?' stacked':'');
     // 이미지는 안쪽 레이어에 — 블러가 보더까지 번지지 않게, 선택 체크 표시도 선명하게 유지
     const img=document.createElement('div');
     img.className='gt-img';
@@ -7045,7 +7061,7 @@ function attachDraggedThumbToGrid(folder){
   if(slot) slot.remove();
 
   const el = document.createElement('div');
-  el.className = 'gallery-thumb dragging' + (folder.blur ? ' blurred' : '');
+  el.className = 'gallery-thumb dragging' + ((folder.blur && !gallerySelectMode) ? ' blurred' : '');
   el.dataset.key = draggedGalleryKey;
   const img = document.createElement('div');
   img.className = 'gt-img';
@@ -9141,18 +9157,9 @@ document.getElementById('arcInsertImageBtn').addEventListener('click', ()=>{
   const selAtOpen = window.getSelection();
   const rangeAtOpen = (selAtOpen.rangeCount && editorAtOpen.contains(selAtOpen.getRangeAt(0).commonAncestorContainer))
     ? selAtOpen.getRangeAt(0).cloneRange() : null;
-  const input=document.createElement('input'); input.type='file'; input.accept='image/*';
-  input.addEventListener('change', async ()=>{
-    const f=input.files[0]; if(!f) return;
-    const url=await fileToDataUrl(f);
-    const editor=document.getElementById('arcContentEditor'); editor.focus();
-    if(rangeAtOpen){
-      const sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(rangeAtOpen);
-    }
-    document.execCommand('insertHTML', false, `<img src="${url}" /><br>`);
-  });
+  const input=document.createElement('input');
+  input.type='file'; input.accept='image/*'; input.multiple = true;
+  input.addEventListener('change', ()=> insertEditorImages('arcContentEditor', input.files, rangeAtOpen));
   input.click();
 });
 /* ============================================================
@@ -9182,6 +9189,33 @@ function selectEditorImg(img){
   selectedEditorImg = img;
   img.classList.add('img-selected');
   showImgToolbar(img);
+}
+
+/* 고른 사진을 본문에 넣습니다 — ARCHIVE 글쓰기와 LOG 글쓰기가 함께 씁니다.
+
+   **한 번에 여러 장**을 고를 수 있습니다. 줄이는 것은 한 장씩 차례로 합니다
+   (갤러리의 여러 장 넣기와 같은 이유 — 한꺼번에 다 올리면 메모리가 튀니다).
+   그러고 **다 줄인 뒤에 한 번만 끼워 넣습니다** — 한 장씩 끼우면 줄이는
+   동안 커서가 어디에 있을지 보장할 수 없어 순서가 엉해집니다.
+   savedRange 는 파일 선택창이 뜨기 전의 커서 자리입니다(ARCHIVE 쪽 설명 참고). */
+async function insertEditorImages(editorId, fileList, savedRange){
+  const files = Array.from(fileList || []).filter(f=> !f.type || f.type.startsWith('image/'));
+  if(!files.length) return;
+  const urls = [];
+  for(const f of files){
+    const url = await fileToDataUrl(f);
+    if(url) urls.push(url);
+  }
+  if(!urls.length) return;
+  const editor = document.getElementById(editorId);
+  if(!editor) return;
+  editor.focus();
+  if(savedRange){
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(savedRange);
+  }
+  document.execCommand('insertHTML', false, urls.map(u=> `<img src="${u}" /><br>`).join(''));
 }
 
 /* 사진 하나를 고르게 하고 data URL 로 돌려줍니다 (툴바의 '변경' 이 씁니다) */

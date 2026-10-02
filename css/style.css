@@ -4124,6 +4124,23 @@
     .rt-toolbar-memo .rt-cpick .rt-cpick-btn{width:32px;height:32px;padding:4px;}
     .rt-color{width:32px;height:32px;}
     .rt-cpick .rt-cpick-btn{width:32px;height:32px;padding:4px;}
+    /* 페어 프로필의 서식 줄 — 단추가 여섯(＋ B I 색 ˄ ˅)인데, 폰에서는
+       프로필 둘이 나란히 서서 그 칸이 화면 절반밖에 안 됩니다. 32px 로는 두 줄이
+       됩니다 — 필요 217px / 있는 폭 177px (393px 화면에서 쟴 값). 두 줄이 되면
+       그만큼 설명칸이 깎이므로, 메모 줄과 같은 장치를 씁니다: 폭을 못박지 않고
+       폭을 flex:1 1 0 으로 두어 여섯이 칸을 나눠 갖게 합니다(쟰 값 27px, 키는 32 그대로).
+       **width 를 붙이면 안 됩니다** — nowrap 인 줄의 최소 폭은 칸들의 폭을 더한 값이
+       되어(쟰 값 207px), 그 칸이 들어있는 격자 열을 거꾸로 밀어 프로필 둘이 화면을
+       61px 넘갑니다(재보았음). 기준값 0 이면 최소 폭이 글자 크기만큼으로 줄어
+       열을 밀지 않습니다. */
+    .pd-info-col .rt-toolbar{flex-wrap:nowrap;gap:3px;}
+    /* 줄어드는 것은 **서식 단추 다섯**입니다. 글자색은 input 이 아니라
+       JS 가 세우는 위젯(span.rt-cpick › button.rt-cpick-btn)이라, 그냥 `button` 으로
+       잡으면 그 안쪽 단추까지 width:auto 가 되어 안여백만큼(10px) 줄어들고,
+       감싼 스팬은 flex:none 이라 그 폭 그대로 굳어 세로 줄 하나처럼 보였습니다
+       (주인 지적, 쟴 값 10x32). 색은 다른 폰 제어들처럼 32px 고정입니다. */
+    .pd-info-col .rt-toolbar button:not(.rt-cpick-btn){flex:1 1 0;width:auto;min-width:0;}
+    .pd-info-col .rt-toolbar .rt-cpick .rt-cpick-btn{width:32px;height:32px;padding:4px;}
     /* 색 묶음(LOG 서식 줄)도 같은 32px — 칩 15 + 이름 15 + 위아래 테두리 2 */
     .rt-colorbar .rt-colorcell{min-width:52px;}
     .rt-colorbar .rt-colorcell input[type=color]{height:15px;}
