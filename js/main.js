@@ -4556,6 +4556,32 @@ function insertFoldBlock(editorId){
    붙여버리는 경우가 있습니다(자리는 정확히 "br 뒤"인데도). 그래서 항상 br
    뒤에 무언가(원래 있던 다음 형제, 없으면 채움용 <br> 하나)를 두고 그 앞에
    커서를 놓습니다 — "그 다음 형제 앞"은 안정적으로 해석됩니다. */
+/* 커서가 칸 맨 끝 — 마지막 <br> **뒤**에 서 있으면 그 <br> 앞으로 옮깁니다.
+   그 마지막 <br> 은 줄을 나누는 것이 아니라 **빈 줄이 보이게 하는 자리지키**입니다
+   (placeCursorAfterBr 이 두고 갑니다). 그 뒤에서 엔터를 치면 <br> 이 하나 더 들어가고
+   자리지키도 새로 붙어 **한 번에 두 줄**이 생겼습니다(주인 지적: "엔터가 두 번
+   들어가요"). 쟰 값: 복사 칸 19.3 → 38.5 → 77px, 두 번째 엔터가 두 줄짜리였습니다.
+   자리지키 앞으로 옮겨 두면 그 자리에 <br> 하나만 들어가고, 자리지키는 이미 있으므로
+   더 만들지 않습니다. */
+function caretBeforeTailBr(sel, range, box){
+  const last = box.lastChild;
+  if(!last || last.nodeType !== 1 || last.tagName !== 'BR') return range;
+  if(!range.collapsed) return range;
+  const c = range.startContainer, o = range.startOffset;
+  let after = false;
+  if(c === box) after = o >= box.childNodes.length;
+  else if(c.nodeType === 3 && !c.data.trim()){
+    /* 빈 글자 마디 하나만 남아 있는 자리도 같은 끝입니다 */
+    let n = c;
+    while(n && n !== last && n.previousSibling) n = n.previousSibling;
+    after = (n === last);
+  }
+  if(!after) return range;
+  const r = document.createRange();
+  r.setStartBefore(last); r.collapse(true);
+  sel.removeAllRanges(); sel.addRange(r);
+  return r;
+}
 function placeCursorAfterBr(sel, br){
   let next = br.nextSibling;
   if(!next || (next.nodeType===3 && !next.data)){
@@ -4710,9 +4736,10 @@ function initFoldEnter(editorId){
     const cbBody = startEl && startEl.closest('.cb-body');
     if(cbBody && editor.contains(cbBody)){
       e.preventDefault();
-      range.deleteContents();
+      const r = caretBeforeTailBr(sel, range, cbBody);
+      r.deleteContents();
       const br = document.createElement('br');
-      range.insertNode(br);
+      r.insertNode(br);
       placeCursorAfterBr(sel, br);
       return;
     }
@@ -4735,9 +4762,10 @@ function initFoldEnter(editorId){
     const body = startEl && startEl.closest('.fold-body');
     if(body && editor.contains(body)){
       e.preventDefault();
-      range.deleteContents();
+      const r = caretBeforeTailBr(sel, range, body);
+      r.deleteContents();
       const br = document.createElement('br');
-      range.insertNode(br);
+      r.insertNode(br);
       placeCursorAfterBr(sel, br);
     }
   });
@@ -8220,6 +8248,127 @@ const PAIR_THEME_HOST = { root: document.querySelector('#pdSidePages .oc-theme')
   getPost: ()=> getCurrentPost(), save: ()=> savePair(), idx: 0 };
 
 let draggedSongRow = null;
+/* ---- 테마곡을 바꿀 때의 움직임 ----
+   줄을 누르면 세 가지가 동시에 일어납니다: 위 칸의 그림이 옆으로 밀리고,
+   흰 막대가 차오르고, 고른 줄의 가사가 열립니다.
+
+   **목록을 다시 그리지 않는 것이 핵심입니다.** 예전에는 줄을 누를 때마다
+   renderThemeSongs 가 list.innerHTML 을 비우고 다시 만들었는데, 그러면 모든 요소가
+   새 요소라 전환이 걸릴 틈이 없습니다(‘띄 하고’ 바뀜습니다). setThemeIdx 는
+   지금 있는 줄의 .current 만 옮기고 위 칸만 다시 칠합니다.
+   곡을 더하거나 지우는 것은 목록 자체가 바뀜므로 전처럼 renderThemeSongs 입니다. */
+const THEME_SWIPE_MS = 420;    // CSS .oc-theme-now-art 의 .42s
+const THEME_OPEN_MS  = 300;    // CSS .oc-theme-lyrics 의 .3s
+const THEME_LYRICS_MAX = 120;  // CSS .lyr-done 의 max-height
+
+/* 가사 칸을 여닫습니다. animate===false 면 그 자리에서 바로 모양만 맞춥니다
+   (목록을 처음 그릴 때 — 열리는 장면을 보여 줄 일이 아닙니다).
+   다 열린 뒤에는 height 를 auto 로 풀어 둡니다 — px 로 못박아 두면 가사를 더 적을 때
+   칸이 따라 커지지 않습니다. */
+function setLyricsOpen(el, open, animate){
+  if(!el) return;
+  clearTimeout(el._lyrT);
+  open = !!open;
+  if(animate === false){
+    el.style.transition = 'none';
+    el.style.height = open ? 'auto' : '0px';
+    el.classList.toggle('lyr-done', open);
+    void el.offsetHeight;
+    el.style.transition = '';
+    el._lyrOpen = open;
+    return;
+  }
+  if(!!el._lyrOpen === open) return;
+  el._lyrOpen = open;
+  /* 지금 높이를 먼저 px 로 못박습니다 — auto 에서는 전환이 시작되지 않습니다 */
+  el.classList.remove('lyr-done');
+  el.style.height = el.getBoundingClientRect().height + 'px';
+  void el.offsetHeight;
+  el.style.height = (open ? Math.min(el.scrollHeight, THEME_LYRICS_MAX) : 0) + 'px';
+  el._lyrT = setTimeout(()=>{
+    if(el._lyrOpen){ el.style.height = 'auto'; el.classList.add('lyr-done'); }
+    else el.style.height = '0px';
+  }, THEME_OPEN_MS + 40);
+}
+
+/* 위 칸(NOW PLAYING)을 다시 칠합니다.
+   dir 이 0 이면 그냥 바꿔 놓고, +1 이면 오른쪽에서, -1 이면 왼쪽에서 밀려 들어옵니다. */
+function paintThemeNow(host, dir){
+  const root = host && host.root; if(!root) return;
+  const post = host.getPost(); if(!post) return;
+  const songs = Array.isArray(post.themeSongs) ? post.themeSongs : [];
+  const now = songs[host.idx] || null;
+
+  const t = root.querySelector('.oc-theme-now-title');
+  if(t) t.innerText = now ? (now.title || '제목 없음') : '테마곡';
+  const a = root.querySelector('.oc-theme-now-artist');
+  if(a) a.innerText = now ? (now.artist || '') : '';
+
+  /* 막대는 몇 번째 곡인지를 나타냅니다 — 세 곡 중 첫 곡이면 1/3, 다섯 중 넷이면 4/5.
+     곡을 바꿀 때만 차오르게 하고, 창을 새로 열 때는 전환을 꺼 둡니다 —
+     열자마자 CSS 기본값 45% 에서 미끄러지는 것은 움직임이 아니라 사고로 보입니다. */
+  const bar = root.querySelector('.oc-theme-bar span');
+  if(bar){
+    const w = (now && songs.length) ? (((host.idx + 1) / songs.length) * 100).toFixed(2) + '%' : '0%';
+    if(!dir){
+      bar.style.transition = 'none';
+      bar.style.width = w;
+      void bar.offsetWidth;
+      bar.style.transition = '';
+    }else bar.style.width = w;
+  }
+
+  const stage = root.querySelector('.oc-theme-now');
+  if(!stage) return;
+  /* 빠르게 연달아 누르면 그림이 여러 장 쌓일 수 있습니다 — 마지막 한 장만 남깁니다 */
+  const arts = Array.from(stage.querySelectorAll('.oc-theme-now-art'));
+  arts.slice(0, -1).forEach(n=> n.remove());
+  const cur = arts[arts.length - 1];
+  if(!cur) return;
+
+  const fill = (el, song)=>{
+    const cover = (song && song.cover) ? imgUrl(song.cover) : '';
+    el.style.backgroundImage = cover ? `url('${cover}')` : 'none';
+    if(song && song.cover) whenImgArrives(song.cover, el, ()=>{
+      el.style.backgroundImage = `url('${imgUrl(song.cover)}')`;
+    });
+  };
+  if(!dir){ cur.style.transform = ''; fill(cur, now); return; }
+
+  const next = cur.cloneNode(false);
+  fill(next, now);
+  next.style.transition = 'none';
+  next.style.transform = 'translateX(' + (dir > 0 ? 100 : -100) + '%)';
+  stage.insertBefore(next, cur.nextSibling);
+  /* 시작 자리가 한 번 그려진 뒤에야 밀 수 있습니다. requestAnimationFrame 은
+     배경 탭에서 아예 오지 않으므로 사이트의 다른 움직임처럼 타이머를 씁니다. */
+  setTimeout(()=>{
+    next.style.transition = '';
+    next.style.transform = 'translateX(0)';
+    cur.style.transform = 'translateX(' + (dir > 0 ? -100 : 100) + '%)';
+  }, 20);
+  setTimeout(()=>{
+    if(cur.parentNode) cur.remove();
+    next.style.transform = '';
+  }, THEME_SWIPE_MS + 80);
+}
+
+/* 고른 곡을 바꿉니다 — 목록은 그대로 두고 모양만 옮깁니다 */
+function setThemeIdx(host, i){
+  const root = host && host.root; if(!root) return;
+  const post = host.getPost(); if(!post) return;
+  const songs = Array.isArray(post.themeSongs) ? post.themeSongs : [];
+  if(i < 0 || i >= songs.length || i === host.idx) return;
+  const dir = i > host.idx ? 1 : -1;   // 뒤쪽 곡이면 오른쪽에서, 앞쪽 곡이면 왼쪽에서
+  host.idx = i;
+  paintThemeNow(host, dir);
+  root.querySelectorAll('.oc-theme-row').forEach((r, n)=>{
+    const on = (n === i);
+    r.classList.toggle('current', on);
+    setLyricsOpen(r.querySelector('.oc-theme-lyrics'), on, true);
+  });
+}
+
 function renderThemeSongs(host){
   const root = host && host.root;
   if(!root) return;
@@ -8230,23 +8379,8 @@ function renderThemeSongs(host){
   const list = root.querySelector('.oc-theme-list');
   if(!list) return;
   if(host.idx >= songs.length) host.idx = 0;
-  const now = songs[host.idx] || null;
 
-  const art=root.querySelector('.oc-theme-now-art');
-  if(art){
-    const cover = (now && now.cover) ? imgUrl(now.cover) : '';
-    art.style.backgroundImage = cover ? `url('${cover}')` : 'none';
-    if(now && now.cover) whenImgArrives(now.cover, art, ()=>{
-      art.style.backgroundImage = `url('${imgUrl(now.cover)}')`;
-    });
-  }
-  const t=root.querySelector('.oc-theme-now-title');
-  if(t) t.innerText = now ? (now.title || '제목 없음') : '테마곡';
-  const a=root.querySelector('.oc-theme-now-artist');
-  if(a) a.innerText = now ? (now.artist || '') : '';
-  /* 막대는 몇 번째 곡인지를 나타냅니다 — 세 곡 중 첫 곡이면 1/3, 다섯 중 넷이면 4/5 */
-  const bar=root.querySelector('.oc-theme-bar span');
-  if(bar) bar.style.width = now ? (((host.idx+1)/songs.length)*100).toFixed(2)+'%' : '0%';
+  paintThemeNow(host, 0);
 
   list.innerHTML='';
   /* 끌고 지나가는 줄이 실시간으로 자리를 내주도록 — 목록 하나에 한 번만 겁니다 */
@@ -8346,11 +8480,9 @@ function renderThemeSongs(host){
       await host.save(); renderThemeSongs(host);
     });
     /* 줄을 누르면 위 칸으로 올라오고 가사가 펼쳐집니다 */
-    row.addEventListener('click', ()=>{
-      if(host.idx===i) return;
-      host.idx = i;
-      renderThemeSongs(host);
-    });
+    row.addEventListener('click', ()=> setThemeIdx(host, i));
+    /* 처음 그릴 때는 열리는 장면 없이 제 모양으로 둡니다 */
+    setLyricsOpen(row.querySelector('.oc-theme-lyrics'), i === host.idx, false);
 
     /* 손잡이(::)를 끌어 순서를 바꿉니다. 제목·아티스트가 글자 편집 칸이라
        줄 전체를 끌게 하면 글자 선택이 안 되므로 손잡이만 draggable 입니다. */
