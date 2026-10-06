@@ -69,7 +69,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
-<link rel="stylesheet" href="css/style.css?v=232" />
+<link rel="stylesheet" href="css/style.css?v=235" />
 </head>
 <body>
 <div class="app-window">
@@ -565,10 +565,77 @@
         </div>
       </div>
       <div class="mg-body" data-mgbody="setting">
-        <div class="mg-pane active" data-mgpane="cursor"><p class="mg-soon">커서 모양 — 준비 중입니다.</p></div>
-        <div class="mg-pane" data-mgpane="effect"><p class="mg-soon">커서 이펙트 — 준비 중입니다.</p></div>
-        <div class="mg-pane" data-mgpane="sound"><p class="mg-soon">클릭 효과음 — 준비 중입니다.</p></div>
-        <div class="mg-pane" data-mgpane="sidebar"><p class="mg-soon">사이드바 이름 — 준비 중입니다.</p></div>
+
+        <!-- ---- 커서 모양 ----
+             네 자리는 CSS 가 실제로 가려낼 수 있는 상태들입니다. '누르고 있는
+             동안' 은 CSS 에 그런 상태가 없어서 넣지 않았습니다(나중에 이펙트
+             층으로 하면 됩니다). 줄은 main.js 의 renderCursorPane 이 그립니다. -->
+        <div class="mg-pane active" data-mgpane="cursor">
+          <div class="cur-list" id="curList"></div>
+          <p class="mg-note">
+            PNG 와 CUR 을 씁니다. 올린 그림은 32px 로 줄여 저장해요 —
+            크롬은 128px 이 넘는 커서를 통째로 무시하거든요.
+            움직이는 커서(ANI·움직이는 GIF)는 크롬이 그려주지 않아서,
+            올려도 기본 커서로 보입니다.
+          </p>
+          <input type="file" id="curFilePick" accept=".png,.cur,.gif,.ani,image/png,image/gif,image/x-icon" style="display:none;" />
+        </div>
+
+        <!-- ---- 커서 이펙트 ---- -->
+        <div class="mg-pane" data-mgpane="effect">
+          <div class="fx-picks" id="fxPicks"></div>
+          <div class="fx-custom">
+            <span class="wg-f-head">
+              <span class="wg-f-label">직접 넣기</span>
+              <button class="wg-file" type="button" id="fxCodeFile">파일에서 가져오기</button>
+            </span>
+            <textarea id="fxCode" rows="7" spellcheck="false"
+              placeholder="&lt;script&gt; ... &lt;/script&gt; 또는 스크립트 본문"></textarea>
+            <!-- 왜 가둬 두는지 한 줄로 알려 둡니다 — 남의 코드를 그냥 돌리면
+                 로그인된 권한이 그대로 넘어갑니다. -->
+            <p class="fx-warn">
+              남이 만든 코드는 <b>격리된 칸</b> 안에서만 돕니다. 마우스 자리만
+              전해 주고, 글·사진·로그인에는 손댈 수 없어요. 그래도 모르는 곳에서
+              받은 코드는 넣기 전에 한 번 읽어보세요.
+            </p>
+            <div class="wg-add-row">
+              <button class="btn-ghost" type="button" id="fxCodeClear">지우기</button>
+              <button class="btn-primary" type="button" id="fxCodeSave">적용</button>
+            </div>
+          </div>
+          <input type="file" id="fxFilePick" accept=".js,.txt,.html,text/javascript,text/plain" style="display:none;" />
+        </div>
+
+        <!-- ---- 클릭 효과음 ---- -->
+        <div class="mg-pane" data-mgpane="sound">
+          <!-- 소리는 **모아 두고 고릅니다.** 바꿀 때마다 앞 것을 지우던 방식은
+               되돌릴 수가 없어서, 뮤직 재생목록처럼 목록을 두고 그중 하나를
+               고르는 쪽으로 바꿨습니다(주인 지시). '기본 소리' 는 늘 첫 줄이고
+               지울 수 없습니다. 줄은 main.js 의 renderSoundPane 이 그립니다. -->
+          <div class="snd-list" id="sndList"></div>
+          <div class="snd-add-row">
+            <button class="wg-chip" type="button" id="sndPick">＋ 소리 추가</button>
+          </div>
+          <label class="snd-vol">
+            <span class="wg-f-label">음량</span>
+            <input type="range" class="mb-vol" id="sndVol" min="0" max="100" step="1" />
+            <span class="snd-vol-n" id="sndVolN">40</span>
+          </label>
+          <p class="mg-note" id="sndNote"></p>
+          <input type="file" id="sndFilePick" accept="audio/*,.mp3,.wav,.ogg,.m4a" style="display:none;" />
+        </div>
+
+        <!-- ---- 사이드바 ---- -->
+        <div class="mg-pane" data-mgpane="sidebar">
+          <div class="nav-name-list" id="navNameList"></div>
+          <div class="wg-row sb-row">
+            <span class="wg-row-name">STORAGE 게이지</span>
+            <span class="wg-row-ctl">
+              <button class="wg-chip" type="button" id="sbStorage"></button>
+            </span>
+          </div>
+          <p class="mg-note">이름을 비우면 원래 이름으로 돌아가요.</p>
+        </div>
       </div>
     </section>
 
@@ -1514,7 +1581,7 @@
        (그 목록을 만드는 것도 JS인데 새 CSS 가 감싸이지 않은 select 를 폭 0 으로
        접습니다), 스티커 서랍이 엉뚱한 자리에 놓였습니다.
        **CSS 와 JS 를 함께 고쳤으면 번호도 함께 올리세요.** -->
-<script src="js/main.js?v=232"></script>
-<script type="module" src="js/firebase-store.js?v=117"></script>
+<script src="js/main.js?v=235"></script>
+<script type="module" src="js/firebase-store.js?v=118"></script>
 </body>
 </html>

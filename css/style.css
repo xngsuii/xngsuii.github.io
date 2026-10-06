@@ -643,6 +643,108 @@
   /* note 는 채워 그리는 아이콘이라 획이 아니라 면입니다 */
   .wg-ico circle[cx="4.4"],.wg-ico circle[cx="10.4"]{fill:currentColor;stroke:none;}
 
+  /* ---------- 설정: 커서 ----------
+     커서 그림 자체는 main.js 가 만든 #cursorStyle 한 장이 답니다(여기 없습니다) —
+     주소가 데이터라서 CSS 파일에 적어 둘 수가 없습니다. */
+  .cur-list{display:flex;flex-direction:column;}
+  .cur-row{display:flex;align-items:center;gap:12px;padding:10px 2px;
+    border-bottom:1px solid var(--rule-soft);}
+  .cur-row:last-child{border-bottom:0;}
+  /* 미리보기는 바둑판을 깔아 둡니다 — 커서는 거의 투명 바탕이라, 흰 칸에
+     흰 그림을 올리면 아무것도 없는 것처럼 보입니다. */
+  .cur-prev{flex:none;width:44px;height:44px;display:flex;align-items:center;justify-content:center;
+    border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;
+    background-color:var(--bg);
+    background-image:linear-gradient(45deg,var(--surface-2) 25%,transparent 25%),
+      linear-gradient(-45deg,var(--surface-2) 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,var(--surface-2) 75%),
+      linear-gradient(-45deg,transparent 75%,var(--surface-2) 75%);
+    background-size:10px 10px;
+    background-position:0 0,0 5px,5px -5px,-5px 0;}
+  .cur-prev img{max-width:32px;max-height:32px;image-rendering:auto;}
+  .cur-prev-empty{font-family:var(--mono);font-size:9px;color:var(--text-muted);
+    background-image:none;}
+  .cur-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+  .cur-name{font-family:var(--mono);font-size:12.5px;color:var(--text);}
+  .cur-hint{font-family:var(--mono);font-size:10px;color:var(--text-muted);}
+  .cur-hot{flex:none;display:flex;align-items:center;gap:5px;}
+  .cur-hot input{width:48px;height:24px;padding:0 6px;font-family:var(--mono);font-size:11px;
+    color:var(--text);background:var(--bg);border:1px solid var(--border);
+    border-radius:var(--radius-sm);}
+  .cur-hot input:focus{outline:none;border-color:var(--accent);}
+  .cur-hot input:disabled{opacity:.4;}
+  /* 코드로 넣기 — 위젯 목록의 미리보기와 같은 방식으로 줄 **아래**가 펼쳐집니다.
+     줄바꿈이 켜져 있어야 머리줄이 그대로 남습니다(위젯 줄에서 겪은 그대로). */
+  .cur-row{flex-wrap:wrap;}
+  /* 펼친 줄에 **바탕을 깔지 않습니다.** 회색으로 덮어 봤더니 주인이 그대로
+     흰 바탕이 낫다고 했습니다 — 펼쳐진 코드 칸 자체가 이미 '여기가 열렸다'를
+     말하고 있어서, 바탕까지 바꾸면 말이 두 번입니다. (.cur-row-open 은 클래스로
+     남아 있습니다 — JS 가 여닫을 때 붙였다 뗍니다.) */
+  .cur-code-box{flex:1 1 100%;width:100%;display:flex;flex-direction:column;gap:10px;
+    margin-top:4px;padding:14px 0 10px 56px;}
+  .cur-code-box textarea{font-family:var(--mono);font-size:12px;padding:8px 9px;line-height:1.5;
+    white-space:pre;overflow-x:auto;resize:vertical;color:var(--text);
+    background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);}
+  .cur-code-box textarea:focus{outline:none;border-color:var(--accent);}
+  .cur-code-warn{margin:0;min-height:14px;font-family:var(--mono);font-size:10.5px;color:#c0392b;}
+
+  /* ---------- 설정: 커서 이펙트 ---------- */
+  .fx-picks{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;}
+  .fx-pick{display:flex;flex-direction:column;align-items:flex-start;gap:3px;
+    min-width:104px;padding:10px 12px;background:transparent;
+    border:1px solid var(--border);border-radius:var(--radius-sm);text-align:left;}
+  .fx-pick:hover{border-color:var(--text-muted);}
+  .fx-pick.active{border-color:var(--accent);}
+  .fx-pick-name{font-family:var(--mono);font-size:12px;color:var(--text);}
+  .fx-pick.active .fx-pick-name{color:var(--accent);font-variation-settings:'wght' 800;}
+  .fx-pick-hint{font-family:var(--mono);font-size:9.5px;color:var(--text-muted);}
+  .fx-custom{display:flex;flex-direction:column;gap:5px;}
+  .fx-custom textarea{font-family:var(--mono);font-size:12px;padding:8px 9px;line-height:1.5;
+    white-space:pre;overflow-x:auto;resize:vertical;color:var(--text);
+    background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);}
+  .fx-custom textarea:focus{outline:none;border-color:var(--accent);}
+  .fx-warn{margin:2px 0 6px;font-family:var(--mono);font-size:10.5px;line-height:1.6;
+    color:var(--text-muted);}
+  .fx-warn b{color:var(--text);font-variation-settings:'wght' 800;}
+  /* 이펙트가 그려지는 자리. **마우스를 가로채지 않아야** 합니다 — 가로채면 그 아래
+     단추가 눌리지 않습니다. 스티커(30) 아래, 글 위. */
+  .fx-layer{position:fixed;inset:0;z-index:25;pointer-events:none;display:none;}
+  /* 직접 넣은 코드가 도는 격리 칸 — 투명하고, 역시 가로채지 않습니다 */
+  .fx-frame{position:fixed;inset:0;width:100%;height:100%;border:0;z-index:26;
+    pointer-events:none;background:transparent;}
+
+  /* ---------- 설정: 효과음 ----------
+     소리는 모아 두고 그중 하나를 고릅니다. 고른 줄은 왼쪽에 점을 찍고 이름을
+     신호색으로 — 네모를 두르거나 바탕을 깔지 않는 것은 이 사이트가 '지금 여기'를
+     늘 색과 굵기로만 말하기 때문입니다(사이드바 분류와 같은 방식). */
+  .snd-list{display:flex;flex-direction:column;}
+  .snd-row{display:flex;align-items:center;gap:8px;padding:10px 2px;
+    border-bottom:1px solid var(--rule-soft);}
+  .snd-row:last-child{border-bottom:0;}
+  .snd-mark{flex:none;width:7px;height:7px;border-radius:50%;background:transparent;}
+  .snd-on .snd-mark{background:var(--accent);}
+  .snd-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    font-family:var(--mono);font-size:12.5px;color:var(--text);}
+  .snd-on .snd-name{color:var(--accent);font-variation-settings:'wght' 800;}
+  .snd-skip{flex:none;font-family:var(--mono);font-size:9.5px;color:var(--text-muted);
+    font-variant-numeric:tabular-nums;}
+  .snd-add-row{display:flex;padding:12px 2px 0;}
+  /* 음량 막대는 **뮤직 위젯과 같은 것**입니다 — 같은 일을 하는 조절기가 한 사이트에
+     두 모양이면 안 됩니다(주인 지시). .mb-vol 을 그대로 입히고, 여기서는 줄 안에서
+     늘어나는 것만 말합니다(.mb-vol 자신은 width:100% 라 그대로 두면 너무 깁니다). */
+  .snd-vol{display:flex;align-items:center;gap:10px;padding:18px 2px 2px;}
+  .snd-vol .mb-vol{flex:1;width:auto;max-width:260px;margin:0;}
+  .snd-vol-n{font-family:var(--mono);font-size:11px;color:var(--text-muted);
+    font-variant-numeric:tabular-nums;min-width:24px;text-align:right;}
+
+  /* ---------- 설정: 사이드바 ---------- */
+  .nav-name-list{display:flex;flex-direction:column;}
+  .sb-row{cursor:default;}
+  .sb-row .wg-row-name{flex:1;}
+  .sb-name{max-width:180px;}
+  /* 게이지 숨기기 — [data-editonly] 규칙보다 뒤에, 더 무겁게 적습니다 */
+  body.no-storage-meter .storage-meter[data-editonly]{display:none;}
+
   /* ---------- 위젯 관리 탭 ---------- */
   .wg-list{display:flex;flex-direction:column;}
   /* **flex-wrap:wrap 이 있어야 미리보기가 아래로 갑니다.** 없으면 미리보기가
@@ -4016,6 +4118,17 @@
     .wg-chip{height:30px;padding:0 9px;}
     /* 좁으니 두 모습을 위아래로 */
     .wg-prev{flex-direction:column;padding-left:0;}
+    /* 설정 칸들도 좁은 화면에서는 위아래로 */
+    .cur-row{flex-wrap:wrap;gap:8px;}
+    .cur-txt{flex:1 1 40%;}
+    .cur-hot{order:3;}
+    .cur-hot input{height:30px;}
+    .snd-row{flex-wrap:wrap;}
+    .snd-name{flex:1 1 60%;}
+    .snd-row .wg-row-ctl{flex:1 1 100%;}
+    .cur-code-box{padding-left:0;}
+    .fx-pick{flex:1 1 44%;min-width:0;}
+    .sb-name{max-width:140px;}
     .wg-prev-side,.wg-pop-demo{max-width:100%;}
     .wg-file{font-size:11px;}
     .wg-f input,.wg-f textarea{font-size:12.5px;padding:9px 10px;}

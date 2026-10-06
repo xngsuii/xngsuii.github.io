@@ -317,7 +317,17 @@ let state = {
   /* PORTAL — 사이드바 맨 아래의 바깥 사이트 목록 [{id, name, url}] */
   portalLinks:[],
   /* 위젯 — [{id, name, on, where, mobile, order, icon, x, y, min, html, css}] */
-  widgets:[]
+  widgets:[],
+  /* 커서 그림 네 가지 — {default, pointer, text, grab} 각각 {src,x,y,name} 또는 null */
+  cursors:{},
+  /* 커서 이펙트 — {preset, code} */
+  cursorFx:{ preset:'none', code:'' },
+  /* 클릭 효과음 — {src, vol, skip, name}. src 가 비면 기본 소리입니다. */
+  clickSound:{ src:'', vol:0.4, skip:0, name:'' },
+  /* 사이드바 메뉴 이름 — 비면 원래 이름 */
+  navNames:{},
+  /* STORAGE 게이지를 사이드바에 둘지 */
+  showStorage:true
 };
 
 /* ---- PROMPT 폴더 ----
@@ -714,6 +724,11 @@ async function loadState(){
   state.pairCats = normalizePairCats(await storageGet('pairCats', null));
   state.portalLinks = normalizePortalLinks(await storageGet('portalLinks', null));
   state.widgets = normalizeWidgets(await storageGet('widgets', null));
+  state.cursors = normalizeCursors(await storageGet('cursors', null));
+  state.cursorFx = normalizeCursorFx(await storageGet('cursorFx', null));
+  state.clickSound = normalizeClickSound(await storageGet('clickSound', null));
+  state.navNames = normalizeNavNames(await storageGet('navNames', null));
+  state.showStorage = (await storageGet('showStorage', true)) !== false;
   state.ocCats = normalizeOcCats(await storageGet('ocCats', null), await storageGet('ocFolders', null));
   state.ocPosts = (await storageGet('ocPosts', [])).map(migrateOcPost);
   /* 카테고리가 이제 필수라, 없어졌거나 유효하지 않은 카테고리를 가리키는 글은
@@ -763,6 +778,11 @@ function renderAll(){
   /* 저장된 그림자 설정을 화면과 체크칸에 맞춥니다 (renderStickers 는 화면만 봅니다) */
   applyStickerShadow();
   renderWidgets();
+  applyCursors();
+  applyCursorFx();
+  applyNavNames();
+  applyShowStorage();
+  renderSettingPanes();
   applyEditMode();
 }
 
@@ -1354,7 +1374,9 @@ const PAIR_CAT_NAV = {
   savePosts: ()=> storageSet('pairPosts', state.pairPosts),
   newId: ()=> 'pc'+Date.now(),
   newExtra: ()=> ({ folders: normalizeCatFolders(null, PAIR_DEFAULT_FOLDER) }),   // OC 와 같이 카테고리마다 폴더 목록
-  title: (name)=>{ document.getElementById('pairTitle').innerText = 'Pair · ' + name; },
+  /* 머리글의 앞머리는 **사이드바 이름과 같은 곳(navName)에서** 옵니다 — 글자를
+     박아 두면 사이드바만 바뀌고 머리글은 그대로여서 둘이 어긋납니다. */
+  title: (name)=>{ document.getElementById('pairTitle').innerText = navName('pair') + ' · ' + name; },
   get: ()=> currentPairFilter,
   set: (id)=>{ currentPairFilter = id; pairPage = 1; },
   moveBtns: ()=> document.getElementById('pairMoveBtns'),
@@ -1374,7 +1396,7 @@ const OC_CAT_NAV = {
   savePosts: ()=> saveOc(),
   newId: ()=> 'occ'+Date.now(),
   newExtra: ()=> ({ folders: normalizeCatFolders(null, OC_DEFAULT_FOLDER) }),   // 카테고리마다 자기 폴더 목록을 갖습니다
-  title: (name)=>{ const el=document.getElementById('ocTitle'); if(el) el.innerText = 'OC · ' + name; },
+  title: (name)=>{ const el=document.getElementById('ocTitle'); if(el) el.innerText = navName('oc') + ' · ' + name; },
   get: ()=> currentOcFilter,
   set: (id)=>{ currentOcFilter = id; ocPage = 1; },
   moveBtns: ()=> document.getElementById('ocMoveBtns'),
@@ -2018,13 +2040,38 @@ homePagesWrap.addEventListener('wheel', (e)=>{
      따로 움직입니다.
    ============================================================ */
 const CLICK_SOUND_URL  = 'audio/click.mp3?v=1';
-const CLICK_SOUND_SKIP = 0.018;   // 초 — 파일 맨 앞의 빈 구간
+const CLICK_SOUND_SKIP = 0.018;   // 초 — **기본 소리의** 맨 앞 빈 구간(직접 잰 값)
 /* 파일이 거의 최대 음량(0.99)으로 만들어져 있어 그대로는 컸습니다.
    0.4 는 약 -8dB — 들리되 거슬리지 않는 쪽으로 낮춘 값이고, 주인이 듣고 고릅니다.
    소리 크기는 곱하기라 0.5 가 '절반쯤 작게', 0.25 가 '확 작게' 로 들립니다. */
 const CLICK_VOLUME     = 0.4;     // 1 = 파일 그대로
 let clickCtx = null, clickBuf = null, clickDecoding = null;
+/* 주인이 올린 소리의 바이트. 설정에서 바꾸면 여기에 들어오고, 기본으로 되돌리면
+   비웁니다 — clickBuf 와 clickDecoding 도 같이 비워야 다음에 새로 풉니다. */
+let clickUserBytes = null;
 const clickBytes = fetch(CLICK_SOUND_URL).then(r=> r.ok ? r.arrayBuffer() : null).catch(()=> null);
+/* 음량과 건너뛸 자리는 **설정에서 읽습니다.** 소리를 바꾸면 앞 빈 구간이 달라지는데,
+   예전처럼 상수로 박아 두면 바꿀 때마다 손으로 다시 재야 했습니다. */
+function clickVolume(){
+  const v = (state.clickSound || {}).vol;
+  return v == null ? CLICK_VOLUME : Math.max(0, Math.min(1, v));
+}
+function clickSkip(){
+  const c = clickSoundCur();
+  return c ? (Number(c.skip) || 0) : CLICK_SOUND_SKIP;
+}
+/* 설정의 소리를 쓸 수 있게 풉니다. 없으면 기본 소리로 돌아갑니다. */
+function clickSourceBytes(){
+  const c = clickSoundCur();
+  if(!c) return clickBytes;
+  if(clickUserBytes) return clickUserBytes;
+  const u = imgUrl(c.src);             // 사진과 같은 창고에 있습니다
+  if(!u) return clickBytes;            // 아직 안 왔으면 이번만 기본 소리로
+  clickUserBytes = fetch(u).then(r=> r.ok ? r.arrayBuffer() : null).catch(()=> null);
+  return clickUserBytes;
+}
+/* 고른 소리가 바뀌면 풀어 둔 것을 버립니다 — 안 버리면 앞 소리가 계속 납니다 */
+function clickSoundReset(){ clickBuf = null; clickDecoding = null; clickUserBytes = null; }
 function playClickSound(){
   const AC = window.AudioContext || window.webkitAudioContext;
   if(!AC) return;
@@ -2035,16 +2082,16 @@ function playClickSound(){
       const src = clickCtx.createBufferSource();
       src.buffer = buf;
       const gain = clickCtx.createGain();
-      gain.gain.value = CLICK_VOLUME;
+      gain.gain.value = clickVolume();
       src.connect(gain).connect(clickCtx.destination);
-      src.start(0, Math.min(CLICK_SOUND_SKIP, buf.duration));
+      src.start(0, Math.min(clickSkip(), buf.duration));
     }catch(_){ /* 소리는 곁들이는 것이라 실패해도 조용히 넘어갑니다 */ }
   };
   if(clickBuf){ fire(clickBuf); return; }
   /* 푸는 것은 한 번만 — decodeAudioData 는 받은 바이트를 써 버려서 두 번 못 합니다 */
   if(!clickDecoding){
-    clickDecoding = clickBytes
-      .then(b=> b ? clickCtx.decodeAudioData(b) : null)
+    clickDecoding = Promise.resolve(clickSourceBytes())
+      .then(b=> b ? clickCtx.decodeAudioData(b.slice ? b.slice(0) : b) : null)
       .then(buf=>{ clickBuf = buf; return buf; })
       .catch(()=> null);
   }
@@ -10498,7 +10545,7 @@ function renderArchive(){
   const wrap=document.getElementById('archiveBody');
   // PAIR 처럼 상단에 현재 카테고리를 함께 표기
   const titleEl=document.getElementById('archiveTitle');
-  if(titleEl) titleEl.innerText = 'Archive · ' + (ARCHIVE_CAT_LABEL[currentArchiveCategory] || currentArchiveCategory);
+  if(titleEl) titleEl.innerText = navName('archive') + ' · ' + (ARCHIVE_CAT_LABEL[currentArchiveCategory] || currentArchiveCategory);
   const isGallery = currentArchiveCategory==='nai';
 
   /* 선택 / 일괄 삭제는 세 카테고리 모두에서 씁니다.
@@ -11548,6 +11595,752 @@ window.addEventListener('resize', ()=>{
     });
   }, 120);
 });
+
+/* ============================================================
+   설정 — 커서 · 이펙트 · 효과음 · 사이드바
+   ============================================================ */
+
+/* ---- 커서 모양 ----
+   네 자리뿐인 까닭: CSS 가 실제로 가려낼 수 있는 상태가 이것들입니다.
+   '누르고 있는 동안' 은 CSS 에 그런 상태가 없어서 뺐습니다.
+
+   **폴백 키워드는 반드시 붙입니다.** `cursor:url(..)` 만 쓰면 그림을 못 받았을 때
+   선언 자체가 무효가 되어 커서가 사라진 것처럼 보입니다. 뒤에 `, pointer` 처럼
+   붙여 두면 어떤 경우에도 돌아갈 곳이 있습니다 — ANI 를 올렸을 때 깨지지 않고
+   기본 커서로 보이는 것도 이 덕분입니다.
+
+   선택자는 **사이트가 이미 cursor 를 적어 둔 곳들을 이겨야 하므로** !important 로
+   둡니다. 중요도가 같을 때는 구체성이 이기므로, 아래 네 묶음은 적어둔 차례대로
+   점점 좁아져서 입력칸 안에서는 글자 커서가, 단추 위에서는 손가락이 이깁니다. */
+const CURSOR_SLOTS = [
+  { key:'default', name:'기본',            fallback:'auto',    hint:'아무 데나' },
+  { key:'pointer', name:'누를 수 있는 것', fallback:'pointer', hint:'단추·메뉴 위' },
+  { key:'text',    name:'글자',            fallback:'text',    hint:'글 쓰는 칸 안' },
+  { key:'grab',    name:'끌기',            fallback:'grab',    hint:'끌 수 있는 것 위' }
+];
+const CURSOR_SEL = {
+  default: 'html, body',
+  pointer: 'a, button, summary, label, select, [role="button"], ' +
+           'input[type="button"], input[type="submit"], input[type="reset"], ' +
+           'input[type="checkbox"], input[type="radio"], input[type="file"], ' +
+           '.nav-item, .nav-sub-item, .smi, .mg-tab, .wg-chip, .post-card, .dream-card',
+  text:    'input:not([type]), input[type="text"], input[type="search"], input[type="email"], ' +
+           'input[type="password"], input[type="number"], input[type="url"], ' +
+           'textarea, [contenteditable="true"], [contenteditable=""]',
+  grab:    '[draggable="true"], .wg-grip, .sticker, .adj-layer, .meta-drag'
+};
+const CURSOR_MAX = 32;        // 크롬은 128px 이 넘으면 통째로 무시합니다
+let cursorStyleEl = null;
+
+function normalizeCursors(v){
+  const out = {};
+  CURSOR_SLOTS.forEach(sl=>{
+    const o = (v && v[sl.key]) || null;
+    if(!o || !o.src){ out[sl.key] = null; return; }
+    out[sl.key] = {
+      src: String(o.src),
+      x: Math.max(0, Math.min(CURSOR_MAX, Number(o.x) || 0)),
+      y: Math.max(0, Math.min(CURSOR_MAX, Number(o.y) || 0)),
+      name: String(o.name || '')
+    };
+  });
+  return out;
+}
+function saveCursors(){ return storageSet('cursors', state.cursors); }
+
+/* 올린 파일을 쓸 수 있는 모양으로 바꿉니다.
+   · PNG·GIF 는 캔버스로 32px 까지 줄이고 **PNG 로** 내보냅니다(JPEG 는 투명을
+     못 담아 커서 뒤에 흰 네모가 생깁니다).
+   · CUR·ANI 는 브라우저가 <img> 로 그려주지 않아 캔버스에 올릴 수 없습니다 —
+     줄이지 않고 그대로 담습니다. 크기는 원래 작게 만들어진 형식이라 괜찮습니다. */
+function cursorFromFile(file){
+  return new Promise((resolve, reject)=>{
+    const name = (file.name || '').toLowerCase();
+    const raw = /\.(cur|ani|ico)$/.test(name);
+    const fr = new FileReader();
+    fr.onerror = ()=> reject(new Error('읽지 못했어요'));
+    fr.onload = ()=>{
+      const url = String(fr.result || '');
+      if(raw){ resolve({ src:url, name:file.name, animated:/\.ani$/.test(name) }); return; }
+      const im = new Image();
+      im.onload = ()=>{
+        const k = Math.min(1, CURSOR_MAX / Math.max(im.width, im.height, 1));
+        const w = Math.max(1, Math.round(im.width * k));
+        const h = Math.max(1, Math.round(im.height * k));
+        const cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        const cx = cv.getContext('2d');
+        cx.imageSmoothingQuality = 'high';
+        cx.drawImage(im, 0, 0, w, h);
+        let outUrl;
+        try{ outUrl = cv.toDataURL('image/png'); }catch(_){ outUrl = url; }
+        cv.width = cv.height = 0;      // 아이폰 캔버스 한도 — 쓰고 바로 놓습니다
+        resolve({ src:outUrl, name:file.name, animated:/\.gif$/.test(name) });
+      };
+      im.onerror = ()=> reject(new Error('그림으로 읽지 못했어요'));
+      im.src = url;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
+/* 커서 규칙을 한 장에 몰아 씁니다. 그림이 아직 안 왔으면(imgUrl 이 빈 글자)
+   그 줄은 아예 쓰지 않습니다 — 빈 주소를 넣으면 선언이 무효가 됩니다. */
+function applyCursors(){
+  if(!cursorStyleEl){
+    cursorStyleEl = document.createElement('style');
+    cursorStyleEl.id = 'cursorStyle';
+    document.head.appendChild(cursorStyleEl);
+  }
+  const cur = state.cursors || {};
+  const lines = [];
+  CURSOR_SLOTS.forEach(sl=>{
+    const c = cur[sl.key];
+    if(!c || !c.src) return;
+    const u = imgUrl(c.src);
+    if(!u) return;
+    lines.push(CURSOR_SEL[sl.key] + '{cursor:url("' + u + '") ' + (c.x|0) + ' ' + (c.y|0)
+               + ', ' + sl.fallback + ' !important;}');
+  });
+  cursorStyleEl.textContent = lines.join('\n');
+}
+
+function renderCursorPane(){
+  const box = document.getElementById('curList');
+  if(!box) return;
+  box.innerHTML = '';
+  const cur = state.cursors || {};
+  CURSOR_SLOTS.forEach(sl=>{
+    const c = cur[sl.key];
+    const row = document.createElement('div');
+    row.className = 'cur-row';
+    row.innerHTML =
+      '<span class="cur-prev"></span>' +
+      '<span class="cur-txt"><span class="cur-name"></span><span class="cur-hint"></span></span>' +
+      '<span class="cur-hot"><span class="wg-f-label">잡는 점</span>' +
+        '<input type="number" class="cur-x" min="0" max="' + CURSOR_MAX + '" />' +
+        '<input type="number" class="cur-y" min="0" max="' + CURSOR_MAX + '" /></span>' +
+      '<span class="wg-row-ctl">' +
+        '<button class="wg-chip cur-pick" type="button">파일</button>' +
+        '<button class="wg-chip cur-code" type="button">코드</button>' +
+        '<button class="wg-chip wg-c-del cur-clr" type="button">지우기</button>' +
+      '</span>';
+    row.querySelector('.cur-name').textContent = sl.name;
+    row.querySelector('.cur-hint').textContent = sl.hint;
+    const prev = row.querySelector('.cur-prev');
+    if(c && c.src){
+      const u = imgUrl(c.src);
+      if(u){
+        const im = document.createElement('img');
+        im.src = u; im.alt = '';
+        prev.appendChild(im);
+      }
+      whenImgArrives(c.src, prev, ()=>{ renderCursorPane(); applyCursors(); });
+    }else{
+      prev.classList.add('cur-prev-empty');
+      prev.textContent = '없음';
+    }
+    const xs = row.querySelector('.cur-x'), ys = row.querySelector('.cur-y');
+    xs.value = c ? (c.x | 0) : 0;
+    ys.value = c ? (c.y | 0) : 0;
+    xs.disabled = ys.disabled = !c;
+    const hot = ()=>{
+      const o = (state.cursors || {})[sl.key];
+      if(!o) return;
+      o.x = Math.max(0, Math.min(CURSOR_MAX, Number(xs.value) || 0));
+      o.y = Math.max(0, Math.min(CURSOR_MAX, Number(ys.value) || 0));
+      applyCursors();
+      if(isLoggedIn) saveCursors();
+    };
+    xs.addEventListener('change', hot);
+    ys.addEventListener('change', hot);
+    row.querySelector('.cur-pick').addEventListener('click', ()=> cursorAsk(sl.key));
+    row.querySelector('.cur-code').addEventListener('click', ()=> cursorToggleCode(sl.key, row));
+    row.querySelector('.cur-clr').addEventListener('click', ()=>{
+      if(!state.cursors) state.cursors = normalizeCursors(null);
+      state.cursors[sl.key] = null;
+      applyCursors(); renderCursorPane();
+      if(isLoggedIn) saveCursors();
+    });
+    box.appendChild(row);
+    if(cursorCodeOpen === sl.key) cursorBuildCode(sl.key, row);
+  });
+}
+
+/* ---- 코드로 넣기 ----
+   돌아다니는 커서 코드는 거의 다 이런 모양입니다:
+       <style> body, a:hover { cursor: url('…png'), auto; } </style>
+   그래서 **붙여넣은 글에서 `cursor:url(…)` 을 찾아** 그 주소와 잡는 점을 이 자리에
+   담습니다. CSS 를 통째로 끼워 넣지 않는 까닭: 그러면 남의 선택자와 이 사이트의
+   네 자리 규칙이 서로를 덮어써서, 어느 쪽이 이겼는지 알 수 없게 됩니다.
+   주소만 적어 넣어도 받습니다(한 줄짜리 그림 주소). */
+let cursorCodeOpen = null;
+function cursorToggleCode(key, row){
+  const open = (cursorCodeOpen === key);
+  document.querySelectorAll('.cur-code-box').forEach(n=> n.remove());
+  document.querySelectorAll('.cur-row').forEach(n=> n.classList.remove('cur-row-open'));
+  cursorCodeOpen = open ? null : key;
+  if(!open) cursorBuildCode(key, row);
+}
+function cursorBuildCode(key, row){
+  row.classList.add('cur-row-open');
+  const box = document.createElement('div');
+  box.className = 'cur-code-box';
+  box.innerHTML =
+    '<div class="wg-f"><span class="wg-f-label">HTML</span>' +
+      '<textarea class="cur-html" rows="4" spellcheck="false" ' +
+      'placeholder="&lt;style&gt; body{ cursor:url(\'…png\'), auto; } &lt;/style&gt;"></textarea></div>' +
+    '<div class="wg-f"><span class="wg-f-label">CSS</span>' +
+      '<textarea class="cur-css" rows="4" spellcheck="false" ' +
+      'placeholder="cursor: url(\'https://…/cursor.png\') 0 0, auto;"></textarea></div>' +
+    '<p class="cur-code-warn"></p>' +
+    '<div class="wg-add-row">' +
+      '<button class="btn-ghost" type="button" data-cc="cancel">닫기</button>' +
+      '<button class="btn-primary" type="button" data-cc="save">적용</button>' +
+    '</div>';
+  const warn = box.querySelector('.cur-code-warn');
+  box.querySelectorAll('textarea').forEach(t=>{
+    t.addEventListener('click', (e)=> e.stopPropagation());
+    t.addEventListener('keydown', (e)=> e.stopPropagation());
+  });
+  box.addEventListener('click', (e)=> e.stopPropagation());
+  box.querySelector('[data-cc="cancel"]').addEventListener('click', ()=>{
+    cursorCodeOpen = null; renderCursorPane();
+  });
+  box.querySelector('[data-cc="save"]').addEventListener('click', ()=>{
+    const code = (box.querySelector('.cur-html').value || '') + '\n'
+               + (box.querySelector('.cur-css').value || '');
+    const got = cursorFromCode(code);
+    if(!got){
+      warn.textContent = '그림 주소를 못 찾았어요. cursor:url(…) 이 들어간 코드나 그림 주소를 넣어주세요.';
+      return;
+    }
+    if(!state.cursors) state.cursors = normalizeCursors(null);
+    state.cursors[key] = { src:got.src, x:got.x, y:got.y, name:got.name };
+    cursorCodeOpen = null;
+    applyCursors(); renderCursorPane();
+    if(isLoggedIn) saveCursors();
+  });
+  row.appendChild(box);
+}
+/* 붙여넣은 글에서 그림 주소와 잡는 점을 꺼냅니다.
+   `cursor: url("x.png") 4 2, auto` 와 맨 주소 한 줄, 둘 다 받습니다. */
+function cursorFromCode(code){
+  const txt = String(code || '');
+  let m = /cursor\s*:\s*url\(\s*['"]?([^'")]+)['"]?\s*\)(?:\s+(-?\d+)\s+(-?\d+))?/i.exec(txt);
+  if(m){
+    return {
+      src: m[1].trim(),
+      x: Math.max(0, Math.min(CURSOR_MAX, parseInt(m[2] || '0', 10) || 0)),
+      y: Math.max(0, Math.min(CURSOR_MAX, parseInt(m[3] || '0', 10) || 0)),
+      name: '코드'
+    };
+  }
+  m = /(https?:\/\/[^\s'"<>()]+\.(?:png|gif|cur|ico|svg|webp))/i.exec(txt);
+  if(m) return { src:m[1], x:0, y:0, name:'코드' };
+  m = /(data:image\/[a-z.+-]+;base64,[A-Za-z0-9+/=]+)/i.exec(txt);
+  if(m) return { src:m[1], x:0, y:0, name:'코드' };
+  return null;
+}
+
+let cursorPickSlot = null;
+function cursorAsk(slot){
+  const pick = document.getElementById('curFilePick');
+  if(!pick) return;
+  cursorPickSlot = slot;
+  pick.value = '';
+  pick.click();
+}
+function initCursorPane(){
+  const pick = document.getElementById('curFilePick');
+  if(!pick) return;
+  pick.addEventListener('change', async ()=>{
+    const file = pick.files && pick.files[0];
+    if(!file || !cursorPickSlot) return;
+    const note = document.querySelector('.mg-pane[data-mgpane="cursor"] .mg-note');
+    try{
+      const got = await cursorFromFile(file);
+      if(!state.cursors) state.cursors = normalizeCursors(null);
+      state.cursors[cursorPickSlot] = { src:got.src, x:0, y:0, name:got.name };
+      applyCursors(); renderCursorPane();
+      if(isLoggedIn) saveCursors();
+      if(got.animated && note){
+        note.textContent = got.name + ' — 움직이는 커서는 크롬이 그려주지 않아서 기본 커서로 보여요.';
+      }
+    }catch(e){
+      if(note) note.textContent = '그 파일은 쓰지 못했어요: ' + e.message;
+    }
+    cursorPickSlot = null;
+  });
+}
+
+/* ---- 커서 이펙트 ----
+   고르는 것 셋은 이 파일 안에서 그립니다. 직접 넣는 코드는 **격리된 칸**에서
+   돌립니다 — 돌아다니는 스크립트들은 전부 `<script>` 라서, 페이지 안에서 그냥
+   돌리면 로그인된 Firestore 쓰기 권한을 그대로 쥐게 됩니다. 투명한 전체화면
+   iframe 에 넣고 마우스 자리만 넘겨 주면, 코드는 손대지 않고도 돌면서 바깥은
+   건드리지 못합니다(HTML 상자와 같은 규칙: allow-same-origin 을 주지 않습니다). */
+const FX_PRESETS = [
+  { key:'none',    name:'없음',      hint:'기본' },
+  { key:'trail',   name:'꼬리',      hint:'따라오는 점' },
+  { key:'ripple',  name:'클릭 파동', hint:'누르면 퍼짐' },
+  { key:'sparkle', name:'반짝이',    hint:'움직이면 반짝' }
+];
+const FX_KEYS = FX_PRESETS.map(f=> f.key);
+function normalizeCursorFx(v){
+  return {
+    preset: FX_KEYS.includes(v && v.preset) ? v.preset : 'none',
+    code: String((v && v.code) || '')
+  };
+}
+function saveCursorFx(){ return storageSet('cursorFx', state.cursorFx); }
+
+let fxLayer = null, fxCtx = null, fxBits = [], fxTimer = 0, fxFrame = null;
+function fxCanvas(){
+  if(fxLayer) return fxLayer;
+  fxLayer = document.createElement('canvas');
+  fxLayer.className = 'fx-layer';
+  document.body.appendChild(fxLayer);
+  fxCtx = fxLayer.getContext('2d');
+  const fit = ()=>{
+    const r = Math.min(window.devicePixelRatio || 1, 2);
+    fxLayer.width = Math.round(window.innerWidth * r);
+    fxLayer.height = Math.round(window.innerHeight * r);
+    fxCtx.setTransform(r, 0, 0, r, 0, 0);
+  };
+  fit();
+  window.addEventListener('resize', fit);
+  return fxLayer;
+}
+function fxStop(){
+  clearTimeout(fxTimer); fxTimer = 0;
+  fxBits = [];
+  if(fxCtx && fxLayer) fxCtx.clearRect(0, 0, fxLayer.width, fxLayer.height);
+  if(fxLayer) fxLayer.style.display = 'none';
+}
+/* **requestAnimationFrame 을 쓰지 않습니다** — 배경 탭에서는 한 장도 그리지 않아
+   점이 화면에 박힌 채 남습니다. setTimeout 은 느려질 뿐 반드시 옵니다. */
+function fxTick(){
+  if(!fxBits.length){ fxTimer = 0; if(fxCtx && fxLayer) fxCtx.clearRect(0,0,fxLayer.width,fxLayer.height); return; }
+  const w = window.innerWidth, h = window.innerHeight;
+  fxCtx.clearRect(0, 0, w, h);
+  const now = Date.now();
+  for(let i = fxBits.length - 1; i >= 0; i--){
+    const b = fxBits[i];
+    const t = (now - b.t0) / b.life;
+    if(t >= 1){ fxBits.splice(i, 1); continue; }
+    fxCtx.globalAlpha = Math.max(0, 1 - t);
+    if(b.kind === 'ripple'){
+      fxCtx.beginPath();
+      fxCtx.arc(b.x, b.y, 6 + t * 26, 0, Math.PI * 2);
+      fxCtx.strokeStyle = b.c; fxCtx.lineWidth = 2;
+      fxCtx.stroke();
+    }else if(b.kind === 'sparkle'){
+      const r = 5 * (1 - t);
+      fxCtx.fillStyle = b.c;
+      fxCtx.beginPath();
+      fxCtx.moveTo(b.x, b.y - r * 2); fxCtx.lineTo(b.x + r * .6, b.y - r * .6);
+      fxCtx.lineTo(b.x + r * 2, b.y);  fxCtx.lineTo(b.x + r * .6, b.y + r * .6);
+      fxCtx.lineTo(b.x, b.y + r * 2);  fxCtx.lineTo(b.x - r * .6, b.y + r * .6);
+      fxCtx.lineTo(b.x - r * 2, b.y);  fxCtx.lineTo(b.x - r * .6, b.y - r * .6);
+      fxCtx.closePath(); fxCtx.fill();
+    }else{
+      fxCtx.fillStyle = b.c;
+      fxCtx.beginPath();
+      fxCtx.arc(b.x, b.y + t * 10, 4 * (1 - t) + 1, 0, Math.PI * 2);
+      fxCtx.fill();
+    }
+  }
+  fxCtx.globalAlpha = 1;
+  fxTimer = setTimeout(fxTick, 24);
+}
+function fxAdd(kind, x, y){
+  fxCanvas().style.display = 'block';
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#ef3921';
+  fxBits.push({ kind, x, y, t0:Date.now(), life: kind === 'ripple' ? 520 : 620, c:accent });
+  if(fxBits.length > 90) fxBits.splice(0, fxBits.length - 90);
+  if(!fxTimer) fxTimer = setTimeout(fxTick, 16);
+}
+let fxLastMove = 0;
+document.addEventListener('pointermove', (e)=>{
+  const p = (state.cursorFx || {}).preset;
+  if(p !== 'trail' && p !== 'sparkle') return;
+  if(e.pointerType !== 'mouse') return;
+  const now = Date.now();
+  if(now - fxLastMove < (p === 'sparkle' ? 70 : 28)) return;
+  fxLastMove = now;
+  fxAdd(p === 'sparkle' ? 'sparkle' : 'trail', e.clientX, e.clientY);
+}, { passive:true });
+document.addEventListener('pointerdown', (e)=>{
+  if((state.cursorFx || {}).preset !== 'ripple') return;
+  if(e.pointerType !== 'mouse') return;
+  fxAdd('ripple', e.clientX, e.clientY);
+}, { passive:true, capture:true });
+
+/* 직접 넣은 코드가 도는 격리 칸. 투명한 전체화면이고 마우스를 가로채지 않습니다
+   (pointer-events:none). 바깥에서 자리를 postMessage 로 보내고, 프레임 안에서
+   그 자리로 가짜 mousemove 를 다시 쏩니다 — 티스토리용 스크립트들이 보통
+   document 의 mousemove 를 듣기 때문입니다. */
+let fxFrameEl = null;
+function fxCodeStop(){
+  if(fxFrameEl){ fxFrameEl.remove(); fxFrameEl = null; }
+}
+function fxCodeStart(code){
+  fxCodeStop();
+  if(!code || !code.trim()) return;
+  const body = code.replace(/<\/?script[^>]*>/gi, '');
+  const f = document.createElement('iframe');
+  f.className = 'fx-frame';
+  f.setAttribute('sandbox', 'allow-scripts');     // allow-same-origin 은 주지 않습니다
+  f.srcdoc = '<!doctype html><meta charset="utf-8">'
+    + '<style>html,body{margin:0;height:100%;overflow:hidden;background:transparent;}</style>'
+    + '<body><scr' + 'ipt>'
+    + 'window.addEventListener("message",function(e){var d=e.data;'
+    + 'if(!d||d.__fx!==1)return;'
+    + 'var t=d.t==="down"?"mousedown":d.t==="up"?"mouseup":"mousemove";'
+    + 'var ev=new MouseEvent(t,{clientX:d.x,clientY:d.y,bubbles:true,cancelable:true,view:window});'
+    + 'document.dispatchEvent(ev);if(document.body)document.body.dispatchEvent(ev);});'
+    + '<\/scr' + 'ipt><scr' + 'ipt>' + body + '<\/scr' + 'ipt>';
+  document.body.appendChild(f);
+  fxFrameEl = f;
+}
+function fxSend(t, x, y){
+  if(!fxFrameEl || !fxFrameEl.contentWindow) return;
+  try{ fxFrameEl.contentWindow.postMessage({ __fx:1, t, x, y }, '*'); }catch(_){}
+}
+document.addEventListener('pointermove', (e)=> fxSend('move', e.clientX, e.clientY), { passive:true });
+document.addEventListener('pointerdown', (e)=> fxSend('down', e.clientX, e.clientY), { passive:true, capture:true });
+document.addEventListener('pointerup',   (e)=> fxSend('up',   e.clientX, e.clientY), { passive:true, capture:true });
+
+function applyCursorFx(){
+  const fx = state.cursorFx || { preset:'none', code:'' };
+  if(fx.preset === 'none') fxStop();
+  else fxCanvas().style.display = 'block';
+  fxCodeStart(fx.code);
+}
+function renderFxPane(){
+  const box = document.getElementById('fxPicks');
+  if(!box) return;
+  const fx = state.cursorFx || { preset:'none', code:'' };
+  box.innerHTML = '';
+  FX_PRESETS.forEach(f=>{
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'fx-pick' + (fx.preset === f.key ? ' active' : '');
+    b.innerHTML = '<span class="fx-pick-name"></span><span class="fx-pick-hint"></span>';
+    b.querySelector('.fx-pick-name').textContent = f.name;
+    b.querySelector('.fx-pick-hint').textContent = f.hint;
+    b.addEventListener('click', ()=>{
+      state.cursorFx = normalizeCursorFx({ preset:f.key, code:fx.code });
+      applyCursorFx(); renderFxPane();
+      if(isLoggedIn) saveCursorFx();
+    });
+    box.appendChild(b);
+  });
+  const ta = document.getElementById('fxCode');
+  if(ta && document.activeElement !== ta) ta.value = fx.code || '';
+}
+function initFxPane(){
+  const ta = document.getElementById('fxCode');
+  const save = document.getElementById('fxCodeSave');
+  const clr = document.getElementById('fxCodeClear');
+  const pick = document.getElementById('fxFilePick');
+  if(!save) return;
+  save.addEventListener('click', ()=>{
+    state.cursorFx = normalizeCursorFx({ preset:(state.cursorFx||{}).preset, code: ta.value || '' });
+    applyCursorFx(); renderFxPane();
+    if(isLoggedIn) saveCursorFx();
+  });
+  clr.addEventListener('click', ()=>{
+    ta.value = '';
+    state.cursorFx = normalizeCursorFx({ preset:(state.cursorFx||{}).preset, code:'' });
+    applyCursorFx(); renderFxPane();
+    if(isLoggedIn) saveCursorFx();
+  });
+  document.getElementById('fxCodeFile')?.addEventListener('click', ()=>{ pick.value = ''; pick.click(); });
+  pick?.addEventListener('change', ()=>{
+    const file = pick.files && pick.files[0];
+    if(!file) return;
+    if(file.size > 300000) return;
+    const r = new FileReader();
+    r.onload = ()=>{ ta.value = String(r.result || ''); ta.focus(); };
+    r.readAsText(file);
+  });
+}
+
+/* ---- 클릭 효과음 ----
+   파일 앞의 빈 구간은 **올릴 때 자동으로 잽니다** — mp3 로 만들면 맨 앞에 여백이
+   붙는데, 그만큼 건너뛰고 틀어야 손가락과 소리가 맞습니다. 예전에는 18ms 를
+   손으로 박아 두었고, 소리를 바꾸면 다시 재야 했습니다. */
+/* **모아 두고 고릅니다.** 예전에는 소리 하나만 담아서, 새로 올리면 앞 것이
+   사라져 되돌릴 수가 없었습니다(주인 지시로 목록이 됐습니다).
+   `cur` 가 비어 있으면 사이트에 딸린 기본 소리입니다 — 그 기본은 목록에 담지
+   않습니다(파일이 저장소가 아니라 사이트에 있으니까요).
+   **예전 모양(그냥 {src,skip,name})도 받아 줍니다** — 이미 올려 둔 소리가
+   목록이 되면서 사라지면 안 되니, 첫 줄로 옮겨 담고 그것을 고른 것으로 둡니다. */
+function normalizeClickSound(v){
+  const vol = Math.max(0, Math.min(1, v && v.vol != null ? Number(v.vol) : 0.4));
+  const list = [];
+  const seen = new Set();
+  const push = (o)=>{
+    if(!o || !o.src) return null;
+    const id = String(o.id || ('cs' + Date.now().toString(36) + Math.random().toString(36).slice(2,5)));
+    if(seen.has(id)) return null;
+    seen.add(id);
+    list.push({
+      id,
+      name: String(o.name || '소리').slice(0, 40),
+      src: String(o.src),
+      skip: Math.max(0, Math.min(1, Number(o.skip) || 0))
+    });
+    return id;
+  };
+  let cur = '';
+  if(v && Array.isArray(v.list)){
+    v.list.forEach(push);
+    cur = String(v.cur || '');
+  }else if(v && v.src){
+    cur = push({ src:v.src, name:v.name, skip:v.skip }) || '';
+  }
+  if(cur && !seen.has(cur)) cur = '';
+  return { vol, cur, list };
+}
+function clickSoundCur(){
+  const cs = state.clickSound || {};
+  return (cs.list || []).find(x=> x.id === cs.cur) || null;
+}
+function saveClickSound(){ return storageSet('clickSound', state.clickSound); }
+/* 첫 소리가 나기 시작하는 자리 — 봉우리의 2% 를 넘는 첫 표본입니다. */
+function measureLeadSilence(buf){
+  const ch = buf.getChannelData(0);
+  let peak = 0;
+  for(let i = 0; i < ch.length; i++){ const a = Math.abs(ch[i]); if(a > peak) peak = a; }
+  if(peak <= 0) return 0;
+  const gate = peak * 0.02;
+  for(let i = 0; i < ch.length; i++){
+    if(Math.abs(ch[i]) >= gate) return Math.max(0, i / buf.sampleRate - 0.002);
+  }
+  return 0;
+}
+function renderSoundPane(){
+  const box = document.getElementById('sndList');
+  if(!box) return;
+  const cs = state.clickSound || normalizeClickSound(null);
+  box.innerHTML = '';
+  /* 기본 소리는 늘 첫 줄이고 지울 수 없습니다 */
+  const rows = [{ id:'', name:'기본 소리', fixed:true }].concat(cs.list || []);
+  rows.forEach(r=>{
+    const on = (cs.cur || '') === r.id;
+    const row = document.createElement('div');
+    row.className = 'snd-row' + (on ? ' snd-on' : '');
+    row.dataset.sndid = r.id;
+    row.innerHTML =
+      '<span class="snd-mark" aria-hidden="true"></span>' +
+      '<span class="snd-name"></span>' +
+      '<span class="snd-skip"></span>' +
+      '<span class="wg-row-ctl">' +
+        '<button class="wg-chip snd-try" type="button">들어보기</button>' +
+        (on ? '<button class="wg-chip wg-chip-on" type="button" disabled>고름</button>'
+            : '<button class="wg-chip snd-use" type="button">고르기</button>') +
+        (r.fixed ? '' : '<button class="wg-chip wg-c-del snd-del" type="button">삭제</button>') +
+      '</span>';
+    row.querySelector('.snd-name').textContent = r.name;
+    row.querySelector('.snd-skip').textContent = r.fixed
+      ? '' : '앞 ' + Math.round((r.skip || 0) * 1000) + 'ms 건너뜀';
+    row.querySelector('.snd-try').addEventListener('click', ()=> sndPreview(r.id));
+    const use = row.querySelector('.snd-use');
+    if(use) use.addEventListener('click', ()=>{
+      state.clickSound.cur = r.id;
+      clickSoundReset();
+      renderSoundPane();
+      if(isLoggedIn) saveClickSound();
+    });
+    const del = row.querySelector('.snd-del');
+    if(del) del.addEventListener('click', async ()=>{
+      if(!(await siteConfirm('‘' + r.name + '’ 소리를 목록에서 지울까요?'))) return;
+      state.clickSound.list = (state.clickSound.list || []).filter(x=> x.id !== r.id);
+      if(state.clickSound.cur === r.id) state.clickSound.cur = '';
+      clickSoundReset();
+      renderSoundPane();
+      if(isLoggedIn) saveClickSound();
+    });
+    box.appendChild(row);
+  });
+  const vol = document.getElementById('sndVol');
+  const n = document.getElementById('sndVolN');
+  if(vol){ vol.value = Math.round(cs.vol * 100); n.textContent = String(Math.round(cs.vol * 100)); }
+}
+
+/* 고르지 않은 소리도 들어볼 수 있어야 고를 수 있습니다.
+   **고른 것을 잠깐 바꿔치웠다 되돌리는 방법은 쓰지 않습니다** — 처음엔 그렇게
+   했는데, 되돌리기 전(0.9초) 사이에 다른 걸 누르거나 칸을 다시 그리면 들어보기만
+   했는데 고른 것이 바뀐 채로 남습니다. 여기서는 상태를 건드리지 않고 그 소리만
+   따로 풀어서 한 번 틉니다. */
+function sndPreview(id){
+  const cs = state.clickSound || {};
+  const item = id ? (cs.list || []).find(x=> x.id === id) : null;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if(!AC) return;
+  if(!clickCtx){ try{ clickCtx = new AC(); }catch(_){ return; } }
+  if(clickCtx.state === 'suspended') clickCtx.resume().catch(()=>{});
+  const skip = item ? (Number(item.skip) || 0) : CLICK_SOUND_SKIP;
+  let bytes;
+  if(item){
+    const u = imgUrl(item.src);
+    bytes = u ? fetch(u).then(r=> r.ok ? r.arrayBuffer() : null).catch(()=> null)
+              : Promise.resolve(null);
+  }else{
+    bytes = clickBytes;
+  }
+  Promise.resolve(bytes)
+    /* decodeAudioData 는 받은 바이트를 써 버립니다 — 늘 복사본을 줍니다 */
+    .then(b=> b ? clickCtx.decodeAudioData(b.slice(0)) : null)
+    .then(buf=>{
+      if(!buf) return;
+      const src = clickCtx.createBufferSource();
+      src.buffer = buf;
+      const gain = clickCtx.createGain();
+      gain.gain.value = clickVolume();
+      src.connect(gain).connect(clickCtx.destination);
+      src.start(0, Math.min(skip, buf.duration));
+    })
+    .catch(()=>{});
+}
+
+function initSoundPane(){
+  const pick = document.getElementById('sndFilePick');
+  if(!pick) return;
+  document.getElementById('sndPick').addEventListener('click', ()=>{ pick.value = ''; pick.click(); });
+  const vol = document.getElementById('sndVol');
+  vol.addEventListener('input', ()=>{
+    const v = Number(vol.value) / 100;
+    state.clickSound.vol = v;
+    document.getElementById('sndVolN').textContent = String(Math.round(v * 100));
+  });
+  vol.addEventListener('change', ()=>{ if(isLoggedIn) saveClickSound(); });
+  pick.addEventListener('change', async ()=>{
+    const file = pick.files && pick.files[0];
+    const note = document.getElementById('sndNote');
+    if(!file) return;
+    if(file.size > 400000){ if(note) note.textContent = '소리가 너무 커요 (400KB 까지).'; return; }
+    try{
+      const raw = await file.arrayBuffer();
+      const AC = window.AudioContext || window.webkitAudioContext;
+      const ctx = clickCtx || new AC();
+      const decoded = await ctx.decodeAudioData(raw.slice(0));
+      const skip = measureLeadSilence(decoded);
+      const url = await new Promise((res, rej)=>{
+        const fr = new FileReader();
+        fr.onload = ()=> res(String(fr.result || ''));
+        fr.onerror = ()=> rej(new Error('읽지 못했어요'));
+        fr.readAsDataURL(file);
+      });
+      const id = 'cs' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+      if(!state.clickSound.list) state.clickSound.list = [];
+      state.clickSound.list.push({ id, name:file.name, src:url, skip });
+      state.clickSound.cur = id;              // 방금 더한 것을 바로 씁니다
+      clickSoundReset();
+      renderSoundPane();
+      if(note) note.textContent = file.name + ' — 앞 빈 구간 ' + Math.round(skip * 1000) + 'ms 를 재서 건너뜁니다.';
+      if(isLoggedIn) saveClickSound();
+    }catch(e){
+      if(note) note.textContent = '소리로 읽지 못했어요.';
+    }
+  });
+}
+
+/* ---- 사이드바 ---- */
+const NAV_NAME_SLOTS = [
+  { key:'pair',    def:'Pair'    },
+  { key:'oc',      def:'OC'      },
+  { key:'archive', def:'Archive' },
+  { key:'portal',  def:'Portal'  }
+];
+function normalizeNavNames(v){
+  const out = {};
+  NAV_NAME_SLOTS.forEach(sl=>{
+    const t = String((v && v[sl.key]) || '').trim().slice(0, 16);
+    out[sl.key] = t;          // 빈 글자 = 원래 이름을 씁니다
+  });
+  return out;
+}
+function saveNavNames(){ return storageSet('navNames', state.navNames); }
+function navName(key){
+  const sl = NAV_NAME_SLOTS.find(x=> x.key === key);
+  if(!sl) return '';
+  return ((state.navNames || {})[key] || '').trim() || sl.def;
+}
+/* 이름은 사이드바 단추와 각 화면의 머리글 양쪽에 쓰입니다 — 한 군데(navName)에서
+   읽으므로 여기서 다시 그리면 둘 다 따라옵니다. */
+function applyNavNames(){
+  const set = (sel, text)=>{ const el = document.querySelector(sel); if(el) el.innerText = text; };
+  set('.nav-item[data-view="pair"]', navName('pair'));
+  set('.nav-item[data-view="oc"]', navName('oc'));
+  set('.nav-item[data-view="archive"]', navName('archive'));
+  set('#portalBtn', navName('portal'));
+  safely('PAIR 머리글', ()=> PAIR_CAT_NAV.title(catTitle(PAIR_CAT_NAV, currentPairFilter)));
+  safely('OC 머리글', ()=> OC_CAT_NAV.title(catTitle(OC_CAT_NAV, currentOcFilter)));
+  const at = document.getElementById('archiveTitle');
+  if(at) at.innerText = navName('archive') + ' · ' + (ARCHIVE_CAT_LABEL[currentArchiveCategory] || currentArchiveCategory);
+}
+function renderSidebarPane(){
+  const box = document.getElementById('navNameList');
+  if(!box) return;
+  box.innerHTML = '';
+  NAV_NAME_SLOTS.forEach(sl=>{
+    const row = document.createElement('div');
+    row.className = 'wg-row sb-row';
+    row.innerHTML =
+      '<span class="wg-row-name"></span>' +
+      '<span class="wg-row-ctl"><input type="text" class="wg-name-input sb-name" maxlength="16" /></span>';
+    row.querySelector('.wg-row-name').textContent = sl.def;
+    const inp = row.querySelector('.sb-name');
+    inp.value = (state.navNames || {})[sl.key] || '';
+    inp.placeholder = sl.def;
+    const commit = ()=>{
+      if(!state.navNames) state.navNames = normalizeNavNames(null);
+      state.navNames[sl.key] = (inp.value || '').trim().slice(0, 16);
+      applyNavNames();
+      if(isLoggedIn) saveNavNames();
+    };
+    inp.addEventListener('change', commit);
+    inp.addEventListener('keydown', (e)=>{
+      e.stopPropagation();
+      if(e.key === 'Enter'){ e.preventDefault(); inp.blur(); }
+    });
+    box.appendChild(row);
+  });
+  const btn = document.getElementById('sbStorage');
+  if(btn){
+    const on = state.showStorage !== false;
+    btn.textContent = on ? '보임' : '숨김';
+    btn.classList.toggle('wg-chip-on', on);
+  }
+}
+function applyShowStorage(){
+  document.body.classList.toggle('no-storage-meter', state.showStorage === false);
+}
+function initSidebarPane(){
+  const btn = document.getElementById('sbStorage');
+  if(!btn) return;
+  btn.addEventListener('click', ()=>{
+    state.showStorage = (state.showStorage === false);
+    applyShowStorage(); renderSidebarPane();
+    if(isLoggedIn) storageSet('showStorage', state.showStorage);
+  });
+}
+
+/* 설정 화면을 켤 때 네 장을 한꺼번에 맞춥니다 */
+function renderSettingPanes(){
+  safely('커서 칸', renderCursorPane);
+  safely('이펙트 칸', renderFxPane);
+  safely('소리 칸', renderSoundPane);
+  safely('사이드바 칸', renderSidebarPane);
+}
+initCursorPane();
+initFxPane();
+initSoundPane();
+initSidebarPane();
 
 /* ============================================================
    INIT

@@ -61,7 +61,20 @@ const SCALAR_KEYS = ['profile', 'siteName', 'homeIntro', 'homeBanner', 'archiveS
                         직접 만든 위젯의 HTML·CSS 도 여기 들어가지만 글자뿐이라
                         작습니다. 단, 위젯 CSS 안에 data: 그림을 박으면 그건
                         사진 창고로 빠져나가 용량을 깎습니다(주인에게 안내함). */
-                     'widgets'];
+                     'widgets',
+                     /* 커서 그림 네 가지. 32px 로 줄여 넣으므로 한 장에 몇 KB 이고,
+                        data: 라서 사진 창고로 빠져나갑니다(그래도 작습니다). */
+                     'cursors',
+                     /* 커서 이펙트 — 고른 이름 하나와 직접 넣은 코드(글자). */
+                     'cursorFx',
+                     /* 클릭 효과음 — 소리 파일과 음량. 소리도 data: 라서 사진과
+                        같은 창고로 빠져나갑니다. 음량은 보는 사람 모두에게 같아야
+                        하므로 여기 둡니다(뮤직 위젯 음량은 기기별이라 다릅니다). */
+                     'clickSound',
+                     /* 사이드바 메뉴 이름 바꾸기 — {pair, oc, archive, portal}. */
+                     'navNames',
+                     /* STORAGE 게이지를 사이드바에 둘지. 참/거짓 하나입니다. */
+                     'showStorage'];
 const LIST_KEYS   = ['cards', 'pairPosts', 'archive', 'ocPosts'];
 
 /* Firestore 문서 1개 최대 1MiB. 여유를 두고 자릅니다. */
