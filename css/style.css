@@ -565,6 +565,77 @@
   .storage-meter.warn .sm-pct{color:#c0392b;}
   .sm-sub{margin-top:5px;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:.12em;line-height:1.4;color:var(--text-muted);font-variant-numeric:tabular-nums;}
 
+  /* ---------- ✦ MENU ----------
+     사이드바의 가장 아래 줄입니다. 저장 용량 게이지 **밑**이고 편집 모드 전용.
+
+     글자 크기를 Home·Pair 와 같은 17px 로 하지 않은 까닭 — 이것은 가는 곳이
+     아니라 **도구**입니다. 바로 위의 STORAGE 라벨과 같은 10px 대문자 라벨로
+     두면 사이드바 바닥이 '메뉴 / 위젯 / 게이지 + 도구' 로 읽힙니다. 17px 로
+     키워 봤더니 세 항목을 펼칠 폭(256px)이 모자라기도 했습니다.
+
+     펼침은 **가로**입니다. 위로 펼치면 게이지를 덮고, 아래에는 자리가 없습니다
+     (여기가 사이드바 바닥입니다). width 를 0 에서 실제 폭까지 재우는 방식이고,
+     그 폭은 main.js 가 열 때마다 재서 넣습니다 — 넉넉한 max-width 로 두면
+     애니메이션이 실제 글자보다 긴 거리를 달려 늦게 끝난 것처럼 보입니다. */
+  .side-menu{display:flex;align-items:center;margin-top:16px;}
+  body.logged-in .side-menu[data-editonly]{display:flex;}
+  /* 굵어지는 움직임은 사이드바 메뉴(.nav-item)와 **같은 장치**입니다 — 쉬는
+     굵기를 적어 두고 font-variation-settings 에 전환을 걸어, Pretendard
+     Variable 의 굵기 축을 따라 흐르게 합니다. 쉬는 값을 적지 않으면 전환이
+     걸릴 출발점이 없어서 굵기가 한 프레임에 튑니다(처음에 그랬습니다).
+     글자 테두리로 굵은 흉내를 내는 옛 장치는 들여오지 마세요. */
+  .side-menu-btn{flex:none;display:flex;align-items:center;gap:6px;padding:0;height:20px;
+    background:transparent;border:none;border-radius:0;
+    font-family:var(--mono);font-size:10px;font-weight:500;text-transform:uppercase;
+    letter-spacing:.16em;color:var(--text-muted);
+    font-variation-settings:'wght' 500;
+    transition:color .22s ease,font-variation-settings .22s ease;}
+  /* ✦ 는 **직접 그린 그림**입니다(index.html 참고). 글자로 두었더니 100% 배율에서만
+     한 픽셀 떠 보였습니다 — Pretendard 에 없는 기호라 다른 서체로 넘어가고, 그 서체의
+     오르내림 높이를 크롬이 정수 픽셀로 반올림하는데 그 반올림이 배율마다 달라지기
+     때문입니다. 글자를 쓰는 한 padding 으로 보정해도 한 배율에서만 맞습니다.
+     그림은 상자가 곧 모양이라 어느 배율에서도 가운데에 섭니다(갤러리 단추들을
+     글자에서 그림으로 바꾼 것과 같은 까닭). 채우기만 쓰므로 stroke 는 없습니다. */
+  .smb-mark{flex:none;display:block;width:11px;height:11px;fill:currentColor;}
+  .side-menu-btn:hover,
+  .side-menu.open .side-menu-btn{color:var(--accent);font-variation-settings:'wght' 800;}
+  /* 펼쳐지는 칸. 넘치는 쪽을 감춰 두고 width 만 움직입니다. */
+  .side-menu-items{flex:none;display:flex;align-items:center;gap:5px;
+    width:0;overflow:hidden;white-space:nowrap;transition:width .26s ease;}
+  /* MENU 와 세 항목을 잇는 표식. 항목 사이의 가름점(·)이 하나인 것과 달리 셋을
+     띄워 놓아, '여기서 묶음이 바뀐다'로 읽힙니다. 점 사이 간격은 자간이 내므로
+     마지막 점 뒤에도 자간만큼이 남아, SETTING 앞 여백이 저절로 생깁니다
+     (그래서 padding-right 가 없습니다). 예전에는 첫 항목의 margin-left 11px
+     하나였는데, 주인이 더 띄우고 표식을 넣기를 원했습니다. */
+  /* **양쪽 간격이 눈에 같아 보여야 합니다.** 처음에는 왼쪽이 0 이었습니다 — MENU 와
+     .side-menu-items 는 .side-menu 의 형제이고 그 줄에는 gap 이 없어서, 점이 MENU 에
+     딱 붙었습니다(주인 지적).
+
+     고칠 때 **자간의 꼬리**를 빼놓으면 안 됩니다. 자간은 마지막 글자 **뒤에도** 붙어서,
+     상자 끝과 글자 끝이 어긋납니다 — MENU 는 .16em(1.6px), 점은 .26em(2.6px)이 꼬리로
+     남습니다. 그래서 상자만 맞추면 눈에는 2.6px 어긋나 보입니다. 둘 다 9px 로 맞춘 셈:
+       왼쪽  = margin-left 7.4 + MENU 꼬리 1.6        = 9
+       오른쪽 = margin-right 1.4 + 점 꼬리 2.6 + gap 5 = 9
+     **gap·자간·글자 크기를 바꾸면 이 산수를 다시 하세요.** */
+  .smi-lead{flex:none;font-family:var(--mono);font-size:10px;font-weight:500;
+    letter-spacing:.26em;margin-left:7.4px;margin-right:1.4px;color:var(--text-muted);opacity:.45;}
+  .smi{flex:none;padding:0;height:20px;background:transparent;border:none;border-radius:0;
+    font-family:var(--mono);font-size:10px;font-weight:500;text-transform:uppercase;
+    letter-spacing:.14em;color:var(--text-muted);
+    font-variation-settings:'wght' 500;
+    transition:color .22s ease,font-variation-settings .22s ease;}
+  .smi:hover{color:var(--accent);font-variation-settings:'wght' 800;}
+  /* **폭을 잴 때만** 셋을 다 굵게 합니다. 칸의 폭은 쉬는 모습에서 재는데, 굵어진
+     글자는 조금 넓어서 마지막 항목이 1~2px 잘렸습니다. 굵은 모습으로 재 두면
+     어느 상태에서도 넘치지 않습니다 — 재는 동안 전환도 꺼야 합니다(한 프레임
+     안에 붙였다 떼므로 눈에는 안 보이지만, 전환이 걸리면 값이 흐르는 중에
+     읽힙니다). */
+  .side-menu-items.measuring .smi{font-variation-settings:'wght' 800;transition:none;}
+  .smi-dot{flex:none;font-family:var(--mono);font-size:10px;color:var(--text-muted);opacity:.45;}
+  /* 지금 보고 있는 관리 화면은 사이드바 분류와 같은 방식으로 표시합니다 */
+  body[data-view="setting"] .smi[data-menu="setting"],
+  body[data-view="widget"] .smi[data-menu="widget"]{color:var(--accent);font-variation-settings:'wght' 800;}
+
   [data-editonly]{display:none;}
   body.logged-in [data-editonly]{display:inline-flex;}
   body.logged-in .add-card[data-editonly]{display:flex;}
@@ -1555,6 +1626,32 @@
      격자·표의 높이는 한 픽셀도 달라지지 않았습니다.
      검색 줄은 이 칸 바깥(형제)이라 이 간격을 받지 않습니다. */
   .archive-body{padding:0 0 10px;display:flex;flex-direction:column;gap:28px;flex:1;min-height:0;}
+
+  /* ---- SETTING · WIDGET ----
+     ARCHIVE 와 같은 뼈대입니다 — 상단바는 제자리에 두고 아래 칸만 남은 높이를
+     차지합니다(.view.active 의 display:block 을 여기서 덮어씁니다).
+
+     선택기는 상단바 **오른쪽**, ARCHIVE 가 단추를 두는 자리입니다. 왼쪽에는
+     화면 이름이 있어서(.topbar h2) 둘이 한 줄에서 마주봅니다. 글자는 화면
+     이름과 똑같은 10px 대문자 라벨이고, 지금 보고 있는 장만 신호색으로
+     굵어집니다 — 네모 테두리나 밑줄을 두르지 않은 까닭은 이 사이트에서
+     '지금 여기'를 늘 색과 굵기로만 표시하기 때문입니다(.nav-sub-item 참고). */
+  #view-setting.active,
+  #view-widget.active{display:flex;flex-direction:column;min-height:0;}
+  .mg-tabs{display:flex;align-items:center;gap:7px;}
+  .mg-tab{flex:none;padding:0;height:22px;background:transparent;border:none;border-radius:0;
+    font-family:var(--mono);font-size:10px;font-weight:500;text-transform:uppercase;
+    letter-spacing:.16em;color:var(--text-muted);
+    font-variation-settings:'wght' 500;
+    transition:color .22s ease,font-variation-settings .22s ease;}
+  .mg-tab:hover{color:var(--text);}
+  .mg-tab.active{color:var(--accent);font-variation-settings:'wght' 800;}
+  .mg-tab-dot{flex:none;font-family:var(--mono);font-size:10px;color:var(--text-muted);opacity:.45;}
+  .mg-body{flex:1;min-height:0;position:relative;padding:0 0 24px;}
+  .mg-pane{display:none;}
+  .mg-pane.active{display:flex;flex-direction:column;min-height:0;height:100%;overflow-y:auto;}
+  .mg-soon{margin:0;font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.04em;
+    color:var(--text-muted);}
   /* OOC/ETC 표는 길어지면 표 영역만 스크롤 (페이지 버튼은 아래에 고정) */
   .archive-table-scroll{flex:1;min-height:0;overflow-y:auto;}
   .arc-item{border:1px solid var(--border);border-radius:var(--radius);padding:14px;position:relative;background:var(--bg);}
@@ -3727,6 +3824,18 @@
     .nav-sub.open{max-height:70vh;}
     /* 터치 타겟 40px 이상 */
     .nav-cat-add{width:40px;height:40px;font-size:16px;}
+    /* ✦ MENU — 글자는 데스크톱과 같은 10px 라벨로 두고 누를 높이만 키웁니다.
+       키우면 서랍 안쪽 폭(270 - 여백 32 = 237px)에 `✦ MENU + 세 항목` 이 안
+       들어갑니다. 측정값: 데스크톱은 229 / 256 으로 27px 이 남는데 서랍에서는
+       8px 뿐이라, **간격만 줄여 여유를 15px 로 늘려 둡니다** — 글자는 그대로이니
+       눈에 보이는 차이는 없고, 제일 좁은 기기(320px → 안쪽 237)에서도 남습니다. */
+    .side-menu{margin-top:14px;}
+    .side-menu-btn,.smi{height:40px;}
+    .side-menu-items{gap:4px;}
+    /* 같은 산수, 폰 값으로: 왼쪽 7.4+1.6=9 / 오른쪽 3+2+gap 4=9 */
+    .smi-lead{letter-spacing:.2em;margin-left:7.4px;margin-right:3px;}
+    .smi{letter-spacing:.08em;}
+    .mg-tab{height:40px;}
     .ns-add-row{padding:8px 8px 8px 10px;}
     .ns-add-ok,.ns-add-cancel{width:36px;height:36px;font-size:14px;}
     .ns-add-input{padding:9px 10px;font-size:13px;}

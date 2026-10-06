@@ -69,7 +69,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
-<link rel="stylesheet" href="css/style.css?v=225" />
+<link rel="stylesheet" href="css/style.css?v=228" />
 </head>
 <body>
 <div class="app-window">
@@ -244,6 +244,39 @@
       </div>
       <div class="sm-bar"><div class="sm-fill" id="smFill"></div></div>
       <div class="sm-sub" id="smSub">계산 중…</div>
+    </div>
+
+    <!-- ✦ MENU — 사이드바의 **맨 아래**, 저장 용량 게이지 밑입니다. 편집 모드에만
+         보입니다. 누르면 세로가 아니라 **오른쪽으로** 세 항목이 펼쳐집니다:
+         `✦ MENU  SETTING · WIDGET · WRITE`. 위로 펼치면 게이지를 덮고, 아래로는
+         펼칠 자리가 없어서(여기가 사이드바 바닥입니다) 가로로 폅니다.
+         SETTING·WIDGET 은 낫표 안쪽 패널에 뜨는 화면이고, WRITE 는 화면이 아니라
+         동작입니다(ARCHIVE 글쓰기를 ETC 로 엽니다). -->
+    <div class="side-menu" id="sideMenu" data-editonly>
+      <button class="side-menu-btn" id="sideMenuBtn" type="button" aria-expanded="false" aria-controls="sideMenuItems">
+        <!-- ✦ 는 **글자가 아니라 직접 그린 그림**입니다. Pretendard 에 없는 기호라
+             기기마다 다른 서체로 넘어가고, 넘어간 서체의 글자 높이를 크롬이 정수
+             픽셀로 반올림하기 때문에 100% 배율에서만 한 픽셀 떠 보였습니다(확대·축소
+             하면 멀쩡해 보이는 것이 그 증거입니다). 그림은 상자가 곧 모양이라
+             어느 배율에서도 가운데에 섭니다. 돋보기·갤러리 단추와 같은 16 격자. -->
+        <svg class="smb-mark" viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M8 1.6 Q8.75 7.25 14.4 8 Q8.75 8.75 8 14.4 Q7.25 8.75 1.6 8 Q7.25 7.25 8 1.6 Z" />
+        </svg><span class="smb-text">MENU</span>
+      </button>
+      <!-- 펼침은 width 를 0 에서 실제 폭까지 재워 넣습니다 — main.js 가 열 때마다
+           폭을 재서 넣으므로(서체가 늦게 와도 맞습니다) 여기에는 값이 없습니다. -->
+      <div class="side-menu-items" id="sideMenuItems">
+        <!-- MENU 와 세 항목을 잇는 표식. 항목 사이의 가름점(·)보다 길게 두어
+             '묶음이 바뀌는 자리' 로 읽히게 합니다. 칸 안쪽에 있으므로 접으면
+             함께 사라집니다 — 접힌 채로 점만 남으면 아무 데도 안 닿는 점이 됩니다.
+             점 사이는 글자 하나하나를 띄워서(자간) 냅니다. -->
+        <span class="smi-lead" aria-hidden="true">···</span>
+        <button class="smi" type="button" data-menu="setting">SETTING</button>
+        <span class="smi-dot" aria-hidden="true">·</span>
+        <button class="smi" type="button" data-menu="widget">WIDGET</button>
+        <span class="smi-dot" aria-hidden="true">·</span>
+        <button class="smi" type="button" data-menu="write">WRITE</button>
+      </div>
     </div>
 
   </aside>
@@ -481,6 +514,60 @@
         </div>
       </div>
       <div class="archive-body" id="archiveBody"></div>
+    </section>
+
+    <!-- ---------- SETTING · WIDGET ----------
+         사이드바 ✦ MENU 로 들어오는 관리 화면 두 개입니다. 다른 화면과 똑같이
+         `.view` 하나씩이고 activateView('setting') 이 켭니다 — 떠 있는 창이
+         아닙니다(PAIR 상세를 모달에서 화면으로 옮긴 것과 같은 이유입니다).
+
+         안쪽은 **상단 선택기만** 둡니다. 왼쪽에 세부 사이드바를 한 겹 더 두는
+         구조도 생각했는데, 넣을 항목이 네 개뿐이라 그 열이 거의 비어 보입니다.
+         항목이 늘면 그때 옮깁니다.
+
+         좌상단의 화면 이름은 다른 화면과 **같은 `.topbar h2`** 입니다(10px 대문자
+         라벨). 선택기는 상단바 오른쪽, ARCHIVE 가 단추들을 두는 자리에 놓입니다.
+
+         장(.mg-pane)은 지금 비어 있습니다 — 커서·효과음·사이드바 이름은 다음
+         묶음에서, 위젯 목록은 그 다음 묶음에서 채웁니다. -->
+    <section class="view" id="view-setting">
+      <div class="topbar">
+        <h2>Setting</h2>
+        <div class="topbar-actions">
+          <div class="mg-tabs" data-mgtabs="setting">
+            <button class="mg-tab active" type="button" data-mgpane="cursor">CURSOR</button>
+            <span class="mg-tab-dot" aria-hidden="true">·</span>
+            <button class="mg-tab" type="button" data-mgpane="effect">EFFECT</button>
+            <span class="mg-tab-dot" aria-hidden="true">·</span>
+            <button class="mg-tab" type="button" data-mgpane="sound">SOUND</button>
+            <span class="mg-tab-dot" aria-hidden="true">·</span>
+            <button class="mg-tab" type="button" data-mgpane="sidebar">SIDEBAR</button>
+          </div>
+        </div>
+      </div>
+      <div class="mg-body" data-mgbody="setting">
+        <div class="mg-pane active" data-mgpane="cursor"><p class="mg-soon">커서 모양 — 준비 중입니다.</p></div>
+        <div class="mg-pane" data-mgpane="effect"><p class="mg-soon">커서 이펙트 — 준비 중입니다.</p></div>
+        <div class="mg-pane" data-mgpane="sound"><p class="mg-soon">클릭 효과음 — 준비 중입니다.</p></div>
+        <div class="mg-pane" data-mgpane="sidebar"><p class="mg-soon">사이드바 이름 — 준비 중입니다.</p></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-widget">
+      <div class="topbar">
+        <h2>Widget</h2>
+        <div class="topbar-actions">
+          <div class="mg-tabs" data-mgtabs="widget">
+            <button class="mg-tab active" type="button" data-mgpane="list">LIST</button>
+            <span class="mg-tab-dot" aria-hidden="true">·</span>
+            <button class="mg-tab" type="button" data-mgpane="add">ADD</button>
+          </div>
+        </div>
+      </div>
+      <div class="mg-body" data-mgbody="widget">
+        <div class="mg-pane active" data-mgpane="list"><p class="mg-soon">위젯 목록 — 준비 중입니다.</p></div>
+        <div class="mg-pane" data-mgpane="add"><p class="mg-soon">위젯 추가 — 준비 중입니다.</p></div>
+      </div>
     </section>
 
     <!-- ================= PAIR 상세 =================
@@ -1366,7 +1453,7 @@
        (그 목록을 만드는 것도 JS인데 새 CSS 가 감싸이지 않은 select 를 폭 0 으로
        접습니다), 스티커 서랍이 엉뚱한 자리에 놓였습니다.
        **CSS 와 JS 를 함께 고쳤으면 번호도 함께 올리세요.** -->
-<script src="js/main.js?v=225"></script>
+<script src="js/main.js?v=228"></script>
 <script type="module" src="js/firebase-store.js?v=116"></script>
 </body>
 </html>

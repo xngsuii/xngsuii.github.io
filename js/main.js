@@ -49,6 +49,19 @@ function applyEditMode(){
     const p = getCurrentPost();
     if(p) fillPairDetail(p);
   });
+  /* 관리 화면은 편집 전용입니다 — 보고 있는 중에 로그아웃하면 HOME 으로
+     내보냅니다. ✦ MENU 줄 자체는 [data-editonly] 로 사라지므로, 그냥 두면
+     돌아올 길이 없는 화면에 갇힙니다. */
+  safely('관리 화면', ()=>{
+    if(isLoggedIn) return;
+    setSideMenuOpen(false);
+    const cur = document.body.dataset.view;
+    if(cur !== 'setting' && cur !== 'widget') return;
+    navItems.forEach(b=> b.classList.remove('active'));
+    document.querySelector('.nav-item[data-view="home"]')?.classList.add('active');
+    activateView('home');
+    markCurrentView('home');
+  });
   safely('ARCHIVE 수정', ()=>{
     /* 보기 모드로 돌아가면 고칠 수 없습니다 — 열려 있던 수정 자리를 접습니다 */
     if(!isLoggedIn && arcEditing()){
@@ -1796,18 +1809,128 @@ function setArchiveCategory(cat){
   document.querySelectorAll('#archiveSub .nav-sub-item').forEach(b=>
     b.classList.toggle('active', b.dataset.archivesub === cat));
 }
+/* 사이드바에서 ARCHIVE 하위 분류를 누른 것과 **똑같이** 그 분류로 들어갑니다 —
+   목록 상태(setArchiveCategory)와 화면, 사이드바 표시까지 한 번에. ✦ MENU 의
+   WRITE 도 이 길로 들어옵니다(다른 화면에서 눌러도 사이드바가 따라오도록). */
+function openArchiveCategory(cat){
+  setArchiveCategory(cat);
+  navItems.forEach(b=>b.classList.remove('active'));
+  document.querySelector('.nav-item[data-view="archive"]').classList.add('active');
+  activateView('archive');
+  markCurrentView('archive');
+  // 고른 쪽만 열어둡니다 — 큰 메뉴를 눌러 들어왔을 때와 같은 모습이 되도록
+  archiveSub.classList.add('open');
+  pairSub.classList.remove('open');
+  /* OC·PORTAL 도 함께 접습니다. 예전에는 PAIR 만 접어서, OC 에서 ARCHIVE 분류를
+     누르면 OC 목록이 펼쳐진 채로 남아 있었습니다 — '한 번에 한 목록만'이라는
+     큰 메뉴 쪽 규칙과 어긋났습니다. */
+  ocSub.classList.remove('open');
+  portalSub?.classList.remove('open');
+  renderArchive();
+}
 document.querySelectorAll('#archiveSub .nav-sub-item').forEach(btn=>{
   btn.addEventListener('click', (e)=>{
     e.stopPropagation();
-    setArchiveCategory(btn.dataset.archivesub);
-    navItems.forEach(b=>b.classList.remove('active'));
-    document.querySelector('.nav-item[data-view="archive"]').classList.add('active');
-    activateView('archive');
-    markCurrentView('archive');
-    // 고른 쪽만 열어둡니다 — 큰 메뉴를 눌러 들어왔을 때와 같은 모습이 되도록
-    archiveSub.classList.add('open');
-    pairSub.classList.remove('open');
-    renderArchive();
+    openArchiveCategory(btn.dataset.archivesub);
+  });
+});
+
+/* ------------------------------------------------------------
+   ✦ MENU — 사이드바 맨 아래 줄
+   ------------------------------------------------------------
+   SETTING · WIDGET 은 낫표 안쪽 패널에 뜨는 **화면**이고(모달이 아닙니다 —
+   PAIR 상세를 창에서 화면으로 옮긴 것과 같은 까닭), WRITE 는 화면이 아니라
+   동작입니다. 그래서 세 항목이 한 줄에 나란히 있어도 하는 일이 다릅니다.
+
+   줄은 **가로로** 펼칩니다. 위로 펼치면 바로 위의 저장 용량 게이지를 덮고,
+   아래에는 펼칠 자리가 없습니다(여기가 사이드바 바닥입니다).
+
+   펼친 채로 두는 쪽을 골랐습니다 — SETTING 과 WIDGET 을 오가는 일이 많고,
+   지금 어느 쪽을 보고 있는지 이 줄이 색으로 알려 주기 때문입니다. 닫히는
+   때는 네 가지뿐입니다: MENU 를 다시 누름 / Escape / 다른 메뉴로 나감 /
+   WRITE(그 자리에서 글쓰기로 떠납니다). */
+const sideMenu = document.getElementById('sideMenu');
+const sideMenuBtn = document.getElementById('sideMenuBtn');
+const sideMenuItems = document.getElementById('sideMenuItems');
+function setSideMenuOpen(open){
+  if(!sideMenu) return;
+  sideMenu.classList.toggle('open', open);
+  sideMenuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if(!open){ sideMenuItems.style.width = ''; return; }
+  /* 펼칠 폭은 **열 때마다 잽니다.** 못 박아 두면 안 되는 까닭 — 서체가 늦게
+     오면 글자 폭이 달라지고, 폰과 데스크톱의 글자 크기도 다릅니다. 넉넉한
+     값으로 두는 방법도 있지만, 그러면 애니메이션이 실제 글자보다 긴 거리를
+     달려서 글자가 다 나온 뒤에도 한참 더 움직이는 것처럼 보입니다. */
+  /* **굵어진 모습으로 잽니다.** 항목은 마우스를 올리면 굵어지고(사이드바 메뉴와
+     같은 장치) 굵은 글자는 조금 넓어서, 쉬는 모습으로 잰 폭에서는 마지막 항목이
+     1~2px 잘렸습니다. .measuring 이 셋을 다 굵게 하고 전환도 끕니다. */
+  sideMenuItems.classList.add('measuring');
+  sideMenuItems.style.width = 'auto';
+  let w = Math.ceil(sideMenuItems.getBoundingClientRect().width);
+  sideMenuItems.classList.remove('measuring');
+  /* **남는 자리를 넘지 않게 자릅니다.** 지금은 데스크톱 9px·폰 6px 이 남지만, 서체가
+     조금만 넓게 그려져도 모자랄 수 있습니다. 그대로 두면 사이드바가 가로로 넘쳐
+     서랍에 가로 막대가 생기는데(.sidebar 가 overflow-y:auto 라 x 도 auto 가 됩니다)
+     그건 눈에 띄게 망가진 모습입니다. 잘리면 마지막 글자 끝만 조금 가려집니다. */
+  const sideBox = sideMenu.parentElement;
+  if(sideBox){
+    const cs = getComputedStyle(sideBox);
+    const room = sideBox.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)
+               - sideMenuBtn.getBoundingClientRect().width;
+    if(room > 0) w = Math.min(w, Math.floor(room));
+  }
+  sideMenuItems.style.width = '0px';
+  void sideMenuItems.offsetWidth;   // 0 에서 출발하도록 한 번 끊습니다 (스티커 data-play 와 같은 수)
+  sideMenuItems.style.width = w + 'px';
+}
+/* SETTING·WIDGET 으로 옮깁니다. 이 둘은 사이드바 메뉴(.nav-item)가 아니므로
+   '지금 여기' 표시를 받을 단추가 없습니다 — body[data-view] 를 보고 CSS 가
+   ✦ MENU 줄의 해당 항목을 굵게 합니다. */
+function openManageView(name){
+  navItems.forEach(b=> b.classList.remove('active'));
+  activateView(name);
+  markCurrentView(name);
+  [pairSub, ocSub, archiveSub, portalSub].forEach(el=> el?.classList.remove('open'));
+}
+sideMenuBtn?.addEventListener('click', (e)=>{
+  e.stopPropagation();
+  setSideMenuOpen(!sideMenu.classList.contains('open'));
+});
+/* **거품을 막지 않습니다.** 폰에서는 서랍을 닫는 일을 #sidebar 에 걸린 처리기가
+   맡고 있어서(initMobileDrawer), stopPropagation 을 하면 고른 뒤에도 서랍이 열린
+   채로 남아 화면이 가려집니다. */
+document.querySelectorAll('#sideMenuItems .smi').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const which = btn.dataset.menu;
+    if(which === 'write'){
+      setSideMenuOpen(false);
+      openArcWrite('etc');   // 기본 분류는 ETC
+    }else{
+      openManageView(which);
+    }
+  });
+});
+/* 다른 메뉴로 나가면 접습니다. 큰 메뉴는 단추가 고정이고, 하위 분류는 JS 가
+   다시 그리므로 사이드바에 위임해서 받습니다. */
+navItems.forEach(b=> b.addEventListener('click', ()=> setSideMenuOpen(false)));
+document.getElementById('sidebar')?.addEventListener('click', (e)=>{
+  if(e.target.closest('.nav-sub-item')) setSideMenuOpen(false);
+});
+document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') setSideMenuOpen(false); });
+
+/* ---- 관리 화면의 상단 선택기 ----
+   한 벌로 둘을 다 봅니다 — 선택기(.mg-tabs[data-mgtabs])와 장 묶음
+   (.mg-body[data-mgbody])을 같은 이름으로 짝지어 두었습니다. */
+document.querySelectorAll('.mg-tabs').forEach(tabs=>{
+  const body = document.querySelector('.mg-body[data-mgbody="' + tabs.dataset.mgtabs + '"]');
+  tabs.querySelectorAll('.mg-tab').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      tabs.querySelectorAll('.mg-tab').forEach(b=> b.classList.remove('active'));
+      btn.classList.add('active');
+      if(!body) return;
+      body.querySelectorAll('.mg-pane').forEach(pane=>
+        pane.classList.toggle('active', pane.dataset.mgpane === btn.dataset.mgpane));
+    });
   });
 });
 
@@ -9300,8 +9423,15 @@ async function enterArcEdit(existingItem){
 
 /* 새 글도 같은 화면에서 씁니다. 빈 글 화면이 수정 모드로 열리고, 게시를
    눌러야 실제로 만들어집니다 — 취소하면 아무것도 남지 않습니다. */
-document.getElementById('addArchiveBtn').addEventListener('click', ()=>{
+/* cat 을 주면 **그 분류로 먼저 들어간 뒤** 글쓰기를 엽니다 — ✦ MENU 의 WRITE 는
+   HOME·PAIR 등 어디서나 누를 수 있으므로, 그래야 취소하고 나왔을 때 보이는
+   목록과 사이드바 표시가 서로 맞습니다(backToArchiveList 는 화면만 켜고
+   사이드바는 손대지 않습니다). 분류를 옮기면 새 글의 분류도 따라옵니다 —
+   enterArcEdit 이 currentArchiveCategory 에서 시작하기 때문입니다.
+   ARCHIVE 안의 '＋ 글쓰기' 는 cat 없이 불러 지금 보고 있는 분류에 씁니다. */
+function openArcWrite(cat){
   if(!isLoggedIn) return;
+  if(cat) openArchiveCategory(cat);
   arcListPage = arcPage;
   openDetailView('archive-detail');
   document.getElementById('arcViewTitle').innerText = '';
@@ -9310,7 +9440,8 @@ document.getElementById('addArchiveBtn').addEventListener('click', ()=>{
   document.getElementById('arcViewContent').innerHTML = '';
   document.getElementById('arcViewAttachSection').style.display = 'none';
   enterArcEdit(null);
-});
+}
+document.getElementById('addArchiveBtn').addEventListener('click', ()=> openArcWrite());
 
 /* 취소 — 고치던 글이 있으면 그 글을 읽는 자리로, 새 글이었으면 목록으로 */
 document.getElementById('arcCancelBtn').addEventListener('click', async ()=>{
@@ -10662,9 +10793,12 @@ function initMobileDrawer(){
     b.addEventListener('click', ()=>{ if(b.dataset.view === 'home') setOpen(false); });
   });
   /* PAIR·OC 의 하위 항목은 JS 가 다시 그리므로 위임해서 받습니다.
-     ＋(분류 추가)와 ✎(이름 변경)은 창이 뜨는 동안 서랍이 열려 있어야 하므로 제외합니다. */
+     ＋(분류 추가)와 ✎(이름 변경)은 창이 뜨는 동안 서랍이 열려 있어야 하므로 제외합니다.
+     ✦ MENU 의 세 항목(.smi)도 여기서 닫습니다 — 고르면 패널에 화면이 뜨는데,
+     서랍이 그대로 열려 있으면 그 화면을 덮습니다. MENU 단추 자체는 해당하지
+     않으므로(선택자에 없습니다) 펼치려고 누른 것만으로는 닫히지 않습니다. */
   sidebar.addEventListener('click', (e)=>{
-    const item = e.target.closest('.nav-sub-item');
+    const item = e.target.closest('.nav-sub-item, .smi');
     if(!item || e.target.closest('.ns-edit')) return;
     setOpen(false);
   });
