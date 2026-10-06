@@ -1227,6 +1227,7 @@ function restartHomeIntro(){
 function activateView(view){
   const el = document.getElementById('view-' + view);
   if(!el) return;
+  clearScrollLive();   // 보이던 막대를 다음 화면까지 끌고 가지 않습니다
   /* 상세 화면에서 다른 곳으로 옮기면 '상세를 보고 있다' 표시를 지웁니다 —
      사이드바에서 PAIR 을 다시 누르는 것도 이 길로 들어옵니다. */
   if(view !== 'pair-detail' && view !== 'oc-detail'){
@@ -5528,6 +5529,7 @@ function logPaneHost(){
 }
 function openLogDetail(){
   const el = logDetailEl(); if(!el) return;
+  clearScrollLive();   // 글 화면도 '다른 화면' 입니다 (activateView 를 거치지 않습니다)
   const host = logPaneHost();
   if(host && el.parentNode !== host) host.appendChild(el);
   const first = !logDetailOpen();
@@ -5539,6 +5541,7 @@ function openLogDetail(){
 }
 function closeLogDetail(){
   const el = logDetailEl(); if(!el) return;
+  clearScrollLive();   // 글에서 목록으로 나올 때도 같습니다
   exitLogEdit();
   el.classList.remove('open');
   currentLogViewId = null;
@@ -6795,6 +6798,12 @@ function isMobileWidth(){ return window.matchMedia(MOBILE_MQ).matches; }
    무엇을 굴리고 있는지 알 수 없습니다.
    scroll 은 거품이 일지 않으므로 캡처로 받습니다. */
 const SCROLL_LIVE_MS = 5000;
+/* 막대가 그려지는 띠의 폭 — 막대 자체는 6px 이고, 거기에 겨냥할 여유를 더했습니다.
+   **칸 전체가 아니라 이 띠 안에 들어왔을 때만** 켭니다. 처음에는 칸 어디든 마우스가
+   들어오면 켰는데, .main 은 패널 거의 전체라 패널 안에서 마우스를 움직이는 내내
+   타이머가 다시 걸려 "5초보다 훨씬 오래 떠 있고, 막대에 올리지도 않았는데 보인다"가
+   됐습니다(주인 지적). */
+const SCROLL_EDGE_PX = 18;
 let scrollLiveEl = null, scrollLiveTimer = 0;
 /* 커서 아래에서 **실제로 굴러가는** 칸을 찾습니다 — 넘치지도 않는데 켜 두면
    있지도 않은 막대를 기다리게 됩니다. */
@@ -6811,6 +6820,14 @@ function scrollableFrom(node){
   }
   return null;
 }
+/* 화면을 옮기면 바로 끕니다. 그러지 않으면 막대가 보이는 채로 다른 글에
+   들어갔을 때 남은 5초를 그 글에서 마저 세어, 올리지도 않은 막대가 떠 있습니다
+   (주인 지적). .main 은 화면이 바뀌어도 같은 요소라 저절로 꺼지지 않습니다. */
+function clearScrollLive(){
+  clearTimeout(scrollLiveTimer);
+  if(scrollLiveEl) scrollLiveEl.classList.remove('scroll-live');
+  scrollLiveEl = null;
+}
 function markScrollLive(el){
   if(!el || !el.classList) return;
   if(scrollLiveEl && scrollLiveEl !== el) scrollLiveEl.classList.remove('scroll-live');
@@ -6822,13 +6839,29 @@ function markScrollLive(el){
     scrollLiveEl = null;
   }, SCROLL_LIVE_MS);
 }
-document.addEventListener('pointerover', (e)=>{
+/* 커서가 그 칸의 막대 띠 위에 있는가 — 세로 막대는 오른쪽 가장자리, 가로 막대는
+   아래 가장자리입니다. 막대는 DOM 마디가 아니라서 좌표로 볼 수밖에 없습니다. */
+function overScrollEdge(el, x, y){
+  const r = el.getBoundingClientRect();
+  if(x < r.left || x > r.right || y < r.top || y > r.bottom) return false;
+  const cs = getComputedStyle(el);
+  if(el.scrollHeight > el.clientHeight + 1 && /auto|scroll/.test(cs.overflowY)
+     && x >= r.right - SCROLL_EDGE_PX) return true;
+  if(el.scrollWidth > el.clientWidth + 1 && /auto|scroll/.test(cs.overflowX)
+     && y >= r.bottom - SCROLL_EDGE_PX) return true;
+  return false;
+}
+/* pointerover 는 마디를 넘을 때만 오므로 띠 안인지 알 수 없습니다 — pointermove 를
+   씁니다. 자주 오는 사건이라, 이미 켜져 있는 칸에 그대로 머무를 때는 타이머만
+   다시 걸고 끝냅니다(그래야 올려놓고 있는 동안 계속 보입니다). */
+document.addEventListener('pointermove', (e)=>{
   const el = scrollableFrom(e.target);
-  if(el) markScrollLive(el);
+  if(el && overScrollEdge(el, e.clientX, e.clientY)) markScrollLive(el);
 }, { passive: true });
-document.addEventListener('scroll', (e)=>{
-  if(e.target && e.target.nodeType === 1) markScrollLive(e.target);
-}, { capture: true, passive: true });
+/* **굴러갈 때는 켜지 않습니다.** 한때 scroll 을 캡처로 받아 함께 켰는데, 주인이
+   "띠에 올렸을 때만" 으로 정리했습니다. 막대를 잡아 끄는 동안에도 커서는 띠 위에
+   있으므로 pointermove 쪽이 계속 살려 둡니다 — 끌면서 커서를 띠에서 멀리 떼어
+   놓으면 5초 뒤 사라지지만, 그 전에 손을 떼는 것이 보통입니다. */
 
 /* ---- 쪽 번호 ----
    네 군데(PAIR 목록 · PAIR 안의 LOG · OC 목록 · ARCHIVE 목록)가 같은 줄을
