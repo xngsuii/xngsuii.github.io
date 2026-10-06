@@ -289,6 +289,201 @@
   /* 끌어서 순서를 바꾸는 손잡이. 위젯 안에 **절대 자리로 얹혀** 위젯 자신의
      배치는 건드리지 않습니다. 편집 모드에만 JS 가 답니다. */
   .wg-reordering{opacity:.55;}
+  /* ---------- 디데이 위젯 ----------
+     얇은 배너 하나. 사진은 배경으로 깔고 글자는 그 위 가운데에 놓습니다 —
+     사진이 없을 때도 모양이 무너지지 않도록 바탕색을 둡니다.
+     화살표는 **올렸을 때만** 나타납니다(주인 지시). 손가락에는 hover 가 없으므로
+     폰에서는 늘 보이게 둡니다. */
+  .dday-widget{position:relative;padding:0 0 16px;}
+  /* **높이가 아니라 비율로 잡습니다.** 사이드바(256px)에서 72px 이던 그 비율
+     그대로, 팝업처럼 폭이 다른 자리에서도 같은 모양이 됩니다(주인 요청).
+     256 : 72 = 32 : 9. */
+  .dday-banner{position:relative;aspect-ratio:32/9;border-radius:var(--radius-sm);
+    overflow:hidden;background:var(--surface-2);}
+  /* 넘길 때 통째로 미끄러지는 칸 — 사진과 글자가 함께 움직입니다 */
+  .dday-slide{position:absolute;inset:0;}
+  /* 넘어가는 동안만 있는 복제본 — 진짜 칸과 나란히 놓입니다 */
+  .dday-ghost{position:absolute;inset:0;}
+  /* **두 겹으로 적어야 합니다.** 이 칸은 .adjustable-img 이기도 한데, 그 규칙이
+     이 파일 **뒤쪽**에서 `position:relative` 를 말합니다. 한 겹(.dday-photo)끼리는
+     뒤에 쓴 쪽이 이기므로 relative 가 되고, 그러면 inset:0 이 아무 일도 하지 않아
+     칸의 높이가 **0** 이 됩니다(안의 그림 층은 absolute 라 높이를 만들지 않습니다).
+     사진 주소는 멀쩡히 들어가 있는데 화면에는 아무것도 안 보였던 까닭입니다. */
+  .dday-banner .dday-photo{position:absolute;inset:0;}
+  /* 사진 위의 흰 글자가 읽히도록 — 가운데만 살짝 어둡게.
+     **마우스를 받지 않아야 합니다.** 이 막은 사진 위에 덮여 있어서, 그냥 두면
+     사진을 두 번 눌러도 그 누름을 이 막이 먼저 삼켜 버립니다 — 자리 맞추기가
+     아예 열리지 않았던 까닭입니다(주인 지적). 글자 칸(.dday-mid)은 이미 같은
+     이유로 꺼 두었습니다. */
+  .dday-scrim{position:absolute;inset:0;background:rgba(0,0,0,.34);pointer-events:none;}
+  .dday-widget.dday-empty .dday-scrim{background:transparent;}
+  .dday-mid{position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:2px;padding:0 26px;pointer-events:none;}
+  .dday-count{font-family:var(--mono);font-size:20px;line-height:1.1;color:#fff;
+    font-variation-settings:'wght' 800;font-variant-numeric:tabular-nums;
+    text-shadow:0 1px 6px rgba(0,0,0,.45);}
+  .dday-note{font-family:var(--mono);font-size:10.5px;line-height:1.3;color:#fff;
+    text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;
+    text-shadow:0 1px 6px rgba(0,0,0,.45);}
+  .dday-widget.dday-empty .dday-count,
+  .dday-widget.dday-empty .dday-note{color:var(--text-muted);text-shadow:none;}
+  .dday-widget.dday-empty .dday-count{font-size:11px;font-variation-settings:'wght' 500;}
+  .dday-nav{position:absolute;top:50%;transform:translateY(-50%);width:22px;height:30px;
+    display:flex;align-items:center;justify-content:center;padding:0;
+    background:transparent;border:none;border-radius:0;
+    font-family:system-ui,'Segoe UI Symbol',sans-serif;font-size:17px;line-height:1;
+    color:#fff;text-shadow:0 1px 5px rgba(0,0,0,.5);
+    opacity:0;transition:opacity .18s ease;}
+  .dday-prev{left:2px;}
+  .dday-next{right:2px;}
+  .dday-banner:hover .dday-nav{opacity:.85;}
+  .dday-nav:hover{opacity:1 !important;}
+  .dday-widget.dday-one .dday-nav{display:none;}
+  .dday-edit{position:absolute;top:4px;right:4px;width:20px;height:20px;padding:0;
+    display:none;align-items:center;justify-content:center;
+    background:rgba(0,0,0,.4);border:none;border-radius:var(--radius-sm);
+    font-size:10px;color:#fff;opacity:0;transition:opacity .18s ease;}
+  body.logged-in .dday-edit[data-editonly]{display:flex;}
+  .dday-banner:hover .dday-edit{opacity:1;}
+  /* 쪽을 알리는 동그란 점은 뺐습니다 — 화살표만으로 충분하다는 주인 판단입니다. */
+  /* 디데이 관리 창 */
+  .dd-list{display:flex;flex-direction:column;max-height:50vh;overflow-y:auto;}
+  .dd-row{display:flex;align-items:center;gap:10px;padding:10px 2px;
+    border-bottom:1px solid var(--rule-soft);}
+  .dd-row:last-child{border-bottom:0;}
+  .dd-thumb{flex:none;width:44px;height:30px;border-radius:var(--radius-sm);
+    background:var(--surface-2) center/cover no-repeat;}
+  .dd-fields{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:5px;}
+  .dd-fields input{font-family:var(--mono);font-size:11.5px;padding:5px 7px;color:var(--text);
+    background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);}
+  .dd-name{flex:1 1 90px;min-width:0;}
+  .dd-date{flex:0 0 130px;}
+  .dd-note{flex:1 1 100%;}
+  .dd-fields input:focus{outline:none;border-color:var(--accent);}
+
+  /* 최신글 설정 창 — 고르개와 숫자 칸의 높이를 맞추고 사이를 띄웁니다.
+     둘이 서로 다른 장치(그린 드롭다운 / 기본 input)라 가만히 두면 높이가
+     어긋나고 딱 붙습니다(주인 지적). */
+  #modalRecent .wg-f{gap:6px;}
+  #modalRecent .wg-f + .wg-f{margin-top:16px;}
+  #modalRecent .pick-dd{width:100%;}
+  /* 공통 .pick-dd-btn 에 max-width:190px 이 박혀 있습니다(좁은 상단바용) —
+     이 창에서는 숫자 칸과 폭을 맞춰야 하므로 풀어 줍니다. */
+  #modalRecent .pick-dd-btn{width:100%;max-width:none;height:36px;justify-content:space-between;}
+  #modalRecent input[type=number]{width:100%;height:36px;box-sizing:border-box;
+    padding:0 10px;font-family:var(--mono);font-size:12.5px;color:var(--text);
+    background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);}
+  #modalRecent input[type=number]:focus{outline:none;border-color:var(--accent);}
+  #modalRecent .form-actions{margin-top:20px;}
+  /* 고르개 목록이 창 밖으로 나갈 수 있게 합니다 — .modal 은 기본이
+     `overflow-y:auto` 라, 펼친 목록이 창 아래끝에서 잘렸습니다(주인 지적).
+     이 창은 칸이 둘뿐이라 넘칠 일이 없어 감출 까닭도 없습니다. */
+  #modalRecent .modal{overflow:visible;}
+  /* 그래도 아래가 좁으면 **위로** 펼칩니다 — ARCHIVE 검색줄이 폰에서 쓰는 수와
+     같습니다. main.js 가 자리를 보고 .pick-up 을 답니다. */
+  .pick-dd.pick-up .pick-dd-menu{top:auto;bottom:calc(100% + 4px);}
+
+  /* ---------- 최신글 위젯 ---------- */
+  .recent-widget{position:relative;padding:0 0 16px;}
+  .rc-head{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:7px;}
+  .rc-title{font-family:var(--mono);font-size:10px;font-weight:500;text-transform:uppercase;
+    letter-spacing:.16em;color:var(--text-muted);}
+  .rc-opt{display:none;width:18px;height:18px;padding:0;align-items:center;justify-content:center;
+    background:transparent;border:none;font-size:10px;color:var(--text-muted);opacity:.5;}
+  body.logged-in .rc-opt[data-editonly]{display:flex;}
+  .rc-opt:hover{opacity:1;color:var(--accent);}
+  .rc-list{display:flex;flex-direction:column;}
+  /* 글 한 줄 — 제목과 어디 글인지. 상자 없이 글자만 놓습니다(사이드바와 같은 말투). */
+  .rc-item{display:flex;flex-direction:column;align-items:flex-start;gap:1px;
+    padding:5px 0;background:transparent;border:none;border-radius:0;text-align:left;width:100%;}
+  .rc-item + .rc-item{border-top:1px solid var(--rule-soft);}
+  .rc-item-title{width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    font-family:var(--mono);font-size:12px;color:var(--text);
+    font-variation-settings:'wght' 400;transition:color .18s ease,font-variation-settings .18s ease;}
+  .rc-item:hover .rc-item-title{color:var(--accent);font-variation-settings:'wght' 800;}
+  .rc-item-sub{font-family:var(--mono);font-size:9px;letter-spacing:.06em;color:var(--text-muted);}
+  .rc-none{font-family:var(--mono);font-size:10.5px;color:var(--text-muted);padding:4px 0;}
+
+  /* ---------- 단어사전 위젯 ----------
+     사전 한 쪽을 그대로 옮긴 모양입니다. 편집 모드에서는 글자 자리가 그 자리에서
+     고쳐 쓰는 칸이 되고(.dict-edit), 비어 있으면 안내 글이 보입니다. */
+  .dict-widget{position:relative;padding:0 0 16px;}
+  .dict-photo{position:relative;height:64px;margin-bottom:9px;border-radius:var(--radius-sm);
+    background:var(--surface-2) center/cover no-repeat;overflow:hidden;}
+  .dict-photo.dict-photo-empty{background-image:none;}
+  .dict-widget:not(.dict-can-edit) .dict-photo.dict-photo-empty{display:none;}
+  /* ＋사진 / 사진(바꾸기) 은 조정 칸이 가진 단추입니다(.adj-empty / .adj-change).
+     바꾸기를 **지우기 왼쪽**에 나란히 두려고 둘을 한 줄에 담았습니다. */
+  .dict-photo .adj-empty{position:absolute;inset:0;display:none;align-items:center;
+    justify-content:center;width:100%;background:transparent;border:none;border-radius:0;
+    font-family:var(--mono);font-size:10px;color:var(--text-muted);}
+  /* ＋사진도 같은 까닭으로 끄는 규칙에 [data-editonly] 를 적습니다 */
+  .dict-widget:not(.dict-can-edit) .dict-photo .adj-empty[data-editonly]{display:none;}
+  .dict-widget.dict-can-edit .dict-photo.dict-photo-empty .adj-empty[data-editonly]{display:flex;}
+  .dict-photo-tools{position:absolute;top:4px;right:4px;display:none;align-items:center;gap:4px;}
+  .dict-widget.dict-can-edit .dict-photo:not(.dict-photo-empty) .dict-photo-tools{display:flex;}
+  /* 둘 다 같은 크기의 작은 네모입니다 — 한쪽만 글자라 길쭉하면 짝이 안 맞습니다 */
+  .dict-photo-tools .adj-change,
+  .dict-photo-del{position:static;width:18px;height:18px;padding:0;display:flex;
+    align-items:center;justify-content:center;background:rgba(0,0,0,.42);border:none;
+    border-radius:var(--radius-sm);font-size:9px;line-height:1;color:#fff;}
+  .dict-photo-tools .adj-change{font-size:10px;}
+  .dict-photo-tools .adj-change:hover,.dict-photo-del:hover{background:rgba(0,0,0,.66);}
+  .dict-headline{display:flex;align-items:baseline;gap:5px;flex-wrap:wrap;}
+  .dict-word{font-family:var(--mono);font-size:19px;line-height:1.3;color:var(--text);
+    font-variation-settings:'wght' 800;}
+  .dict-hanja{font-family:var(--mono);font-size:12px;color:var(--text-muted);}
+  .dict-pron{margin-top:1px;font-family:var(--mono);font-size:11px;color:var(--text-muted);}
+  .dict-pos{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px;}
+  /* 알약 — 고른 것만 신호색으로 찹니다. 편집 모드에서는 전부 보이고 눌러서 고릅니다. */
+  .dict-pill{display:inline-flex;align-items:center;height:18px;padding:0 8px;
+    border:1px solid var(--accent);border-radius:9px;background:var(--accent);
+    font-family:var(--mono);font-size:9.5px;color:#fff;}
+  .dict-pos-pick .dict-pill{background:transparent;border-color:var(--border);color:var(--text-muted);}
+  .dict-pos-pick .dict-pill.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .dict-pos-pick .dict-pill:hover{border-color:var(--accent);}
+  /* **번호는 직접 셉니다.** `list-style:decimal` 로 두었더니 번호가 하나도 안
+     나왔는데, 까닭은 `.dict-mean` 이 `display:flex` 이기 때문입니다 — 칸이
+     flex 가 되는 순간 그 줄은 더 이상 목록 항목으로 그려지지 않아 ::marker 가
+     사라집니다. 세는 값을 따로 두고 ::before 로 찍으면 모양에 상관없이 나옵니다. */
+  .dict-means{margin:9px 0 0;padding:0;list-style:none;counter-reset:dictmean;}
+  /* **글줄 기준으로 맞춥니다.** flex-start 로 두었더니 번호(11px)와 뜻(12px)의
+     줄 상자 높이가 달라, 번호가 한 줄 위로 들린 것처럼 보였습니다(주인 지적).
+     baseline 이면 글자가 앉는 선이 서로 맞아 사전처럼 나란히 섭니다. */
+  .dict-mean{display:flex;align-items:baseline;gap:5px;
+    font-family:var(--mono);font-size:12px;line-height:1.65;color:var(--text);
+    margin-bottom:2px;counter-increment:dictmean;}
+  .dict-mean::before{content:counter(dictmean) ".";flex:none;min-width:13px;
+    color:var(--text-muted);font-size:11px;}
+  /* ✕ 는 글줄이 아니라 칸 위쪽에 둡니다 — baseline 에 끌려가면 뜻이 길어질수록
+     아래로 내려갑니다. */
+  .dict-mean-del{align-self:flex-start;}
+  /* 하나뿐이면 번호를 붙이지 않습니다 — 사전도 뜻이 하나면 번호를 쓰지 않습니다 */
+  .dict-means.dict-means-one .dict-mean::before{display:none;}
+  .dict-mean-tx{flex:1;min-width:0;}
+  .dict-mean-del{flex:none;width:15px;height:15px;padding:0;margin-top:3px;
+    display:flex;align-items:center;justify-content:center;
+    background:transparent;border:none;font-size:9px;color:var(--text-muted);opacity:.5;}
+  .dict-mean-del:hover{opacity:1;color:#c0392b;}
+  /* ＋뜻 추가는 **WIDGET 화면에서만** — .dict-can-edit 을 main.js 가 답니다.
+     **끄는 규칙도 [data-editonly] 를 적어야 합니다**: 이 파일 뒤쪽의
+     `body.logged-in [data-editonly]{display:inline-flex}` 가 (0,2,0) 이라,
+     `.dict-add{display:none}` (0,1,0) 만으로는 집니다 — 로그인해 있으면 어느
+     화면에서나 ＋뜻이 보였습니다. 이 저장소가 이미 적어 둔 덫입니다. */
+  .dict-add{display:none;margin-top:6px;padding:0;background:transparent;border:none;
+    font-family:var(--mono);font-size:10px;color:var(--text-muted);}
+  .dict-widget:not(.dict-can-edit) .dict-add[data-editonly]{display:none;}
+  .dict-widget.dict-can-edit .dict-add[data-editonly]{display:block;}
+  .dict-add:hover{color:var(--accent);}
+  .dict-ex-wrap{margin-top:10px;}
+  /* 예문 — 사이트의 인용구와 같은 모양(왼쪽 신호색 선)을 빌려 옵니다 */
+  .dict-ex{margin:0;padding:2px 0 2px 10px;border-left:3px solid var(--accent);
+    font-family:var(--mono);font-size:11.5px;line-height:1.7;color:var(--text-muted);}
+  /* 고쳐 쓰는 칸 — 비면 안내 글이 보입니다 */
+  .dict-edit{outline:none;}
+  .dict-edit:focus{background:var(--surface-2);border-radius:2px;}
+  .dict-edit:empty:before{content:attr(data-ph);color:var(--text-muted);opacity:.65;}
+
   /* 직접 만든 위젯 */
   .wg-custom{position:relative;padding:0 0 16px;font-size:12px;color:var(--text);}
   .wg-custom-body{min-width:0;overflow-wrap:anywhere;}
@@ -581,7 +776,9 @@
      z-index 70 — 스티커(30) 위, 모달(100) 아래. 종이 질감 50 은 이제 없습니다.
      자리는 JS 가 left/top 으로 잡고 화면 밖으로 못 나가게 가둡니다. */
   .widget-pops{position:static;}
-  .wg-pop{position:fixed;z-index:70;width:236px;box-sizing:border-box;
+  /* overflow:hidden — 가장자리까지 꽉 채우는 위젯(디데이 배너)이 상자의 둥근
+     모서리를 삐져나가지 않게 깎아 줍니다. 팝업 안에서 넘쳐야 하는 것은 없습니다. */
+  .wg-pop{position:fixed;z-index:70;width:236px;box-sizing:border-box;overflow:hidden;
     background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);
     box-shadow:0 6px 20px rgba(0,0,0,.14);}
   /* 제목줄이 곧 손잡이입니다. 끌기는 **스티커와 같은 포인터 방식** —
@@ -626,6 +823,17 @@
     animation:none;box-shadow:none;border:0;background:transparent;
     margin-bottom:0;padding:0 0 11px;}   /* 11 = 사이드바와 같은 값 */
   .wg-pop-body .music-block{padding:0 0 16px;}                   /* 16 = 사이드바와 같은 값 */
+  .wg-pop-body .recent-widget,
+  .wg-pop-body .dict-widget{padding:0 0 16px;}                   /* 둘 다 사이드바와 같은 16 */
+  /* 디데이만 **상단바 바로 아래를 꽉 채웁니다**(주인 요청). 상자의 위·옆 여백을
+     음수 여백으로 되돌려 밀어내고, 모서리도 위쪽만 펴서 상단바와 맞붙입니다.
+     비율은 .dday-banner 의 aspect-ratio 가 지키므로 폭이 달라져도 같은 모양입니다. */
+  /* 아래 여백도 두지 않습니다 — 상자 안을 배너 하나로 채웁니다(주인 요청).
+     16px 을 남겨 두었더니 배너 밑에 흰 띠가 한 줄 남았습니다. */
+  .wg-pop-body .dday-widget{margin:-10px -12px 0;padding:0;}
+  /* 모서리는 상자가 깎습니다(.wg-pop 의 overflow:hidden) — 배너에 따로 둥글기를
+     주면 아래쪽만 각져서 상자와 어긋납니다. */
+  .wg-pop-body .dday-banner{border-radius:0;}
   .wg-pop-body .mb-playlist{display:block;}
   .wg-pop-body .wg-custom{padding:0 0 16px;}
   /* 작게 — 팝업과 **같은 x/y 를 나눠 씁니다**. 끌 수 있고 누르면 다시 펼쳐집니다
@@ -833,6 +1041,10 @@
   .wg-file:hover{color:var(--accent);}
   .wg-f-label{font-family:var(--mono);font-size:10px;font-weight:500;text-transform:uppercase;
     letter-spacing:.16em;color:var(--text-muted);}
+  /* **한글 라벨은 자간을 좁힙니다.** .16em 은 영문 대문자를 띄우려고 둔 값이라,
+     한글에 그대로 걸면 글자가 흩어져 보입니다(주인 지적). 영문 라벨은 그대로
+     두고, 한글이 들어가는 칸만 :lang 으로 가려 좁힙니다. */
+  .wg-f-label:lang(ko){letter-spacing:.02em;}
   .wg-f input,.wg-f textarea{font-family:var(--mono);font-size:12px;padding:8px 9px;
     border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);
     color:var(--text);resize:vertical;line-height:1.5;}
@@ -4127,6 +4339,12 @@
     .snd-name{flex:1 1 60%;}
     .snd-row .wg-row-ctl{flex:1 1 100%;}
     .cur-code-box{padding-left:0;}
+    /* 손가락에는 hover 가 없습니다 — 화살표와 ✎ 를 늘 보이게 두고 키웁니다 */
+    .dday-nav{opacity:.85;width:30px;height:38px;font-size:19px;}
+    .dday-edit{opacity:1;width:26px;height:26px;}
+    
+    .rc-item{padding:8px 0;}
+    .dict-photo{height:76px;}
     .fx-pick{flex:1 1 44%;min-width:0;}
     .sb-name{max-width:140px;}
     .wg-prev-side,.wg-pop-demo{max-width:100%;}

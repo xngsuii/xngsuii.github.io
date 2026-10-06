@@ -46,6 +46,8 @@ function applyEditMode(){
   safely('용량 게이지', renderStorageMeter);
   /* 위젯의 끌기 손잡이는 편집 모드에만 달립니다 */
   safely('위젯', renderWidgets);
+  /* 디데이·단어사전은 편집 모드에서 글자 자리가 고쳐 쓰는 칸이 됩니다 */
+  safely('내장 위젯', renderBuiltinWidgets);
   safely('PAIR 상세', ()=>{
     if(!currentPairPostId) return;
     const p = getCurrentPost();
@@ -242,8 +244,16 @@ function loginErrorMessage(e){
 async function storageGet(key, fallback){
   try{ return window.SiteStore.get(key, fallback); }catch(e){ return fallback; }
 }
+/* 글 목록이 바뀌면 **최신글 위젯을 바로 다시 그립니다.**
+   저장되는 길은 글쓰기·수정·삭제·폴더 이동까지 전부 여기 한 군데를 지나므로,
+   저마다 부르게 하지 않고 여기서 한 번만 봅니다. 예전에는 새로고침해야
+   올라왔습니다(주인 지적). 그릴 것이 없으면 renderRecent 가 곧바로 돌아옵니다. */
+const RECENT_WATCH = ['pairPosts', 'ocPosts', 'archive'];
 async function storageSet(key, value){
   try{ await window.SiteStore.set(key, value); }catch(e){ console.error('저장 실패', e); }
+  if(RECENT_WATCH.includes(key) && typeof renderRecent === 'function'){
+    safely('최신글', renderRecent);
+  }
 }
 /* ------------------------------------------------------------
    사진은 화면보다 늦게 도착합니다
@@ -327,7 +337,13 @@ let state = {
   /* 사이드바 메뉴 이름 — 비면 원래 이름 */
   navNames:{},
   /* STORAGE 게이지를 사이드바에 둘지 */
-  showStorage:true
+  showStorage:true,
+  /* 디데이 배너 — [{id,name,date,note,photo}] */
+  ddays:[],
+  /* 단어사전 한 쪽 */
+  dictWord:null,
+  /* 최신글 위젯 설정 — {source, count} */
+  recentCfg:{ source:'all', count:5 }
 };
 
 /* ---- PROMPT 폴더 ----
@@ -729,6 +745,9 @@ async function loadState(){
   state.clickSound = normalizeClickSound(await storageGet('clickSound', null));
   state.navNames = normalizeNavNames(await storageGet('navNames', null));
   state.showStorage = (await storageGet('showStorage', true)) !== false;
+  state.ddays = normalizeDdays(await storageGet('ddays', null));
+  state.dictWord = normalizeDictWord(await storageGet('dictWord', null));
+  state.recentCfg = normalizeRecentCfg(await storageGet('recentCfg', null));
   state.ocCats = normalizeOcCats(await storageGet('ocCats', null), await storageGet('ocFolders', null));
   state.ocPosts = (await storageGet('ocPosts', [])).map(migrateOcPost);
   /* 카테고리가 이제 필수라, 없어졌거나 유효하지 않은 카테고리를 가리키는 글은
@@ -783,6 +802,7 @@ function renderAll(){
   applyNavNames();
   applyShowStorage();
   renderSettingPanes();
+  renderBuiltinWidgets();
   applyEditMode();
 }
 
@@ -1425,6 +1445,8 @@ let draggedCatId = null;
    옮긴 뒤에도 그 메뉴에서 마지막에 고른 카테고리가 계속 굵게 보입니다. */
 function markCurrentView(view){
   document.body.dataset.view = view;
+  /* 단어사전은 WIDGET 화면에서만 고칠 수 있습니다 — 화면이 바뀐 지금 맞춥니다 */
+  if(typeof renderDict === 'function') safely('단어사전', renderDict);
   /* 다른 메뉴로 옮기면 로그인 창은 접어 둡니다 — 돌아왔을 때 로그인 창이 아니라
      엽서가 보여야 합니다. 화면 밖에서 일어나는 일이라 되감기 없이 곧바로 닫습니다. */
   closeLoginSheet(true);
@@ -9418,6 +9440,14 @@ function bindPickDD(sel){
   btn.addEventListener('click', (e)=>{
     e.stopPropagation();
     document.querySelectorAll('.pick-dd.open').forEach(o=>{ if(o!==wrap) o.classList.remove('open'); });
+    /* 아래에 자리가 모자라면 위로 펼칩니다 — 창 안에서는 목록이 창 아래끝에
+       걸려 잘립니다(주인 지적). 열기 직전에 한 번만 재면 됩니다. */
+    if(!wrap.classList.contains('open')){
+      const r = wrap.getBoundingClientRect();
+      const menu = wrap.querySelector('.pick-dd-menu');
+      const need = menu ? Math.min(menu.scrollHeight + 8, window.innerHeight * 0.5) : 0;
+      wrap.classList.toggle('pick-up', (window.innerHeight - r.bottom) < need && r.top > need);
+    }
     wrap.classList.toggle('open');
   });
   sel._pdd = { sync };
@@ -10859,7 +10889,13 @@ const WG_BUILTIN = [
   { id:'sticker', name:'스티커', icon:'peel', noPhone:true,
     el:()=> document.getElementById('stickerDrawer') },
   { id:'music',   name:'뮤직',   icon:'note',
-    el:()=> document.querySelector('.music-block') }
+    el:()=> document.querySelector('.music-block') },
+  { id:'dday',    name:'디데이', icon:'heart',
+    el:()=> document.getElementById('ddayWidget') },
+  { id:'recent',  name:'최신글', icon:'box',
+    el:()=> document.getElementById('recentWidget') },
+  { id:'dict',    name:'단어사전', icon:'star',
+    el:()=> document.getElementById('dictWidget') }
 ];
 function wgNoPhone(id){ const b = wgBuiltin(id); return !!(b && b.noPhone); }
 const WG_BUILTIN_IDS = WG_BUILTIN.map(w=> w.id);
@@ -11047,6 +11083,13 @@ function renderWidgets(){
      사이드바에서는 서랍이 평소 닫혀 있어 눈에 안 띄었을 뿐 같은 일이었습니다.
      다시 그리면 지금 문서에 붙어 있는 단추로 대기표를 새로 겁니다. */
   if(typeof renderStickerDrawer === 'function') safely('스티커 서랍', renderStickerDrawer);
+  /* **켜자마자 내용이 보이도록** 붙박이 위젯을 전부 다시 그립니다. 꺼 둔 동안에는
+     문서에서 떨어져 있어 사진 대기표가 버려지고 그린 것도 없으므로, 다시 붙이기만
+     해서는 빈 칸이 나옵니다 — 새로고침해야 보이던 까닭입니다(주인 지적). */
+  if(typeof renderBuiltinWidgets === 'function') safely('내장 위젯', renderBuiltinWidgets);
+  /* 스티커 위젯을 끄면 **꺼내 둔 스티커도 함께 감춥니다** — 서랍만 사라지고
+     화면의 스티커가 남아 있으면 치울 길이 없습니다(주인 지적). */
+  if(typeof renderStickers === 'function') safely('스티커', renderStickers);
   wgSyncMusic();
   renderWidgetManage();
 }
@@ -11660,8 +11703,20 @@ function cursorFromFile(file){
     const fr = new FileReader();
     fr.onerror = ()=> reject(new Error('읽지 못했어요'));
     fr.onload = ()=>{
-      const url = String(fr.result || '');
-      if(raw){ resolve({ src:url, name:file.name, animated:/\.ani$/.test(name) }); return; }
+      let url = String(fr.result || '');
+      if(raw){
+        /* **MIME 을 바로잡습니다.** .cur / .ani 는 운영체제가 종류를 모르는 일이
+           많아 FileReader 가 `data:application/octet-stream;…` 로 만들어 주는데,
+           그 주소를 cursor:url() 에 넣으면 브라우저가 그림으로 보지 않아 그냥
+           무시합니다 — 올렸는데 아무 일도 안 일어나는 것처럼 보입니다.
+           .cur 는 아이콘 꼴이라 image/x-icon 으로 바꿔 주면 크롬·엣지 모두
+           그려 줍니다. .ani 는 제 MIME 을 붙여도 **그려 주지 않습니다**(아래 참고). */
+        const cur = /\.(cur|ico)$/.test(name);
+        url = url.replace(/^data:[^;]*;/, cur ? 'data:image/x-icon;'
+                                              : 'data:application/x-navi-animation;');
+        resolve({ src:url, name:file.name, animated:/\.ani$/.test(name) });
+        return;
+      }
       const im = new Image();
       im.onload = ()=>{
         const k = Math.min(1, CURSOR_MAX / Math.max(im.width, im.height, 1));
@@ -12343,6 +12398,528 @@ initSoundPane();
 initSidebarPane();
 
 /* ============================================================
+   내장 위젯 — 디데이 · 최신글 · 단어사전
+   ------------------------------------------------------------
+   셋 다 위젯 목록(state.widgets)의 붙박이 칸이라 켜고 끄고, 순서를 바꾸고,
+   팝업으로 띄울 수 있습니다. 내용은 저마다 제 저장 키에 담깁니다 —
+   위젯 줄(widgets)에 같이 담으면 켜고 끌 때마다 사진까지 다시 쓰게 됩니다.
+   ============================================================ */
+
+/* ---- 디데이 ---- */
+function normalizeDdays(list){
+  if(!Array.isArray(list)) return [];
+  return list.filter(x=> x && (x.date || x.name)).map(x=>({
+    id: String(x.id || ('dd' + Date.now().toString(36) + Math.random().toString(36).slice(2,5))),
+    name: String(x.name || '').slice(0, 30),
+    date: String(x.date || '').slice(0, 10),     // YYYY-MM-DD
+    note: String(x.note || '').slice(0, 60),
+    /* 사진은 자리·배율까지 담습니다 — 글자 하나였던 예전 모양도 그대로 받습니다
+       (normalizeImg 이 문자열을 {src,scale:100,x:50,y:50} 로 바꿔 줍니다). */
+    photo: normalizeImg(x.photo)
+  }));
+}
+function saveDdays(){ return storageSet('ddays', state.ddays); }
+let ddayIdx = 0;      // 지금 보고 있는 것 — 기기마다 달라도 되는 값이라 담지 않습니다
+
+/* 시작한 날을 1일로 셉니다(기념일 세는 방식). 앞날이면 D-n 입니다. */
+function ddayText(dateStr){
+  const t = Date.parse(dateStr + 'T00:00:00');
+  if(!isFinite(t)) return '';
+  const today = new Date();
+  const d0 = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const diff = Math.round((d0 - t) / 86400000);
+  if(diff >= 0) return 'D+' + (diff + 1);
+  return 'D' + diff;
+}
+/* 사진 칸은 **한 번만** 세웁니다. 보고 있는 것이 바뀌면 getObj 가 다른 항목을
+   돌려주고 paint() 가 다시 그립니다 — 칸을 매번 새로 만들면 두 번 눌러 맞추던
+   중에 손에서 사라집니다. */
+let ddayAdj = null;
+function ddayCur(){ return (state.ddays || [])[ddayIdx] || null; }
+function ensureDdayAdj(){
+  if(ddayAdj) return ddayAdj;
+  const box = document.getElementById('ddayPhoto');
+  if(!box) return null;
+  ddayAdj = createAdjustable(box,
+    ()=> (ddayCur() ? ddayCur().photo : blankImg()),
+    (v)=>{
+      const it = ddayCur();
+      if(!it) return;
+      it.photo = v;
+      if(isLoggedIn) saveDdays();
+    });
+  return ddayAdj;
+}
+function renderDday(){
+  const wrap = document.getElementById('ddayWidget');
+  if(!wrap) return;
+  const list = state.ddays || [];
+  wrap.classList.toggle('dday-empty', !list.length);
+  if(ddayIdx >= list.length) ddayIdx = 0;
+  const it = list[ddayIdx] || null;
+  const cnt = document.getElementById('ddayCount');
+  const note = document.getElementById('ddayNote');
+  if(!it){
+    cnt.innerText = isLoggedIn ? '디데이 없음' : '';
+    note.innerText = isLoggedIn ? '✎ 로 추가하세요' : '';
+  }else{
+    cnt.innerText = ddayText(it.date) || it.name || '';
+    note.innerText = it.note || '';
+  }
+  const adj = ensureDdayAdj();
+  if(adj) adj.paint();
+  /* 하나뿐이면 넘길 곳이 없으니 화살표를 숨깁니다 */
+  wrap.classList.toggle('dday-one', list.length <= 1);
+}
+/* 넘길 때 **이어 붙은 것처럼 미끄러집니다.** 나가는 장면과 들어오는 장면이 서로
+   맞닿아 함께 움직이고, 투명해지는 일은 없습니다(주인 요청 — 한 겹만 썼을 때는
+   빈 배경이 비쳐서 흐려졌다 생기는 것처럼 보였습니다).
+
+   나가는 쪽은 **복제본**입니다. 진짜 칸에는 사진을 두 번 눌러 맞추는 장치가
+   붙어 있어서, 그쪽을 복제하면 장치가 엉뚱한 복사본에 남습니다. 복제본은 보여
+   주기만 하고 끝나면 치웁니다(테마곡 앨범아트가 넘어가는 방식과 같습니다).
+
+   **setTimeout 으로 잇습니다** — 배경 탭에서는 animationend 가 오지 않아 장면이
+   밖으로 나간 채 멈춥니다(이 저장소의 공통 규칙). */
+const DDAY_SWIPE_MS = 330;
+const DDAY_SWIPE_EASE = 'cubic-bezier(.22,1,.36,1)';
+let ddaySwiping = false;
+function ddayStep(d){
+  const n = (state.ddays || []).length;
+  if(n <= 1 || ddaySwiping) return;
+  const banner = document.getElementById('ddayBanner');
+  const slide = document.getElementById('ddaySlide');
+  if(!banner || !slide){ ddayIdx = (ddayIdx + d + n) % n; renderDday(); return; }
+
+  /* 지금 보이는 장면을 그대로 복제해 둡니다 — 이 복제본이 밖으로 나갑니다 */
+  const ghost = slide.cloneNode(true);
+  ghost.removeAttribute('id');
+  ghost.classList.add('dday-ghost');
+  ghost.querySelectorAll('[id]').forEach(el=> el.removeAttribute('id'));
+  banner.insertBefore(ghost, slide.nextSibling);
+
+  ddaySwiping = true;
+  ddayIdx = (ddayIdx + d + n) % n;
+  renderDday();                       // 진짜 칸은 이미 다음 장면입니다
+
+  /* 진짜 칸을 맞닿는 자리(바로 옆)에 세워 두고, 둘을 같은 거리만큼 함께 밉니다 */
+  const from = d > 0 ? 100 : -100;
+  slide.style.transition = 'none';
+  slide.style.transform = 'translateX(' + from + '%)';
+  void slide.offsetWidth;             // 그 자리에서 출발하도록 한 번 끊습니다
+  const move = 'transform ' + DDAY_SWIPE_MS + 'ms ' + DDAY_SWIPE_EASE;
+  slide.style.transition = move;
+  ghost.style.transition = move;
+  slide.style.transform = 'translateX(0)';
+  ghost.style.transform = 'translateX(' + (-from) + '%)';
+
+  setTimeout(()=>{
+    ghost.remove();
+    slide.style.transition = '';
+    slide.style.transform = '';
+    ddaySwiping = false;
+  }, DDAY_SWIPE_MS + 30);
+}
+function renderDdayManage(){
+  const box = document.getElementById('ddList');
+  if(!box) return;
+  box.innerHTML = '';
+  (state.ddays || []).forEach(it=>{
+    const row = document.createElement('div');
+    row.className = 'dd-row';
+    row.innerHTML =
+      '<span class="dd-thumb"></span>' +
+      '<span class="dd-fields">' +
+        '<input type="text" class="dd-name" placeholder="이름" maxlength="30" />' +
+        '<input type="date" class="dd-date" />' +
+        '<input type="text" class="dd-note" placeholder="한 줄" maxlength="60" />' +
+      '</span>' +
+      '<span class="wg-row-ctl">' +
+        '<button class="wg-chip dd-photo" type="button">사진</button>' +
+        '<button class="wg-chip wg-c-del dd-del" type="button">삭제</button>' +
+      '</span>';
+    const th = row.querySelector('.dd-thumb');
+    const u = (it.photo && it.photo.src) ? imgUrl(it.photo.src) : '';
+    if(u) th.style.backgroundImage = 'url("' + u + '")';
+    const nm = row.querySelector('.dd-name'); nm.value = it.name;
+    const dt = row.querySelector('.dd-date'); dt.value = it.date;
+    const nt = row.querySelector('.dd-note'); nt.value = it.note;
+    const commit = ()=>{
+      it.name = nm.value.trim().slice(0, 30);
+      it.date = dt.value;
+      it.note = nt.value.trim().slice(0, 60);
+      renderDday();
+      if(isLoggedIn) saveDdays();
+    };
+    [nm, dt, nt].forEach(el=>{
+      el.addEventListener('change', commit);
+      el.addEventListener('keydown', (e)=> e.stopPropagation());
+    });
+    row.querySelector('.dd-photo').addEventListener('click', ()=> ddayPickPhoto(it));
+    row.querySelector('.dd-del').addEventListener('click', async ()=>{
+      if(!(await siteConfirm('이 디데이를 지울까요?'))) return;
+      state.ddays = (state.ddays || []).filter(x=> x !== it);
+      renderDdayManage(); renderDday();
+      if(isLoggedIn) saveDdays();
+    });
+    box.appendChild(row);
+  });
+  if(!(state.ddays || []).length){
+    const n = document.createElement('p');
+    n.className = 'mg-note';
+    n.textContent = '아직 없어요. ＋ 추가로 만들어 주세요.';
+    box.appendChild(n);
+  }
+}
+async function ddayPickPhoto(it){
+  /* pickImageFile 은 고른 그림의 주소를 돌려줍니다(부르는 쪽에 넘기지 않습니다) */
+  const url = await pickImageFile();
+  if(!url) return;
+  it.photo = normalizeImg(url);
+  renderDdayManage(); renderDday();
+  if(isLoggedIn) saveDdays();
+}
+function initDday(){
+  const prev = document.getElementById('ddayPrev');
+  if(!prev) return;
+  prev.addEventListener('click', (e)=>{ e.stopPropagation(); ddayStep(-1); });
+  document.getElementById('ddayNext').addEventListener('click', (e)=>{ e.stopPropagation(); ddayStep(1); });
+  document.getElementById('ddayEdit').addEventListener('click', (e)=>{
+    e.stopPropagation();
+    renderDdayManage();
+    openModal('modalDday');
+  });
+  document.getElementById('ddAdd').addEventListener('click', ()=>{
+    const d = new Date();
+    const iso = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    if(!state.ddays) state.ddays = [];
+    state.ddays.push({ id:'dd' + Date.now().toString(36), name:'', date:iso, note:'', photo:blankImg() });
+    renderDdayManage(); renderDday();
+    if(isLoggedIn) saveDdays();
+  });
+}
+
+/* ---- 최신글 ----
+   어느 목록에서 가져올지 고릅니다. PAIR 의 LOG 도 하나의 갈래입니다 —
+   LOG 글은 PAIR·OC 글 **안에** 들어 있어서, 누를 때 그 글을 먼저 열고
+   그 위에 LOG 글을 띄웁니다. */
+const RECENT_SOURCES = [
+  { key:'all',     name:'전체' },
+  { key:'pair',    name:'PAIR' },
+  { key:'oc',      name:'OC' },
+  { key:'archive', name:'ARCHIVE' },
+  { key:'log',     name:'LOG' }
+];
+function normalizeRecentCfg(v){
+  const key = RECENT_SOURCES.some(s=> s.key === (v && v.source)) ? v.source : 'all';
+  const n = Math.max(1, Math.min(20, parseInt((v && v.count) || 5, 10) || 5));
+  return { source:key, count:n };
+}
+function saveRecentCfg(){ return storageSet('recentCfg', state.recentCfg); }
+
+/* 한 줄로 쓸 수 있게 갈래마다 같은 모양으로 모읍니다 */
+function recentItems(){
+  const out = [];
+  const cfg = state.recentCfg || normalizeRecentCfg(null);
+  const want = cfg.source;
+  const add = (o)=> out.push(o);
+  if(want === 'all' || want === 'pair'){
+    (state.pairPosts || []).forEach(p=> add({
+      kind:'pair', id:p.id, title:(p.title || '').trim() || '새 페어',
+      sub:navName('pair'), when:Number(p.id) || 0
+    }));
+  }
+  if(want === 'all' || want === 'oc'){
+    (state.ocPosts || []).forEach(o=> add({
+      kind:'oc', id:o.id, title:(o.title || '').trim() || '새 캐릭터',
+      sub:navName('oc'), when:Number(o.id) || 0
+    }));
+  }
+  if(want === 'all' || want === 'archive'){
+    (state.archive || []).forEach(a=> add({
+      kind:'archive', id:a.id, title:(a.title || '').trim() || '제목 없음',
+      /* 하위 분류까지 적습니다 — ARCHIVE 한 덩어리로만 보이면 어느 쪽 글인지
+         알 수 없습니다(주인 지적). 폴더까지는 내려가지 않습니다. */
+      sub: navName('archive') + ' · ' + (ARCHIVE_CAT_LABEL[a.category] || a.category || ''),
+      when:Number(a.id) || 0
+    }));
+  }
+  if(want === 'all' || want === 'log'){
+    const sweep = (posts, host)=>{
+      (posts || []).forEach(p=>{
+        (p.log || []).forEach(e=> add({
+          kind:'log', id:e.id, postId:p.id, host,
+          title:(e.title || '').trim() || '제목 없음',
+          sub:'LOG · ' + ((p.title || '').trim() || '이름 없음'),
+          when:Number(e.id) || 0
+        }));
+      });
+    };
+    sweep(state.pairPosts, 'pair');
+    sweep(state.ocPosts, 'oc');
+  }
+  /* id 가 만든 때(Date.now)라 그것이 곧 '새 것' 입니다 — 담긴 차례는
+     옮기고 다시 쓰면서 흐트러져 있어 믿을 수 없습니다(byNewest 와 같은 까닭). */
+  out.sort((a, b)=> b.when - a.when);
+  return out.slice(0, cfg.count);
+}
+function recentGo(it){
+  if(it.kind === 'archive'){
+    const item = (state.archive || []).find(x=> x.id === it.id);
+    if(!item) return;
+    openArchiveCategory(item.category || 'ooc');
+    openArcView(item);
+    return;
+  }
+  if(it.kind === 'pair'){ openPairDetail(it.id); return; }
+  if(it.kind === 'oc'){ openOcDetail(it.id); return; }
+  if(it.kind === 'log'){
+    const posts = it.host === 'oc' ? state.ocPosts : state.pairPosts;
+    const post = (posts || []).find(x=> x.id === it.postId);
+    if(!post) return;
+    if(it.host === 'oc') openOcDetail(it.postId); else openPairDetail(it.postId);
+    const entry = (post.log || []).find(e=> e.id === it.id);
+    if(!entry) return;
+    /* 글 화면은 LOG 칸 위에 덮이므로, 뒤로 나왔을 때 LOG 장이 보이도록
+       먼저 그 장으로 옮겨 둡니다. */
+    try{ if(it.host === 'oc') setOcPage(2, false); else setPdPage(2, false); }catch(_){}
+    openLogView(entry);
+  }
+}
+function renderRecent(){
+  const box = document.getElementById('rcList');
+  if(!box) return;
+  const items = recentItems();
+  box.innerHTML = '';
+  if(!items.length){
+    const n = document.createElement('div');
+    n.className = 'rc-none';
+    n.textContent = '아직 글이 없어요.';
+    box.appendChild(n);
+    return;
+  }
+  items.forEach(it=>{
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'rc-item';
+    b.innerHTML = '<span class="rc-item-title"></span><span class="rc-item-sub"></span>';
+    b.querySelector('.rc-item-title').textContent = it.title;
+    b.querySelector('.rc-item-sub').textContent = it.sub;
+    b.addEventListener('click', ()=> recentGo(it));
+    box.appendChild(b);
+  });
+}
+function initRecent(){
+  const opt = document.getElementById('rcOpt');
+  if(!opt) return;
+  const sel = document.getElementById('rcSource');
+  RECENT_SOURCES.forEach(s=>{
+    const o = document.createElement('option');
+    o.value = s.key; o.textContent = s.name;
+    sel.appendChild(o);
+  });
+  /* **그려서 달아야 보입니다.** .pick-dd-src 는 `display:none` 이라, 이 한 줄이
+     없으면 '어디서' 라벨만 있고 고르개가 통째로 안 보입니다 — 만들다 만 것처럼
+     보였던 까닭입니다(주인 지적). 사이트의 다른 고르개와 같은 장치입니다. */
+  bindPickDD(sel);
+  opt.addEventListener('click', ()=>{
+    const cfg = state.recentCfg || normalizeRecentCfg(null);
+    sel.value = cfg.source;
+    document.getElementById('rcCount').value = cfg.count;
+    openModal('modalRecent');
+  });
+  const commit = ()=>{
+    state.recentCfg = normalizeRecentCfg({
+      source: sel.value,
+      count: document.getElementById('rcCount').value
+    });
+    renderRecent();
+    if(isLoggedIn) saveRecentCfg();
+  };
+  sel.addEventListener('change', commit);
+  document.getElementById('rcCount').addEventListener('change', commit);
+}
+
+/* ---- 단어사전 ----
+   사전 한 쪽의 모양을 그대로 씁니다. 편집 모드에서는 글자 자리가 그 자리에서
+   고쳐 쓰는 칸이 됩니다(창을 띄우지 않습니다) — 사이트의 다른 글자들과 같은
+   방식입니다. 담는 것은 글자뿐이고, 사진만 창고로 빠져나갑니다. */
+const DICT_POS = ['명사', '대명사', '수사', '동사', '형용사', '관형사', '부사', '조사', '감탄사'];
+function normalizeDictWord(v){
+  const means = Array.isArray(v && v.means)
+    ? v.means.map(x=> String(x || '').slice(0, 300)).filter(x=> x !== null)
+    : [];
+  return {
+    word:  String((v && v.word)  || '').slice(0, 40),
+    hanja: String((v && v.hanja) || '').slice(0, 40),
+    pron:  String((v && v.pron)  || '').slice(0, 40),
+    pos:   Array.isArray(v && v.pos) ? v.pos.filter(x=> DICT_POS.includes(x)) : [],
+    means: means.length ? means : [''],
+    ex:    String((v && v.ex)    || '').slice(0, 300),
+    photo: normalizeImg(v && v.photo)
+  };
+}
+function saveDictWord(){ return storageSet('dictWord', state.dictWord); }
+
+/* **단어사전은 WIDGET 화면을 보고 있을 때만 고칠 수 있습니다.** 다른 화면에서는
+   로그인해 있어도 읽는 모습 그대로입니다 — 글을 읽다가 사전 글자에 커서가 들어가
+   엉뚱하게 고쳐지는 일이 없도록(주인 지시). 위젯을 손보는 자리에서만 손봅니다. */
+function dictEditable(){ return isLoggedIn && document.body.dataset.view === 'widget'; }
+
+/* 고쳐 쓸 수 있는 글자 자리를 하나 만듭니다. 편집 모드에서만 칸이 되고,
+   비어 있을 때는 안내 글이 보입니다(CSS 의 :empty:before). */
+function dictField(el, value, placeholder, onSave, multi){
+  if(!el) return;
+  el.textContent = value || '';
+  el.dataset.ph = placeholder || '';
+  el.contentEditable = dictEditable() ? 'true' : 'false';
+  el.classList.toggle('dict-edit', dictEditable());
+  if(el._dictBound) { el._dictSave = onSave; return; }
+  el._dictBound = true;
+  el._dictSave = onSave;
+  el.addEventListener('blur', ()=>{ el._dictSave(el.textContent.trim()); });
+  el.addEventListener('keydown', (e)=>{
+    e.stopPropagation();
+    if(e.key === 'Enter' && !multi){ e.preventDefault(); el.blur(); }
+    if(e.key === 'Escape'){ e.preventDefault(); renderDict(); }
+  });
+  /* 붙여넣기는 글자만 받습니다 — 서식이 따라오면 사전 모양이 깨집니다 */
+  el.addEventListener('paste', (e)=>{
+    e.preventDefault();
+    const t = (e.clipboardData || window.clipboardData).getData('text');
+    document.execCommand('insertText', false, String(t || '').replace(/\r\n/g, '\n'));
+  });
+}
+function renderDict(){
+  const wrap = document.getElementById('dictWidget');
+  if(!wrap) return;
+  const d = state.dictWord || normalizeDictWord(null);
+  state.dictWord = d;
+  /* 편집 단추들(＋뜻·사진)은 CSS 가 이 표시를 보고 켭니다 */
+  wrap.classList.toggle('dict-can-edit', dictEditable());
+  const commit = ()=>{ if(isLoggedIn) saveDictWord(); };
+
+  /* 사진 — 배너·카드와 같은 조정 칸입니다(두 번 누르면 자리를 맞춥니다) */
+  const ph = document.getElementById('dictPhoto');
+  ph.classList.toggle('dict-photo-empty', !d.photo || !d.photo.src);
+  const adj = ensureDictAdj();
+  if(adj) adj.paint();
+
+  dictField(document.getElementById('dictWord'), d.word, '단어',
+    (v)=>{ d.word = v.slice(0, 40); commit(); });
+  dictField(document.getElementById('dictHanja'), d.hanja, '(漢字)',
+    (v)=>{ d.hanja = v.slice(0, 40); commit(); });
+  dictField(document.getElementById('dictPron'), d.pron, '[표준 발음]',
+    (v)=>{ d.pron = v.slice(0, 40); commit(); });
+
+  /* 품사 알약 — 편집 모드에서는 고를 수 있는 단추가 되고, 보기 모드에서는
+     고른 것만 남습니다. */
+  const pos = document.getElementById('dictPos');
+  pos.innerHTML = '';
+  const show = dictEditable() ? DICT_POS : d.pos;
+  show.forEach(name=>{
+    const on = d.pos.includes(name);
+    const b = document.createElement(dictEditable() ? 'button' : 'span');
+    b.className = 'dict-pill' + (on ? ' on' : '');
+    b.textContent = name;
+    if(dictEditable()){
+      b.type = 'button';
+      /* **지금 담긴 것을 보고 판단합니다.** 그릴 때의 on 을 가둬 쓰면, 누른 뒤
+         다시 그려진 알약과 손에 든 알약이 서로 다른 답을 들고 있게 됩니다. */
+      b.addEventListener('click', ()=>{
+        const cur = state.dictWord;
+        cur.pos = cur.pos.includes(name)
+          ? cur.pos.filter(x=> x !== name)
+          : cur.pos.concat(name);
+        renderDict(); commit();
+      });
+    }
+    pos.appendChild(b);
+  });
+  pos.classList.toggle('dict-pos-pick', dictEditable());
+
+  /* 뜻 — 둘 이상이면 번호가 붙습니다(ol 이라 CSS 가 셉니다) */
+  const ol = document.getElementById('dictMeans');
+  ol.innerHTML = '';
+  ol.classList.toggle('dict-means-one', d.means.length <= 1);
+  d.means.forEach((m, i)=>{
+    const li = document.createElement('li');
+    li.className = 'dict-mean';
+    const tx = document.createElement('span');
+    tx.className = 'dict-mean-tx';
+    dictField(tx, m, '뜻을 적어주세요', (v)=>{ d.means[i] = v.slice(0, 300); commit(); }, true);
+    li.appendChild(tx);
+    if(dictEditable() && d.means.length > 1){
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'dict-mean-del';
+      del.title = '이 뜻 지우기';
+      del.textContent = '✕';
+      del.addEventListener('click', ()=>{
+        d.means.splice(i, 1);
+        if(!d.means.length) d.means = [''];
+        renderDict(); commit();
+      });
+      li.appendChild(del);
+    }
+    ol.appendChild(li);
+  });
+
+  dictField(document.getElementById('dictEx'), d.ex, '예문을 적어주세요',
+    (v)=>{ d.ex = v.slice(0, 300); commit(); }, true);
+  /* 보기 모드에서 예문이 비면 인용 틀만 남으므로 통째로 숨깁니다 */
+  wrap.querySelector('.dict-ex-wrap').style.display =
+    (!d.ex && !dictEditable()) ? 'none' : '';
+}
+let dictAdj = null;
+function ensureDictAdj(){
+  if(dictAdj) return dictAdj;
+  const box = document.getElementById('dictPhoto');
+  if(!box) return null;
+  dictAdj = createAdjustable(box,
+    ()=> (state.dictWord && state.dictWord.photo) || blankImg(),
+    (v)=>{
+      if(!state.dictWord) state.dictWord = normalizeDictWord(null);
+      state.dictWord.photo = v;
+      document.getElementById('dictPhoto')
+        .classList.toggle('dict-photo-empty', !v || !v.src);
+      if(isLoggedIn) saveDictWord();
+    });
+  return dictAdj;
+}
+function initDict(){
+  const add = document.getElementById('dictAddMean');
+  if(!add) return;
+  add.addEventListener('click', ()=>{
+    const d = state.dictWord || normalizeDictWord(null);
+    d.means.push('');
+    state.dictWord = d;
+    renderDict();
+    if(isLoggedIn) saveDictWord();
+  });
+  /* 넣기·바꾸기는 조정 칸이 가진 ＋사진 / 사진 단추가 맡습니다(createAdjustable).
+     여기서는 지우기만 답니다. */
+  document.getElementById('dictPhotoDel').addEventListener('click', (e)=>{
+    e.stopPropagation();
+    const d = state.dictWord || normalizeDictWord(null);
+    d.photo = blankImg();
+    state.dictWord = d;
+    renderDict();
+    if(isLoggedIn) saveDictWord();
+  });
+}
+
+/* 셋을 한꺼번에 — renderAll 과 applyEditMode 가 부릅니다 */
+function renderBuiltinWidgets(){
+  safely('디데이', renderDday);
+  safely('최신글', renderRecent);
+  safely('단어사전', renderDict);
+}
+initDday();
+initRecent();
+initDict();
+
+/* ============================================================
    INIT
    ------------------------------------------------------------
    Firestore에서 데이터를 받아온 뒤 화면을 그립니다.
@@ -12906,9 +13483,20 @@ document.getElementById('sdShadowChk')?.addEventListener('change', (e)=>{
   storageSet('stickerShadow', state.stickerShadow);
 });
 
+/* 스티커 위젯이 켜져 있고 이 화면에 놓일 수 있는가 — 꺼져 있으면 꺼내 둔
+   스티커도 보이지 않아야 합니다(서랍이 없으면 도로 넣을 길이 없습니다). */
+function stickerWidgetLive(){
+  if(typeof wgFind !== 'function') return true;        // 위젯 체계가 아직 없으면 예전대로
+  const w = wgFind('sticker');
+  if(!w) return true;
+  if(!w.on) return false;
+  if(isMobileWidth()) return false;                    // 폰에서는 원래 스티커를 쓰지 않습니다
+  return true;
+}
 function renderStickers(){
   const layer = document.getElementById('stickerLayer');
   if(!layer) return;
+  if(!stickerWidgetLive()){ layer.innerHTML = ''; return; }
   const removing = stickerRemoveMode && isLoggedIn;
   layer.classList.toggle('removing', removing);
   layer.classList.toggle('st-shadow', !!state.stickerShadow);

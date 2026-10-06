@@ -74,7 +74,14 @@ const SCALAR_KEYS = ['profile', 'siteName', 'homeIntro', 'homeBanner', 'archiveS
                      /* 사이드바 메뉴 이름 바꾸기 — {pair, oc, archive, portal}. */
                      'navNames',
                      /* STORAGE 게이지를 사이드바에 둘지. 참/거짓 하나입니다. */
-                     'showStorage'];
+                     'showStorage',
+                     /* 디데이 배너 — [{id,name,date,note,photo}]. 사진은 data: 라서
+                        사진 창고로 빠져나갑니다. */
+                     'ddays',
+                     /* 단어사전 위젯 한 쪽 — 단어·발음·품사·뜻·예문·사진. */
+                     'dictWord',
+                     /* 최신글 위젯 설정 — {source, count}. 아주 작습니다. */
+                     'recentCfg'];
 const LIST_KEYS   = ['cards', 'pairPosts', 'archive', 'ocPosts'];
 
 /* Firestore 문서 1개 최대 1MiB. 여유를 두고 자릅니다. */
