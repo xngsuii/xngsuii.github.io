@@ -137,10 +137,21 @@
   /* 오렌지로 칠하지 않습니다 — 이 사이트에서 오렌지는 '지금 여기'를 뜻하는
      신호색이라, 늘 떠 있는 가로대까지 같은 색이면 신호가 묽어집니다.
      평소에는 얇은 선과 같은 회색이고 손이 닿으면 진해집니다. */
+  /* ---- 스크롤 막대 ----
+     평소에는 보이지 않습니다. 그 칸에 마우스를 올리거나 굴리면 나타나고,
+     떠난 뒤 5초쯤 지나면 사라집니다(main.js 의 SCROLL_LIVE_MS 와 쌍).
+
+     **서서히 사라지게는 할 수 없습니다.** ::-webkit-scrollbar-thumb 에는 전환이
+     걸리지 않습니다 — 1초짜리 transition 을 걸고 60ms 에 재보면 색이 이미 끝까지
+     가 있습니다(잰 값). scrollbar-color 쪽은 클래스를 켜도 값 자체가 바뀌지
+     않습니다. 그래서 '툭' 나타났다 '툭' 사라집니다. 서서히 하려면 네이티브 막대를
+     버리고 직접 그려야 하는데, 주인이 알고 이쪽을 골랐습니다.
+     이미 제 막대를 숨겨 둔 칸들(.oc-theme-list 등, width:0)은 그대로입니다. */
   ::-webkit-scrollbar{width:6px;height:6px;}
-  ::-webkit-scrollbar-thumb{background:var(--rule-soft);border-radius:0;}
-  ::-webkit-scrollbar-thumb:hover{background:var(--text-muted);}
+  ::-webkit-scrollbar-thumb{background:transparent;border-radius:0;}
   ::-webkit-scrollbar-track{background:transparent;}
+  .scroll-live::-webkit-scrollbar-thumb{background:var(--rule-soft);}
+  .scroll-live::-webkit-scrollbar-thumb:hover{background:var(--text-muted);}
   /* 파이어폭스는 위 규칙을 모르고 아래 두 줄로만 받습니다.
      그런데 요즘 크롬은 둘 다 아는데, scrollbar-color 가 적혀 있으면 위쪽
      ::-webkit-scrollbar 규칙을 통째로 무시하고 자기 방식으로 그립니다 —
@@ -3379,24 +3390,78 @@
      · 눌렀을 때 : 스티커 자신이 말랑하게 눌렸다 늘어납니다. 말풍선은 그냥 뜹니다.
      둘 다 클래스를 붙여 도는 animation 입니다(transition 이 아닙니다 —
      스티커는 display:none 에서 나타나거나 새로 만들어지기 때문입니다). */
+  /* ---- 스티커가 움직이는 법 ----
+     표시는 **언제나 data-play 하나**입니다. 예전에는 .dropping 과 .squishing 이
+     같은 힘의 규칙 둘로 animation 을 다퉈서, 한쪽을 떼는 순간 animation-name 이
+     다른 쪽으로 되살아나 가만히 있던 스티커가 다시 떨어졌습니다.
+     값은 main.js 의 STICKER_ANIMS 와 같고 **시간도 거기와 쌍입니다**.
+     transform 을 쓰므로 .sticker 의 자리는 left/top 으로 두어야 합니다(지금 그렇습니다).
+     좌우반전이 .sticker 가 아니라 안쪽 img 에 걸리는 것도 같은 이유입니다. */
   @keyframes st-drop{
-    0%  {transform:translateY(-92px);opacity:0;}
-    12% {opacity:1;}
-    52% {transform:translateY(0);}
-    68% {transform:translateY(-15px);}
-    84% {transform:translateY(0);}
-    92% {transform:translateY(-4px);}
-    100%{transform:none;}
+    0%{transform:translateY(-92px);opacity:0;}
+    12%{opacity:1;}
+    55%{transform:translateY(0);}
+    70%{transform:translateY(-13px);}
+    85%{transform:translateY(0);}
+    93%{transform:translateY(-5px);}
+    100%{transform:translateY(0);}
   }
-  .sticker.dropping{animation:st-drop .58s cubic-bezier(.33,.7,.45,1) both;}
+  /* 말랑 — 옆으로 눌렸다 세로로 늘어났다 제자리 */
   @keyframes st-squish{
-    0%  {transform:scale(1,1);}
-    22% {transform:scale(1.16,.84);}
-    48% {transform:scale(.92,1.1);}
-    72% {transform:scale(1.05,.97);}
+    0%{transform:scale(1,1);}
+    30%{transform:scale(1.16,.84);}
+    58%{transform:scale(.92,1.1);}
+    80%{transform:scale(1.04,.97);}
     100%{transform:scale(1,1);}
   }
-  .sticker.squishing{animation:st-squish .46s cubic-bezier(.3,.9,.4,1) both;transform-origin:50% 100%;}
+  /* 통통 — 위로 뿅 튀었다가 작게 한 번 더 */
+  @keyframes st-bounce{
+    0%{transform:translateY(0) scale(1,1);}
+    18%{transform:translateY(-26px) scale(.95,1.07);}
+    40%{transform:translateY(0) scale(1.07,.93);}
+    58%{transform:translateY(-11px) scale(.98,1.02);}
+    78%{transform:translateY(0) scale(1.04,.96);}
+    100%{transform:translateY(0) scale(1,1);}
+  }
+  /* 도리도리 — 좌우로 흔들리며 잦아듦 */
+  @keyframes st-wobble{
+    0%{transform:rotate(0);}
+    15%{transform:rotate(-7deg);}
+    32%{transform:rotate(5.5deg);}
+    49%{transform:rotate(-3.5deg);}
+    66%{transform:rotate(2deg);}
+    83%{transform:rotate(-1deg);}
+    100%{transform:rotate(0);}
+  }
+  /* 꾹 — 키보드가 눌린 것처럼 살짝 작아졌다 돌아옴 */
+  @keyframes st-press{
+    0%{transform:scale(1,1);}
+    42%{transform:scale(.93,.9);}
+    100%{transform:scale(1,1);}
+  }
+  /* 갸웃 — 한쪽으로 기울었다 돌아옴 */
+  @keyframes st-tilt{
+    0%{transform:rotate(0);}
+    30%{transform:rotate(-9deg);}
+    62%{transform:rotate(3.5deg);}
+    100%{transform:rotate(0);}
+  }
+  .sticker[data-play="drop"]  {animation:st-drop   .58s cubic-bezier(.33,.7,.45,1) both;}
+  .sticker[data-play="squish"]{animation:st-squish .46s cubic-bezier(.3,.9,.4,1) both;transform-origin:50% 100%;}
+  .sticker[data-play="bounce"]{animation:st-bounce .62s cubic-bezier(.3,.8,.4,1) both;transform-origin:50% 100%;}
+  .sticker[data-play="wobble"]{animation:st-wobble .6s  ease-out both;transform-origin:50% 90%;}
+  .sticker[data-play="press"] {animation:st-press  .3s  cubic-bezier(.3,.9,.4,1) both;transform-origin:50% 100%;}
+  .sticker[data-play="tilt"]  {animation:st-tilt   .55s cubic-bezier(.3,.8,.4,1) both;transform-origin:50% 100%;}
+  /* 창에서 효과를 고르면 미리보기에서 그대로 돌려 봅니다 */
+  .st-preview[data-play="squish"]{animation:st-squish .46s cubic-bezier(.3,.9,.4,1) both;transform-origin:50% 100%;}
+  .st-preview[data-play="bounce"]{animation:st-bounce .62s cubic-bezier(.3,.8,.4,1) both;transform-origin:50% 100%;}
+  .st-preview[data-play="wobble"]{animation:st-wobble .6s  ease-out both;transform-origin:50% 90%;}
+  .st-preview[data-play="press"] {animation:st-press  .3s  cubic-bezier(.3,.9,.4,1) both;transform-origin:50% 100%;}
+  .st-preview[data-play="tilt"]  {animation:st-tilt   .55s cubic-bezier(.3,.8,.4,1) both;transform-origin:50% 100%;}
+  /* 효과 고르개 — 좌우반전 단추와 같은 모양으로 */
+  .st-anim-row{display:flex;flex-wrap:wrap;gap:6px;}
+  .st-anim-row .btn-ghost{padding:0 10px;min-height:0;height:27px;font-size:10.5px;}
+  .st-anim-row .btn-ghost.on{background:var(--accent);border-color:var(--accent);color:#fff;}
   @media (prefers-reduced-motion:reduce){
     .sticker.dropping,.sticker.squishing{animation-duration:.01s;}
     /* 움직임을 줄여 달라고 한 기기에서는 선을 긋지 않고 그냥 있게 둡니다 */

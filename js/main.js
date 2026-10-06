@@ -1783,14 +1783,22 @@ function catCtx(nav){
     }
   };
 }
+/* ARCHIVE 하위 분류를 고릅니다 — **목록 상태와 사이드바 표시만** 바꾸고 화면은
+   옮기지 않습니다. 메뉴를 눌러 들어오는 길은 화면까지 옮겨야 하므로 그쪽에서
+   따로 합니다. 글을 저장하면서 카테고리를 옮겼을 때도 이걸 불러, 뒤로 나갔을 때
+   옮긴 쪽 목록이 보이게 합니다. */
+function setArchiveCategory(cat){
+  currentArchiveCategory = cat;
+  arcPage = 1;
+  arcUnblurred.clear();
+  arcSelectedIds.clear();   // 카테고리를 옮기면 골라둔 것도 비웁니다
+  document.querySelectorAll('#archiveSub .nav-sub-item').forEach(b=>
+    b.classList.toggle('active', b.dataset.archivesub === cat));
+}
 document.querySelectorAll('#archiveSub .nav-sub-item').forEach(btn=>{
   btn.addEventListener('click', (e)=>{
     e.stopPropagation();
-    document.querySelectorAll('#archiveSub .nav-sub-item').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
-    currentArchiveCategory = btn.dataset.archivesub;
-    arcPage=1;
-    arcUnblurred.clear();
-    arcSelectedIds.clear();   // 카테고리를 옮기면 골라둔 것도 비웁니다
+    setArchiveCategory(btn.dataset.archivesub);
     navItems.forEach(b=>b.classList.remove('active'));
     document.querySelector('.nav-item[data-view="archive"]').classList.add('active');
     activateView('archive');
@@ -3609,7 +3617,12 @@ function htmlToPlainText(html){
    볼드 안에는 홀별(기울임)을, 기울임 안에는 겹별(볼드)을 넣을 수 있게
    내용 쪽을 열어 두었고, 닫는 별 뒤에 별이 또 오면 닫는 별로 보지 않습니다
    (그래야 *기울임 **볼드** 끝* 에서 볼드의 첫 별을 닫는 별로 착각하지 않습니다). */
-const AF_RE_FULL  = /\*\*\*([^*\n]+)\*\*\*|\*\*((?:[^*\n]|\*(?!\*))+?)\*\*|\*(?!\*)((?:[^*\n]|\*\*[^*\n]+\*\*)+?)\*(?!\*)|"([^"\n]*)"|\(([^)\n]*)\)/g;
+/* 따옴표는 **곧은 것과 둥근 것 둘 다** 잡습니다. 갈래를 따로 두는 까닭 — 하나로
+   묶으면 `“곧은"` 처럼 종류가 다른 두 기호가 짝으로 잡힙니다.
+   예전엔 곧은 따옴표만 있었습니다(주인 지적 — 직접 쓸 때는 둥근 쪽이 나오는데
+   그쪽은 색이 안 입혀졌습니다). 갈래가 하나 늘었으므로 **afWrapper 의 묶음 번호도
+   함께 밀립니다** — 괄호는 5 번에서 6 번이 됩니다. */
+const AF_RE_FULL  = /\*\*\*([^*\n]+)\*\*\*|\*\*((?:[^*\n]|\*(?!\*))+?)\*\*|\*(?!\*)((?:[^*\n]|\*\*[^*\n]+\*\*)+?)\*(?!\*)|"([^"\n]*)"|“([^”\n]*)”|\(([^)\n]*)\)/g;
 /* 따옴표·괄호 껍데기 안에서 다시 찾을 때 쓰는 것 — 따옴표·괄호 갈래를 빼야
    방금 만든 껍데기가 자기 자신을 또 감싸는 일이 없습니다. */
 const AF_RE_STARS = /\*\*\*([^*\n]+)\*\*\*|\*\*((?:[^*\n]|\*(?!\*))+?)\*\*|\*(?!\*)((?:[^*\n]|\*\*[^*\n]+\*\*)+?)\*(?!\*)/g;
@@ -3648,8 +3661,9 @@ function afWrapper(m, subColor, parenColor){
     const i = document.createElement('i');
     return { outer:i, inner:i, cut:1, stars:true };
   }
-  const s = document.createElement('span');    // "보조색" / (괄호색) — 기호는 유지
-  s.style.color = m[4] !== undefined ? subColor : parenColor;
+  const s = document.createElement('span');    // "보조색" / “보조색” / (괄호색) — 기호는 유지
+  const quoted = m[4] !== undefined || m[5] !== undefined;   // 4 곧은 따옴표, 5 둥근 따옴표
+  s.style.color = quoted ? subColor : parenColor;
   return { outer:s, inner:s, cut:0, stars:false };
 }
 /* 짝을 지어도 되는 '한 상자' 인지 봅니다. 표의 칸(td·th)은 블록 태그 목록에
@@ -6771,6 +6785,51 @@ const MOBILE_MQ = '(max-width:768px)';
 const SHORT_MQ  = '(max-height:720px)';
 function isMobileWidth(){ return window.matchMedia(MOBILE_MQ).matches; }
 
+/* ---- 스크롤 막대를 잠깐만 보이게 ----
+   막대는 CSS 에서 투명하게 두고, 지금 쓰고 있는 칸에만 .scroll-live 를 붙입니다.
+   붙는 때는 두 가지 — 그 칸 위로 마우스가 들어왔을 때, 그리고 그 칸이 굴러갔을 때.
+   붙일 때마다 5초 타이머를 다시 겁니다. 그래서 올려놓고 있는 동안에는 계속 보이고,
+   떠난 뒤 5초가 지나면 사라집니다.
+
+   **한 번에 한 칸만** 켭니다 — 칸이 겹쳐 있을 때 바깥 칸의 막대까지 같이 뜨면
+   무엇을 굴리고 있는지 알 수 없습니다.
+   scroll 은 거품이 일지 않으므로 캡처로 받습니다. */
+const SCROLL_LIVE_MS = 5000;
+let scrollLiveEl = null, scrollLiveTimer = 0;
+/* 커서 아래에서 **실제로 굴러가는** 칸을 찾습니다 — 넘치지도 않는데 켜 두면
+   있지도 않은 막대를 기다리게 됩니다. */
+function scrollableFrom(node){
+  let el = (node && node.nodeType === 3) ? node.parentElement : node;
+  while(el && el.nodeType === 1){
+    const overY = el.scrollHeight > el.clientHeight + 1;
+    const overX = el.scrollWidth  > el.clientWidth  + 1;
+    if(overY || overX){
+      const cs = getComputedStyle(el);
+      if((overY && /auto|scroll/.test(cs.overflowY)) || (overX && /auto|scroll/.test(cs.overflowX))) return el;
+    }
+    el = el.parentElement;
+  }
+  return null;
+}
+function markScrollLive(el){
+  if(!el || !el.classList) return;
+  if(scrollLiveEl && scrollLiveEl !== el) scrollLiveEl.classList.remove('scroll-live');
+  scrollLiveEl = el;
+  el.classList.add('scroll-live');
+  clearTimeout(scrollLiveTimer);
+  scrollLiveTimer = setTimeout(()=>{
+    if(scrollLiveEl) scrollLiveEl.classList.remove('scroll-live');
+    scrollLiveEl = null;
+  }, SCROLL_LIVE_MS);
+}
+document.addEventListener('pointerover', (e)=>{
+  const el = scrollableFrom(e.target);
+  if(el) markScrollLive(el);
+}, { passive: true });
+document.addEventListener('scroll', (e)=>{
+  if(e.target && e.target.nodeType === 1) markScrollLive(e.target);
+}, { capture: true, passive: true });
+
 /* ---- 쪽 번호 ----
    네 군데(PAIR 목록 · PAIR 안의 LOG · OC 목록 · ARCHIVE 목록)가 같은 줄을
    그리므로 한 함수로 모읍니다.
@@ -9819,12 +9878,14 @@ bindOnce(document.getElementById('saveArcBtn'), async ()=>{
     await storageSet('archiveSeqCounter', state.archiveSeqCounter);
   }
   await storageSet('archive', state.archive);
-  /* 방금 저장한 글이 든 폴더를 목록이 보게 해 둡니다 — 폴더를 옮겨 놓고
-     뒤로 나갔을 때 '글이 사라졌다'로 보이지 않게. 카테고리까지 바꿨다면
-     그 카테고리를 고른 것은 아니므로 목록은 건드리지 않습니다. */
-  if(category===currentArchiveCategory && curArcFolderId(category)!==folderId){
-    setCurArcFolderId(folderId, category);
-  }
+  /* 방금 저장한 글이 있는 자리를 목록이 보게 해 둡니다 — 폴더를 옮겼든
+     카테고리를 옮겼든, 뒤로 나갔을 때 '글이 사라졌다'로 보이지 않게.
+     예전에는 폴더만 따라갔습니다. **글 자체는 그때도 제대로 옮겨졌고**
+     (item.category 를 그대로 씁니다), 따라오지 않던 것은 보고 있던 목록
+     쪽이었습니다 — 사이드바의 하위 메뉴까지 옮겨야 해서 미뤄 둔 것인데,
+     주인 지적대로 옮긴 쪽을 보는 게 맞습니다. */
+  if(category !== currentArchiveCategory) setArchiveCategory(category);
+  if(curArcFolderId(category) !== folderId) setCurArcFolderId(folderId, category);
   /* 새 글은 목록 첫 쪽으로 (맨 앞에 옵니다). 고친 글은 보던 쪽 그대로 둡니다. */
   if(!editingArcId) arcPage = 1;
   const savedId = editingArcId || state.archive[state.archive.length-1].id;
@@ -11023,7 +11084,20 @@ const STICKER_BUBBLE_MS = 3400;
 const STICKER_DEFAULT_W = 130;
 /* style.css 의 .sticker.dropping / .sticker.squishing 규칙과 같아야 합니다 */
 const STICKER_DROP_MS = 580;
-const STICKER_SQUISH_MS = 460;
+/* 눌렀을 때의 움직임 — 스티커마다 고릅니다(s.anim).
+   **시간은 CSS 의 .sticker[data-play=…] 와 쌍입니다** — 한쪽만 고치면 표시를
+   떼는 시점이 어긋나 움직임이 끝나기 전에 끊기거나 다음 누름이 안 먹습니다. */
+const STICKER_ANIMS = {
+  squish: { label: '말랑',     ms: 460 },
+  bounce: { label: '통통',     ms: 620 },
+  wobble: { label: '도리도리', ms: 600 },
+  press:  { label: '꾹',       ms: 300 },
+  tilt:   { label: '갸웃',     ms: 550 }
+};
+const STICKER_ANIM_DEFAULT = 'squish';
+function stickerAnimOf(s){
+  return (s && STICKER_ANIMS[s.anim]) ? s.anim : STICKER_ANIM_DEFAULT;
+}
 let stickerRemoveMode = false;
 /* 폰 전용, 저장하지 않습니다 */
 const stickerLocal = { out:new Set(), pos:new Map() };
@@ -11031,6 +11105,7 @@ let stickerEditId = null;     // 편집 중인 스티커 id (추가면 null)
 let stickerDraftSrc = '';     // 창에서 고른 이미지
 let stickerDraftLines = [];   // 창에서 '추가'로 담은 문구들
 let stickerDraftFlip = false; // 창에서 켜 둔 좌우반전
+let stickerDraftAnim = STICKER_ANIM_DEFAULT;  // 창에서 고른 효과
 /* 방금 서랍에서 꺼낸 스티커 — 이번에 그릴 때만 떨어지는 움직임을 줍니다.
    그리는 함수는 여러 이유로 불리므로(로그인 상태 바뀜 등), 표시가 남아 있으면
    가만히 있던 스티커까지 다시 떨어집니다. */
@@ -11046,6 +11121,9 @@ function normalizeStickers(list){
     x: Number.isFinite(s.x) ? s.x : 50,
     y: Number.isFinite(s.y) ? s.y : 50,
     flip: !!s.flip,
+    /* 모르는 이름이 저장돼 있으면 기본으로 돌려놓습니다.
+       이 줄을 빼면 anim 이 다음 불러올 때 통째로 지워지고 그게 저장됩니다. */
+    anim: STICKER_ANIMS[s.anim] ? s.anim : STICKER_ANIM_DEFAULT,
     out: !!s.out
   }));
 }
@@ -11113,10 +11191,7 @@ function renderStickers(){
        가만히 있던 스티커가 다시 떨어집니다("넣자마자 누르면 두 움직임이 겹친다").
        animationend 대신 타이머를 쓰는 것은, 화면이 안 보이는 탭에서는
        애니메이션이 돌지 않아 그 사건이 영영 오지 않기 때문입니다. */
-    if(stickerDropIds.has(s.id)){
-      el.classList.add('dropping');
-      setTimeout(()=> el.classList.remove('dropping'), STICKER_DROP_MS + 40);
-    }
+    if(stickerDropIds.has(s.id)) playSticker(el, 'drop');
     bindStickerDrag(el, s);
     bindStickerResize(size, el, s);
     layer.appendChild(el);
@@ -11153,7 +11228,7 @@ function bindStickerDrag(el, s){
     el.classList.remove('dragging');
     try{ el.releasePointerCapture(e.pointerId); }catch(_){}
     if(moved){ commitStickerChange(); return; }
-    squishSticker(el);          // 눌린 것은 스티커 자신이 말랑하게 반응합니다
+    playSticker(el, stickerAnimOf(s));   // 눌린 것은 스티커 자신이 반응합니다 (모양은 골라 둘 수 있습니다)
     speakSticker(el, s);        // 말풍선은 움직임 없이 그냥 뜹니다
   };
   el.addEventListener('pointerup', end);
@@ -11203,15 +11278,19 @@ function bindStickerResize(handle, el, s){
 /* 눌렀을 때 스티커가 말랑하게 눌렸다 늘어납니다.
    연달아 눌러도 다시 돌도록, 클래스를 뗀 뒤 한 번 강제로 계산시키고 다시 붙입니다 —
    껐다 켜기를 한 흐름에 하면 크롬은 '바뀐 게 없다'고 보고 아무 것도 하지 않습니다. */
-function squishSticker(el){
-  /* 아직 떨어지는 중이면 그쪽을 먼저 끝냅니다 — 두 규칙이 같은 transform 을
-     다투기 때문입니다(위 renderStickers 주석 참고). */
-  el.classList.remove('dropping');
-  el.classList.remove('squishing');
+function playSticker(el, name){
+  /* **클래스 여러 개가 아니라 data-play 하나로** 가르는 까닭: 예전에는
+     .dropping 과 .squishing 이 같은 힘의 규칙 둘로 animation 을 다퉈서,
+     한쪽을 떼면 animation-name 이 다른 쪽으로 되살아나 가만히 있던 스티커가
+     다시 떨어졌습니다. 표시가 하나뿐이면 다툴 자식이 없습니다. */
+  if(!el) return;
+  el.removeAttribute('data-play');
   void el.offsetWidth;
-  el.classList.add('squishing');
-  clearTimeout(el._squishTimer);
-  el._squishTimer = setTimeout(()=> el.classList.remove('squishing'), STICKER_SQUISH_MS + 40);
+  el.setAttribute('data-play', name);
+  clearTimeout(el._playTimer);
+  const ms = (name === 'drop') ? STICKER_DROP_MS
+           : (STICKER_ANIMS[name] ? STICKER_ANIMS[name].ms : STICKER_ANIMS[STICKER_ANIM_DEFAULT].ms);
+  el._playTimer = setTimeout(()=> el.removeAttribute('data-play'), ms + 40);
 }
 /* 문구가 여러 개면 누를 때마다 무작위로 하나. 바로 앞에 나온 것은 피합니다 */
 function speakSticker(el, s){
@@ -11319,6 +11398,26 @@ function paintStickerPreview(){
 }
 /* 문구는 '추가'로 하나씩 담습니다 — 엔터를 구분자로 쓰면 여러 줄짜리 문구를
    아예 넣을 수 없기 때문입니다. 담긴 것은 아래에 줄바꿈까지 그대로 보여줍니다. */
+/* 효과 고르개. 누르면 바로 위 미리보기에서 그 움직임을 돌려 보여 줍니다 —
+   이름만 보고 고르는 것보다 한 번 보는 쪽이 빠릅니다. */
+function renderStickerAnimRow(){
+  const row = document.getElementById('stAnimRow');
+  if(!row) return;
+  row.innerHTML = '';
+  Object.keys(STICKER_ANIMS).forEach(name=>{
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn-ghost' + (name === stickerDraftAnim ? ' on' : '');
+    b.innerText = STICKER_ANIMS[name].label;
+    b.addEventListener('click', ()=>{
+      stickerDraftAnim = name;
+      row.querySelectorAll('.btn-ghost').forEach(x=> x.classList.remove('on'));
+      b.classList.add('on');
+      playSticker(document.getElementById('stPreview'), name);
+    });
+    row.appendChild(b);
+  });
+}
 function renderStickerLines(){
   const box = document.getElementById('stLineList');
   if(!box) return;
@@ -11357,6 +11456,8 @@ function openStickerModal(s){
   stickerDraftSrc = s ? s.src : '';
   stickerDraftLines = s ? (s.lines || []).slice() : [];
   stickerDraftFlip = s ? !!s.flip : false;
+  stickerDraftAnim = stickerAnimOf(s);
+  renderStickerAnimRow();
   document.getElementById('stickerModalHeading').innerText = s ? '스티커 편집' : '스티커 추가';
   document.getElementById('stLineInput').value = '';
   document.getElementById('stError').innerText = '';
@@ -11463,9 +11564,11 @@ function initStickers(){
       cur.src = stickerDraftSrc;
       cur.lines = lines;
       cur.flip = stickerDraftFlip;
+      cur.anim = stickerDraftAnim;
     }else{
       const p = randomStickerPos();
       const made = { id: Date.now(), src: stickerDraftSrc, lines, flip: stickerDraftFlip,
+                     anim: stickerDraftAnim,
                      w: STICKER_DEFAULT_W, x: p.x, y: p.y, out: true };
       state.stickers.push(made);
       stickerDropIds.add(made.id);          // 만들자마자 툭 떨어지며 나옵니다
