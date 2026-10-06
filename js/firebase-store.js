@@ -56,7 +56,12 @@ const SCALAR_KEYS = ['profile', 'siteName', 'homeIntro', 'homeBanner', 'archiveS
                      'stickers',
                      /* PORTAL — 사이드바 맨 아래의 바깥 사이트 목록.
                         [{id, name, url}] 뿐이라 아주 작습니다. */
-                     'portalLinks'];
+                     'portalLinks',
+                     /* 위젯 — 켬/끔, 놓을 자리, 순서, 아이콘, 팝업 좌표.
+                        직접 만든 위젯의 HTML·CSS 도 여기 들어가지만 글자뿐이라
+                        작습니다. 단, 위젯 CSS 안에 data: 그림을 박으면 그건
+                        사진 창고로 빠져나가 용량을 깎습니다(주인에게 안내함). */
+                     'widgets'];
 const LIST_KEYS   = ['cards', 'pairPosts', 'archive', 'ocPosts'];
 
 /* Firestore 문서 1개 최대 1MiB. 여유를 두고 자릅니다. */

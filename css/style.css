@@ -281,7 +281,18 @@
   /* 바닥에 붙는 것은 이 위의 스티커 서랍부터입니다 — margin-top:auto 는
      .sticker-drawer 가 가지고 있습니다. 여기 다시 넣으면 서랍만 메뉴 밑에
      떨어져 붙습니다. */
-  .music-block{padding:0 0 16px;}
+  .music-block{padding:0 0 16px;position:relative;}
+  /* ---------- 사이드바 위젯 칸 ----------
+     안에 든 위젯은 **옮겨 다니는 바로 그 요소**입니다 — 팝업으로 보내면 이 칸에서
+     빠져 팝업 상자로 들어가고, 되돌리면 돌아옵니다. 두 벌 만들지 않습니다. */
+  .side-widgets{display:flex;flex-direction:column;margin-top:auto;}
+  /* 끌어서 순서를 바꾸는 손잡이. 위젯 안에 **절대 자리로 얹혀** 위젯 자신의
+     배치는 건드리지 않습니다. 편집 모드에만 JS 가 답니다. */
+  .wg-reordering{opacity:.55;}
+  /* 직접 만든 위젯 */
+  .wg-custom{position:relative;padding:0 0 16px;font-size:12px;color:var(--text);}
+  .wg-custom-body{min-width:0;overflow-wrap:anywhere;}
+  .wg-frame{display:block;width:100%;height:150px;border:0;background:transparent;}
   /* 데이터가 오기 전 — 비워 둡니다. visibility 인 까닭은 HOME 격자와 같습니다:
      자리를 남겨야 사이드바가 뒤늦게 밀려 내려가지 않습니다. */
   .music-block.mb-hold{visibility:hidden;}
@@ -564,6 +575,169 @@
   .storage-meter.warn .sm-fill{background:#c0392b;}
   .storage-meter.warn .sm-pct{color:#c0392b;}
   .sm-sub{margin-top:5px;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:.12em;line-height:1.4;color:var(--text-muted);font-variant-numeric:tabular-nums;}
+
+  /* ---------- 팝업 위젯 ----------
+     낫표 바깥에 떠 있습니다. position:fixed 라 패널을 굴려도 따라오지 않습니다.
+     z-index 70 — 스티커(30) 위, 모달(100) 아래. 종이 질감 50 은 이제 없습니다.
+     자리는 JS 가 left/top 으로 잡고 화면 밖으로 못 나가게 가둡니다. */
+  .widget-pops{position:static;}
+  .wg-pop{position:fixed;z-index:70;width:236px;box-sizing:border-box;
+    background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);
+    box-shadow:0 6px 20px rgba(0,0,0,.14);}
+  /* 제목줄이 곧 손잡이입니다. 끌기는 **스티커와 같은 포인터 방식** —
+     브라우저 기본 드래그는 끌리는 그림이 반투명해지고 손댈 수 없습니다. */
+  .wg-pop-bar{display:flex;align-items:center;gap:6px;padding:6px 6px 6px 8px;
+    border-bottom:1px solid var(--rule-soft);cursor:grab;touch-action:none;user-select:none;}
+  .wg-pop.wg-dragging .wg-pop-bar{cursor:grabbing;}
+  /* ☰ 는 이제 '사이드바로 되돌리기' 단추입니다(보기만 하던 표식이 아닙니다) */
+  .wg-pop-home{margin-right:2px;}
+  .wg-pop-grip{flex:none;display:flex;color:var(--text-muted);opacity:.6;}
+  .wg-pop-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    font-family:var(--mono);font-size:10px;font-weight:500;text-transform:uppercase;
+    letter-spacing:.14em;color:var(--text-muted);}
+  .wg-pop-btn{flex:none;width:20px;height:20px;padding:0;display:flex;align-items:center;
+    justify-content:center;background:transparent;border:none;border-radius:0;color:var(--text-muted);}
+  .wg-pop-btn:hover{color:var(--text);}
+  .wg-pop-off:hover{color:#c0392b;}
+  /* 표식 셋(≡ — ✕)은 전부 직접 그린 그림입니다 — Pretendard 에 없는 기호라
+     글자로 두면 기기·배율마다 위아래로 흔들립니다(✦ 에서 겪은 그대로). */
+  .wg-mk{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1.4;
+    stroke-linecap:round;display:block;}
+  /* **아래 여백은 상자가 아니라 위젯이 줍니다.** 2px 로 두었더니 ＋추가·✕제거
+     줄이 바닥에 딱 붙었습니다(주인 지적). 고치면서 상자에 한 값을 박아 볼까 했는데,
+     위젯마다 사이드바에서의 아래 여백이 다릅니다 — 스티커 판은 11(.sticker-drawer-box
+     의 padding), 뮤직은 16(.music-block 의 padding). 한 값으로 맞추면 둘 중 하나는
+     반드시 사이드바와 달라집니다. 그래서 상자는 위·옆만 주고, 아래는 위젯이 제
+     사이드바 값을 그대로 가져옵니다. **위젯을 더하면 여기에도 한 줄 더하세요.** */
+  .wg-pop-body{padding:10px 12px 0;}
+  .wg-pop-body .sticker-drawer{margin-bottom:0;}
+  /* 팝업 안에서는 위젯이 **펼쳐진 것이 기본**입니다. 사이드바에서는 접힌 것이
+     기본이고 늘면 아래를 밀어내지만, 팝업은 상자만 커집니다.
+     CSS 로 안 되는 것은 여닫는 장치뿐이라 각자 한 줄씩입니다. */
+  .wg-pop-body .sticker-drawer{margin:0;}
+  .wg-pop-body .sticker-drawer .sticker-clip{display:none;}
+  /* **margin-bottom 과 배경을 반드시 되돌립니다.** 사이드바에서 이 판은
+     `margin-bottom:-1px` 로 손잡이의 테두리와 한 선을 이루고, `background:var(--bg)`
+     로 뒤를 가립니다. 팝업에서는 그 둘이 그대로 남아 **상자의 아래 테두리를 1px
+     덮어 지웁니다** — 판보다 바깥인 좌우 모서리만 남아서, 아래 선이 가운데만
+     사라진 것처럼 보였습니다(주인이 올린 그림). 판은 여기서 테두리도 배경도
+     가질 까닭이 없으므로 둘 다 끕니다. */
+  .wg-pop-body .sticker-drawer .sticker-drawer-box{display:block;position:static;
+    animation:none;box-shadow:none;border:0;background:transparent;
+    margin-bottom:0;padding:0 0 11px;}   /* 11 = 사이드바와 같은 값 */
+  .wg-pop-body .music-block{padding:0 0 16px;}                   /* 16 = 사이드바와 같은 값 */
+  .wg-pop-body .mb-playlist{display:block;}
+  .wg-pop-body .wg-custom{padding:0 0 16px;}
+  /* 작게 — 팝업과 **같은 x/y 를 나눠 씁니다**. 끌 수 있고 누르면 다시 펼쳐집니다
+     (끌지 않았으면 누른 것으로 봅니다 — 스티커와 같은 규칙). */
+  .wg-mini{position:fixed;z-index:70;width:38px;height:38px;padding:0;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--bg);border:1px solid var(--border);border-radius:50%;
+    box-shadow:0 4px 12px rgba(0,0,0,.14);color:var(--text-muted);
+    cursor:grab;touch-action:none;}
+  .wg-mini:hover{color:var(--accent);border-color:var(--accent);}
+  .wg-mini.wg-dragging{cursor:grabbing;}
+  .wg-mini-ico{width:17px;height:17px;}
+  .wg-ico{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.4;
+    stroke-linecap:round;stroke-linejoin:round;display:block;}
+  /* note 는 채워 그리는 아이콘이라 획이 아니라 면입니다 */
+  .wg-ico circle[cx="4.4"],.wg-ico circle[cx="10.4"]{fill:currentColor;stroke:none;}
+
+  /* ---------- 위젯 관리 탭 ---------- */
+  .wg-list{display:flex;flex-direction:column;}
+  /* **flex-wrap:wrap 이 있어야 미리보기가 아래로 갑니다.** 없으면 미리보기가
+     이름·단추와 같은 줄에 끼어들어 셋이 가로로 폭을 나눠 갖습니다 — 이름이 눌리고
+     단추가 밀려서, 주인이 '위치가 이상하다' 고 한 바로 그 모습이 됩니다.
+     줄바꿈을 켜면 머리줄(이름 … 단추들)은 접혀 있을 때와 **똑같이** 남고
+     미리보기만 그 아래 한 줄을 통째로 씁니다. */
+  /* 줄을 누르면 미리보기가 펼쳐지므로 커서로 알려 줍니다. 안의 단추·손잡이·
+     미리보기는 저마다 제 커서를 다시 말합니다. */
+  .wg-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:9px 2px;position:relative;
+    border-bottom:1px solid var(--rule-soft);cursor:pointer;}
+  .wg-row .wg-chip{cursor:pointer;}
+  .wg-row .wg-grip{cursor:grab;}
+  .wg-row .wg-prev{cursor:default;}
+  .wg-row .wg-name-input{cursor:text;}
+  .wg-row:last-child{border-bottom:0;}
+  .wg-off-row .wg-row-name,.wg-off-row .wg-row-ico{opacity:.42;}
+  .wg-grip{flex:none;width:18px;height:22px;padding:0;display:flex;align-items:center;
+    justify-content:center;background:transparent;border:none;
+    font-family:var(--mono);font-size:10px;letter-spacing:.06em;line-height:1;
+    color:var(--text-muted);opacity:.5;cursor:grab;touch-action:none;}
+  .wg-grip:hover{opacity:1;color:var(--accent);}
+  .wg-row-ico{flex:none;display:flex;color:var(--text-muted);}
+  .wg-row-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    font-family:var(--mono);font-size:12.5px;color:var(--text);}
+  .wg-row-ctl{flex:none;display:flex;align-items:center;gap:5px;}
+  /* 이름을 그 자리에서 고칩니다 — 줄 높이가 흔들리지 않게 글자 크기·높이를
+     이름표(.wg-row-name)와 맞춰 둡니다. */
+  .wg-name-input{width:100%;max-width:220px;height:22px;padding:0 6px;
+    font-family:var(--mono);font-size:12.5px;color:var(--text);
+    background:var(--bg);border:1px solid var(--accent);border-radius:var(--radius-sm);}
+  .wg-name-input:focus{outline:none;}
+  /* 단추는 상단바 단추와 같은 말투 — 1px 네모에 10px 대문자 */
+  .wg-chip{height:24px;padding:0 8px;display:inline-flex;align-items:center;
+    background:transparent;border:1px solid var(--border);border-radius:var(--radius-sm);
+    font-family:var(--mono);font-size:10px;letter-spacing:.02em;color:var(--text-muted);
+    white-space:nowrap;}
+  .wg-chip:hover{color:var(--text);border-color:var(--text-muted);}
+  .wg-chip-on{color:var(--accent);border-color:var(--accent);}
+  .wg-chip:disabled{opacity:.35;}
+  .wg-chip:disabled:hover{color:var(--text-muted);border-color:var(--border);}
+  .wg-c-del:hover{color:#c0392b;border-color:#c0392b;}
+  .wg-iconpick{position:absolute;right:2px;top:100%;z-index:6;display:flex;gap:2px;padding:5px;
+    background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);
+    box-shadow:0 5px 14px rgba(0,0,0,.14);}
+  .wg-ipick{width:28px;height:28px;display:flex;align-items:center;justify-content:center;
+    background:transparent;border:1px solid transparent;border-radius:var(--radius-sm);
+    color:var(--text-muted);}
+  .wg-ipick:hover{color:var(--text);border-color:var(--border);}
+  .wg-ipick.active{color:var(--accent);border-color:var(--accent);}
+  /* ---- 줄을 누르면 펼쳐지는 미리보기 ----
+     켜 두지 않아도 두 모습을 나란히 견줄 수 있게. 안에 든 것은 **복제본**이라
+     눌러도 아무 일도 없습니다(진짜 위젯은 하나뿐이라 가져오면 원래 자리에서
+     사라집니다). 팝업 쪽은 진짜 팝업과 같은 껍데기를 쓰되 흐름 안에 놓습니다 —
+     .wg-pop-body 가 있어야 '팝업에서는 펼쳐진 것이 기본' 규칙이 걸립니다. */
+  .wg-row-open{background:var(--surface-2);}
+  /* 가운데로 모읍니다. 왼쪽에 붙여 두었더니 넓은 화면에서 왼쪽으로 쏠려
+     보였습니다(주인 지적) — 두 미리보기는 저마다 폭이 정해져 있어서 남는 자리가
+     전부 오른쪽에 몰렸기 때문입니다. */
+  .wg-prev{flex:1 1 100%;width:100%;display:flex;gap:24px;
+    align-items:flex-start;justify-content:center;
+    margin-top:4px;padding:14px 0 10px;}
+  /* 칸은 내용만큼만 — flex:1 로 늘리면 가운데 정렬이 뜻을 잃습니다 */
+  .wg-prev-cell{flex:0 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px;}
+  .wg-prev-tag{font-family:var(--mono);font-size:9px;font-weight:500;text-transform:uppercase;
+    letter-spacing:.16em;color:var(--text-muted);}
+  /* 사이드바 쪽은 진짜 사이드바와 같은 폭(256px)으로 보여야 뜻이 있습니다 */
+  .wg-prev-side{width:256px;max-width:100%;padding:10px 0;
+    background:var(--bg);border:1px dashed var(--rule-soft);border-radius:var(--radius-sm);}
+  .wg-prev-side > *{margin-left:10px;margin-right:10px;}
+  .wg-pop-demo{position:static;width:236px;max-width:100%;box-shadow:none;}
+  .wg-prev [data-place]{pointer-events:none;}
+  .wg-prev .wg-pop-btn{pointer-events:none;}
+
+  .mg-note{margin:14px 0 0;font-family:var(--mono);font-size:10px;letter-spacing:.02em;
+    color:var(--text-muted);}
+  /* 추가 장 */
+  /* 폭을 다 씁니다. 560px 로 묶어 두었더니 오른쪽에 쓸모없는 빈 자리가 넓게
+     남았습니다(주인 지적) — 글줄이 아니라 **코드 칸**이라 좁힐 까닭이 없습니다. */
+  .wg-add{display:flex;flex-direction:column;gap:12px;}
+  .wg-f{display:flex;flex-direction:column;gap:5px;}
+  .wg-f-head{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .wg-file{padding:0;background:transparent;border:none;
+    font-family:var(--mono);font-size:10px;letter-spacing:.02em;
+    color:var(--text-muted);text-decoration:underline;text-underline-offset:2px;}
+  .wg-file:hover{color:var(--accent);}
+  .wg-f-label{font-family:var(--mono);font-size:10px;font-weight:500;text-transform:uppercase;
+    letter-spacing:.16em;color:var(--text-muted);}
+  .wg-f input,.wg-f textarea{font-family:var(--mono);font-size:12px;padding:8px 9px;
+    border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);
+    color:var(--text);resize:vertical;line-height:1.5;}
+  .wg-f textarea{white-space:pre;overflow-x:auto;}
+  .wg-f input:focus,.wg-f textarea:focus{outline:none;border-color:var(--accent);}
+  .wg-warn{margin:0;min-height:14px;font-family:var(--mono);font-size:10.5px;color:#c0392b;}
+  .wg-add-row{display:flex;justify-content:flex-end;gap:8px;}
 
   /* ---------- ✦ MENU ----------
      사이드바의 가장 아래 줄입니다. 저장 용량 게이지 **밑**이고 편집 모드 전용.
@@ -3585,7 +3759,10 @@
      예전에는 창 오른쪽 펀치 줄에 끼워진 종이집게였고, 창을 재서 자리를 잡아야
      해서 position:fixed 에 JS(positionStickerDrawer)가 붙어 있었습니다.
      지금은 사이드바 흐름 안에 놓이므로 잴 것이 없습니다. */
-  .sticker-drawer{position:relative;margin-top:auto;margin-bottom:18px;z-index:40;}
+  /* 바닥 닻은 이제 **위젯 칸**이 갖습니다(.side-widgets). 예전에는 여기에
+     margin-top:auto 가 있었는데, 순서를 바꿀 수 있게 되면서 맨 위 위젯이
+     그때그때 달라져 닻이 따라다녀야 했습니다. */
+  .sticker-drawer{position:relative;margin-bottom:18px;z-index:40;}
   /* 손잡이 — 서랍 앞면입니다. 얇고 가로로 길게, 사이드바 폭을 다 씁니다. */
   .sticker-clip{position:relative;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:8px;
     width:100%;height:26px;padding:0 9px;
@@ -3625,7 +3802,11 @@
     color:var(--text-muted);user-select:none;}
   .sd-shadow:hover{color:var(--text);}
   .sd-shadow input{width:11px;height:11px;margin:0;accent-color:var(--accent);cursor:pointer;}
-  .sd-title{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.16em;
+  /* 라벨이 빠져 체크칸 하나만 남았습니다 — 오른쪽에 그대로 두고, 보기 모드에서는
+     그 체크칸이 편집 전용이라 줄이 통째로 비므로 줄까지 숨깁니다. */
+  .sd-head{justify-content:flex-end;}
+  body:not(.logged-in) .sd-head{display:none;}
+  .sd-title{display:none;font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.16em;
     text-transform:uppercase;color:var(--text-muted);}
   /* 스크롤 상자와 단 나누기를 분리합니다 — 단(column-count)에 직접 높이를 주면
      넘치는 내용이 아래가 아니라 옆으로 새 단을 만들어 버립니다. */
@@ -3824,6 +4005,21 @@
     .nav-sub.open{max-height:70vh;}
     /* 터치 타겟 40px 이상 */
     .nav-cat-add{width:40px;height:40px;font-size:16px;}
+    /* **폰에서는 팝업 위젯을 통째로 숨깁니다**(합의된 내용). 화면이 좁아 떠 있는
+       상자가 글을 가리고, 끌어 옮길 자리도 없습니다. 사이드바로 바꾸면 서랍에
+       나타납니다 — JS 도 같은 판단을 하므로(renderWidgets) 이건 이중 잠금입니다. */
+    .widget-pops{display:none;}
+    /* 서랍은 손가락으로 쓰므로 손잡이를 키웁니다 */
+    .wg-grip{width:30px;height:34px;font-size:12px;}
+    .wg-row{gap:6px;padding:10px 2px;flex-wrap:wrap;}
+    .wg-row-name{flex:1 1 100%;order:-1;}
+    .wg-chip{height:30px;padding:0 9px;}
+    /* 좁으니 두 모습을 위아래로 */
+    .wg-prev{flex-direction:column;padding-left:0;}
+    .wg-prev-side,.wg-pop-demo{max-width:100%;}
+    .wg-file{font-size:11px;}
+    .wg-f input,.wg-f textarea{font-size:12.5px;padding:9px 10px;}
+
     /* ✦ MENU — 글자는 데스크톱과 같은 10px 라벨로 두고 누를 높이만 키웁니다.
        키우면 서랍 안쪽 폭(270 - 여백 32 = 237px)에 `✦ MENU + 세 항목` 이 안
        들어갑니다. 측정값: 데스크톱은 229 / 256 으로 27px 이 남는데 서랍에서는

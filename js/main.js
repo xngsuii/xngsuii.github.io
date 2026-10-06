@@ -44,6 +44,8 @@ function applyEditMode(){
   safely('스티커', ()=>{ if(!isLoggedIn) stickerRemoveMode = false; renderStickers(); });
   /* 로그인해야 보이는 자리라, 편집 모드로 들어온 그때 한 번 그려 둡니다 */
   safely('용량 게이지', renderStorageMeter);
+  /* 위젯의 끌기 손잡이는 편집 모드에만 달립니다 */
+  safely('위젯', renderWidgets);
   safely('PAIR 상세', ()=>{
     if(!currentPairPostId) return;
     const p = getCurrentPost();
@@ -313,7 +315,9 @@ let state = {
   /* 화면에 붙여 두는 스티커 — [{id, src, lines, w, x, y, out}] */
   stickers:[],
   /* PORTAL — 사이드바 맨 아래의 바깥 사이트 목록 [{id, name, url}] */
-  portalLinks:[]
+  portalLinks:[],
+  /* 위젯 — [{id, name, on, where, mobile, order, icon, x, y, min, html, css}] */
+  widgets:[]
 };
 
 /* ---- PROMPT 폴더 ----
@@ -709,6 +713,7 @@ async function loadState(){
      그래야 이미 만들어둔 폴더가 사라지지 않습니다. */
   state.pairCats = normalizePairCats(await storageGet('pairCats', null));
   state.portalLinks = normalizePortalLinks(await storageGet('portalLinks', null));
+  state.widgets = normalizeWidgets(await storageGet('widgets', null));
   state.ocCats = normalizeOcCats(await storageGet('ocCats', null), await storageGet('ocFolders', null));
   state.ocPosts = (await storageGet('ocPosts', [])).map(migrateOcPost);
   /* 카테고리가 이제 필수라, 없어졌거나 유효하지 않은 카테고리를 가리키는 글은
@@ -757,6 +762,7 @@ function renderAll(){
   renderStickers();
   /* 저장된 그림자 설정을 화면과 체크칸에 맞춥니다 (renderStickers 는 화면만 봅니다) */
   applyStickerShadow();
+  renderWidgets();
   applyEditMode();
 }
 
@@ -10759,6 +10765,791 @@ if(arcSelectDeleteBtnEl) arcSelectDeleteBtnEl.addEventListener('click', async ()
 });
 
 /* ============================================================
+   위젯
+   ------------------------------------------------------------
+   스티커 서랍과 뮤직 플레이어는 '붙박이 위젯 두 칸' 입니다. 켜고 끄고, 순서를
+   바꾸고, 사이드바에 둘지 화면에 띄울지 고를 수 있습니다. 직접 만든 위젯
+   (HTML·CSS)도 같은 목록에 들어갑니다.
+
+   **위젯 하나에 요소 하나.** 사이드바용과 팝업용을 따로 만들지 않습니다 —
+   두 벌이면 한쪽만 고치다 어긋납니다. 자리를 바꾸면 **그 요소를 옮기고**
+   data-place 를 고쳐 다는 것이 전부이고, 생김새 차이는 CSS 가 가릅니다
+   (사이드바: 접힌 게 기본·테두리 없음 / 팝업: 펼쳐진 게 기본·제목줄 있음).
+   요소를 옮겨도 붙여둔 처리기는 따라갑니다.
+   ============================================================ */
+
+/* 아이콘은 전부 **직접 그립니다**(16 격자). ♪·≡·✕ 같은 기호는 Pretendard 에
+   없어서 기기마다 다른 서체로 넘어가고, 넘어간 서체의 글자 높이를 크롬이 정수
+   픽셀로 반올림해 배율에 따라 위아래로 흔들립니다(✦ 에서 겪은 그대로입니다). */
+const WG_ICONS = {
+  /* 음표 — 채워 그립니다 */
+  note:   '<path d="M6 11.3V3.4l6-1.3v7.4" fill="none"/><circle cx="4.4" cy="11.9" r="1.9"/><circle cx="10.4" cy="10.4" r="1.9"/>',
+  /* 모서리 말린 동그라미 — 스티커 */
+  peel:   '<path d="M14 8a6 6 0 1 0-4.1 5.7" fill="none"/><path d="M14 8c0 1.9-2 2.3-3 3.1-.9.7-1.1 1.9-1.1 2.6" fill="none"/>',
+  star:   '<path d="M8 2.2 9.7 6l4.1.4-3.1 2.7.9 4-3.6-2.1-3.6 2.1.9-4L2.2 6.4 6.3 6z" fill="none"/>',
+  heart:  '<path d="M8 13.3S2.6 10 2.6 6.3A2.9 2.9 0 0 1 8 4.8a2.9 2.9 0 0 1 5.4 1.5c0 3.7-5.4 7-5.4 7z" fill="none"/>',
+  box:    '<rect x="2.6" y="2.6" width="10.8" height="10.8" rx="1.4" fill="none"/>',
+  dot:    '<circle cx="8" cy="8" r="4.6" fill="none"/>',
+  moon:   '<path d="M12.6 9.8A5.4 5.4 0 0 1 6.2 3.4a5.4 5.4 0 1 0 6.4 6.4z" fill="none"/>',
+  cloud:  '<path d="M4.6 12a2.8 2.8 0 0 1 .3-5.6 3.6 3.6 0 0 1 6.9.6 2.5 2.5 0 0 1-.3 5z" fill="none"/>'
+};
+const WG_ICON_ORDER = ['note','peel','star','heart','box','dot','moon','cloud'];
+function wgIconSvg(name, cls){
+  const body = WG_ICONS[name] || WG_ICONS.box;
+  return '<svg class="' + (cls || 'wg-ico') + '" viewBox="0 0 16 16" aria-hidden="true">' + body + '</svg>';
+}
+/* 제목줄의 세 표식도 같은 격자로 */
+const WG_MARK_GRIP  = '<svg class="wg-mk" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5h10M3 8h10M3 11h10"/></svg>';
+const WG_MARK_MIN   = '<svg class="wg-mk" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 8h8"/></svg>';
+const WG_MARK_CLOSE = '<svg class="wg-mk" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2"/></svg>';
+
+/* 붙박이 두 칸. id 는 저장된 값과 짝이므로 **바꾸면 안 됩니다**. */
+/* noPhone: 폰에서는 아예 둘 수 없는 위젯. 스티커 서랍이 그렇습니다 — 폰에서
+   스티커를 쓰지 않기로 한 것은 위젯보다 앞선 결정이고, CSS 도 .sticker-drawer 와
+   .sticker-layer 를 통째로 숨깁니다. 그 결정을 위젯 쪽에서도 그대로 따라야
+   '폰 보임' 을 켜 두었는데 안 보이는' 거짓말이 생기지 않습니다. */
+const WG_BUILTIN = [
+  { id:'sticker', name:'스티커', icon:'peel', noPhone:true,
+    el:()=> document.getElementById('stickerDrawer') },
+  { id:'music',   name:'뮤직',   icon:'note',
+    el:()=> document.querySelector('.music-block') }
+];
+function wgNoPhone(id){ const b = wgBuiltin(id); return !!(b && b.noPhone); }
+const WG_BUILTIN_IDS = WG_BUILTIN.map(w=> w.id);
+function wgBuiltin(id){ return WG_BUILTIN.find(w=> w.id === id) || null; }
+function wgIsBuiltin(id){ return WG_BUILTIN_IDS.includes(id); }
+
+const WG_POP_W = 236;      // 팝업 기본 폭 — 사이드바 안쪽 폭(256)보다 조금 좁게
+const WG_MINI_PX = 38;     // 최소화했을 때 아이콘 크기
+const WG_EDGE = 6;         // 화면 가장자리에서 이만큼은 남깁니다
+
+/* **저장된 값을 다시 짓습니다.** 여기 적지 않은 항목은 다음에 불러올 때 사라지고
+   그 사라짐이 저장됩니다 — normalizeStickers·normalizeGalleryEntries 와 같은
+   지뢰입니다. 새 항목을 더하면 반드시 여기에도 더하세요. */
+function normalizeWidgets(list){
+  const out = [];
+  const seen = new Set();
+  (Array.isArray(list) ? list : []).forEach(x=>{
+    if(!x || !x.id) return;
+    const id = String(x.id);
+    if(seen.has(id)) return;
+    seen.add(id);
+    const builtin = wgBuiltin(id);
+    /* 붙박이가 아니면서 그릴 것도 없는 줄은 버립니다 */
+    if(!builtin && !x.html && !x.css) return;
+    out.push({
+      id,
+      name: String(x.name || (builtin ? builtin.name : '위젯')).slice(0, 24),
+      on: x.on !== false,
+      where: x.where === 'popup' ? 'popup' : 'sidebar',
+      mobile: x.mobile !== false,
+      icon: WG_ICONS[x.icon] ? x.icon : (builtin ? builtin.icon : 'box'),
+      x: Number.isFinite(+x.x) ? +x.x : null,
+      y: Number.isFinite(+x.y) ? +x.y : null,
+      min: !!x.min,
+      html: builtin ? '' : String(x.html || ''),
+      css:  builtin ? '' : String(x.css  || '')
+    });
+  });
+  /* 붙박이는 저장된 적이 없어도 늘 있습니다 (처음 여는 사람 포함) */
+  WG_BUILTIN.forEach(b=>{
+    if(seen.has(b.id)) return;
+    out.push({ id:b.id, name:b.name, on:true, where:'sidebar', mobile:true,
+               icon:b.icon, x:null, y:null, min:false, html:'', css:'' });
+  });
+  /* 순서는 배열 차례로 둡니다 — order 를 따로 저장하면 둘이 어긋납니다 */
+  return out;
+}
+function saveWidgets(){ return storageSet('widgets', state.widgets); }
+function wgFind(id){ return (state.widgets || []).find(w=> w.id === id) || null; }
+
+/* 위젯의 알맹이 요소. 붙박이는 이미 문서에 있고, 직접 만든 것은 없으면 짓습니다.
+   **한 번 지은 요소는 다시 짓지 않습니다** — 다시 지으면 사이드바↔팝업을 오갈
+   때마다 안의 상태(스크롤 위치, 입력 중인 글)가 날아갑니다. */
+const wgCustomEls = new Map();
+function wgElement(w){
+  /* **찾은 요소는 반드시 쥐고 있습니다.** 붙박이는 처음엔 문서 안에 있지만, 끄면
+     문서에서 떼어 둡니다(숨기는 것이 아니라 — 꺼둔 뮤직 위젯이 안 보이는 채로
+     소리를 내면 안 되니까요). 그러면 getElementById 는 **null** 을 돌려주고,
+     다시 켤 방법이 영영 없어집니다. 실제로 그렇게 한 번 만들었다가 '껐다 켜면
+     돌아오지 않는다' 로 잡혔습니다. */
+  let el = wgCustomEls.get(w.id);
+  if(el) return el;
+  const builtin = wgBuiltin(w.id);
+  if(builtin){
+    el = builtin.el();
+    if(el) wgCustomEls.set(w.id, el);
+    return el;
+  }
+  el = document.createElement('div');
+  el.className = 'wg-custom';
+  el.id = 'wg-' + w.id;
+  el.dataset.widget = w.id;
+  wgCustomEls.set(w.id, el);
+  return el;
+}
+/* 직접 만든 위젯의 알맹이를 채웁니다.
+   **사이드바에 놓을 때는 격리 칸을 쓸 수 없습니다**(iframe 은 제 높이를 모르고,
+   사이드바는 내용만큼 늘어나야 합니다). 대신 CSS 선택자 앞에 #wg-<id> 를 붙여
+   그 위젯 안쪽만 칠하게 가둡니다. 팝업은 상자 크기가 정해져 있으므로 격리 칸을
+   써서 바깥 쪽에 아무 영향도 못 주게 합니다. */
+function wgPaintCustom(w, el){
+  if(wgIsBuiltin(w.id)) return;
+  const sig = w.where + '\u0000' + w.html + '\u0000' + w.css;
+  if(el._wgSig === sig) return;      // 안 바뀌었으면 그대로 둡니다
+  el._wgSig = sig;
+  el.innerHTML = '';
+  if(w.where === 'popup'){
+    const f = document.createElement('iframe');
+    f.className = 'wg-frame';
+    /* allow-same-origin 을 주지 않습니다 — 주면 격리가 통째로 풀려서 로그인된
+       세션(Firestore 쓰기 권한)에 손이 닿습니다. HTML 상자(.html-embed)와 같은 규칙. */
+    f.setAttribute('sandbox', 'allow-scripts allow-popups');
+    f.srcdoc = '<!doctype html><meta charset="utf-8"><base target="_blank">'
+             + '<style>html,body{margin:0;padding:0;background:transparent;'
+             + 'font-family:' + WG_FRAME_FONT + ';font-size:12px;color:#1c1c1c;}'
+             + (w.css || '') + '</style>' + (w.html || '');
+    el.appendChild(f);
+  }else{
+    if(w.css){
+      const st = document.createElement('style');
+      st.textContent = wgScopeCss(w.css, '#wg-' + w.id);
+      el.appendChild(st);
+    }
+    const body = document.createElement('div');
+    body.className = 'wg-custom-body';
+    body.innerHTML = w.html || '';
+    /* 사이드바는 격리 칸이 아니므로 스크립트는 통째로 걷어냅니다 */
+    body.querySelectorAll('script').forEach(n=> n.remove());
+    el.appendChild(body);
+  }
+}
+const WG_FRAME_FONT = "'Pretendard Variable', Pretendard, system-ui, sans-serif";
+/* 선택자 앞에 가둘 이름을 붙입니다. @규칙(@media 등)은 안쪽 선택자에 붙도록
+   덩어리째 들여다보지 않고 통과시키고, 중괄호 깊이를 세어 **맨 바깥 선택자**만
+   고칩니다. 완전한 CSS 파서는 아니지만, 바깥으로 새는 것을 막는 데는 충분합니다. */
+function wgScopeCss(css, scope){
+  let out = '', buf = '', depth = 0, i = 0;
+  const flushSel = ()=>{
+    const sel = buf.trim();
+    buf = '';
+    if(!sel) return '';
+    if(sel.startsWith('@')) return sel + ' ';
+    return sel.split(',').map(one=>{
+      const t = one.trim();
+      if(!t) return '';
+      /* :root 나 html/body 를 적었으면 그 위젯 자신을 가리키게 바꿉니다 */
+      if(/^(:root|html|body)\b/.test(t)) return scope + t.replace(/^(:root|html|body)/, '');
+      return scope + ' ' + t;
+    }).filter(Boolean).join(', ') + ' ';
+  };
+  while(i < css.length){
+    const ch = css[i];
+    if(ch === '{'){
+      out += (depth === 0 ? flushSel() : buf) + '{';
+      buf = ''; depth++; i++; continue;
+    }
+    if(ch === '}'){
+      out += buf + '}'; buf = ''; depth = Math.max(0, depth - 1); i++; continue;
+    }
+    if(depth > 0){ out += ch; i++; continue; }   // 선언부는 그대로
+    buf += ch; i++;
+  }
+  return out + buf;
+}
+
+/* ---- 그리기 ----
+   목록 차례대로 제자리에 놓습니다. 끈 위젯은 문서에서 **떼어 둡니다**(숨기는
+   것이 아니라) — 꺼둔 뮤직 위젯이 보이지 않는 채로 소리를 내면 안 되니까요.
+   (유튜브 플레이어는 #ytHost 라 따로 멈춥니다. 아래 wgSyncMusic 참고) */
+let wgPopDragging = false;
+function renderWidgets(){
+  const host = document.getElementById('sideWidgets');
+  const pops = document.getElementById('widgetPops');
+  if(!host || !pops) return;
+  if(wgPopDragging) return;      // 끄는 중에 다시 그리면 끌던 요소가 사라집니다
+  const phone = isMobileWidth();
+
+  /* 이번에 살아남을 팝업 상자만 남기고 나머지는 걷어냅니다 */
+  const keep = new Set();
+  (state.widgets || []).forEach(w=>{
+    const el = wgElement(w);
+    if(!el) return;
+    const popup = w.where === 'popup';
+    /* 폰: 팝업은 통째로 숨기고(계획대로), 사이드바 위젯은 mobile 이 꺼져 있으면 뺍니다 */
+    const show = w.on && (phone ? (!popup && w.mobile && !wgNoPhone(w.id)) : true);
+    if(!show){ el.remove(); return; }
+    wgPaintCustom(w, el);
+    el.dataset.place = popup ? 'popup' : 'sidebar';
+    if(popup){
+      keep.add(w.id);
+      wgPlacePopup(w, el, pops);
+    }else{
+      host.appendChild(el);        // 목록 차례대로 — 같은 부모여도 뒤로 옮겨 순서를 맞춥니다
+    }
+  });
+  /* 남은 팝업 껍데기 치우기 */
+  Array.from(pops.children).forEach(box=>{
+    const id = box.dataset.wgpop || box.dataset.wgmini;
+    if(!keep.has(id)) box.remove();
+  });
+  /* **자리를 옮긴 뒤 스티커 서랍을 다시 그립니다.** 사진 대기표(whenImgArrives)는
+     요소가 문서에서 떨어지는 순간 버려집니다(flushPendingPaints 의 isConnected 검사).
+     위젯을 끄거나 팝업으로 옮기는 동안 그 일이 일어나면 스티커 그림은 **영영**
+     오지 않고, 테두리만 남아 줄처럼 보입니다 — 주인이 팝업에서 본 그 모습입니다.
+     사이드바에서는 서랍이 평소 닫혀 있어 눈에 안 띄었을 뿐 같은 일이었습니다.
+     다시 그리면 지금 문서에 붙어 있는 단추로 대기표를 새로 겁니다. */
+  if(typeof renderStickerDrawer === 'function') safely('스티커 서랍', renderStickerDrawer);
+  wgSyncMusic();
+  renderWidgetManage();
+}
+
+/* ---- 팝업 상자 ---- */
+function wgPlacePopup(w, el, pops){
+  let box = pops.querySelector('.wg-pop[data-wgpop="' + w.id + '"]');
+  let mini = pops.querySelector('.wg-mini[data-wgmini="' + w.id + '"]');
+  if(w.min){
+    if(box) box.remove();
+    if(!mini){
+      mini = document.createElement('button');
+      mini.type = 'button';
+      mini.className = 'wg-mini';
+      mini.dataset.wgmini = w.id;
+      pops.appendChild(mini);
+      wgBindDrag(mini, w.id, mini);
+    }
+    mini.innerHTML = wgIconSvg(w.icon, 'wg-ico wg-mini-ico');
+    mini.title = w.name + ' — 누르면 다시 펼쳐집니다';
+    wgMoveTo(mini, w);
+    /* 펼쳐 둔 알맹이는 어디에도 붙지 않게 떼어 둡니다(상태는 남습니다) */
+    el.remove();
+    return;
+  }
+  if(mini) mini.remove();
+  if(!box){
+    box = document.createElement('div');
+    box.className = 'wg-pop';
+    box.dataset.wgpop = w.id;
+    box.innerHTML =
+      '<div class="wg-pop-bar">' +
+        '<button class="wg-pop-btn wg-pop-home" type="button" title="사이드바로 되돌리기">'
+          + WG_MARK_GRIP + '</button>' +
+        '<span class="wg-pop-name"></span>' +
+        '<button class="wg-pop-btn wg-pop-min" type="button" title="작게">' + WG_MARK_MIN + '</button>' +
+        '<button class="wg-pop-btn wg-pop-off" type="button" title="끄기">' + WG_MARK_CLOSE + '</button>' +
+      '</div><div class="wg-pop-body"></div>';
+    pops.appendChild(box);
+    /* 줄 전체가 손잡이입니다 — 단추 위에서는 끌리지 않게 bindDrag 가 가려냅니다 */
+    wgBindDrag(box, w.id, box.querySelector('.wg-pop-bar'));
+    /* ☰ 는 사이드바로 되돌립니다. 줄 전체가 끌기 손잡이지만 이 단추는
+       wgBindDrag 가 가려내므로(.wg-pop-btn) 눌러도 끌리지 않습니다. */
+    box.querySelector('.wg-pop-home').addEventListener('click', (e)=>{
+      e.stopPropagation(); wgSetWhere(w.id, 'sidebar');
+    });
+    box.querySelector('.wg-pop-min').addEventListener('click', (e)=>{
+      e.stopPropagation(); wgSetMin(w.id, true);
+    });
+    box.querySelector('.wg-pop-off').addEventListener('click', (e)=>{
+      e.stopPropagation(); wgSetOn(w.id, false);
+    });
+  }
+  box.querySelector('.wg-pop-name').textContent = w.name;
+  const body = box.querySelector('.wg-pop-body');
+  if(el.parentElement !== body) body.appendChild(el);
+  wgMoveTo(box, w);
+}
+
+/* 화면 안에 가둔 채로 자리를 잡습니다. 자리를 정한 적이 없으면 오른쪽 위에서
+   차례로 비껴 놓습니다 — 셋을 띄워도 완전히 겹치지 않게. */
+function wgMoveTo(box, w){
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const bw = box.offsetWidth  || (w.min ? WG_MINI_PX : WG_POP_W);
+  const bh = box.offsetHeight || (w.min ? WG_MINI_PX : 160);
+  let x = w.x, y = w.y;
+  if(x == null || y == null){
+    const n = (state.widgets || []).filter(o=> o.where === 'popup').indexOf(w);
+    x = vw - bw - 28 - Math.max(0, n) * 18;
+    y = 96 + Math.max(0, n) * 18;
+  }
+  x = clamp(x, WG_EDGE, Math.max(WG_EDGE, vw - bw - WG_EDGE));
+  y = clamp(y, WG_EDGE, Math.max(WG_EDGE, vh - bh - WG_EDGE));
+  box.style.left = Math.round(x) + 'px';
+  box.style.top  = Math.round(y) + 'px';
+}
+
+/* 끌기 — 스티커와 같은 포인터 방식입니다. 브라우저 기본 드래그는 끌리는 그림이
+   반투명해지고 손댈 수가 없어서 쓰지 않습니다(이 저장소의 공통 규칙). */
+function wgBindDrag(box, id, handle){
+  handle.addEventListener('pointerdown', (e)=>{
+    if(e.button !== 0) return;
+    if(e.target.closest('.wg-pop-btn')) return;     // 단추는 눌리는 자리입니다
+    const w = wgFind(id); if(!w) return;
+    const r = box.getBoundingClientRect();
+    const dx = e.clientX - r.left, dy = e.clientY - r.top;
+    let moved = false;
+    wgPopDragging = true;
+    box.classList.add('wg-dragging');
+    const move = (ev)=>{
+      if(ev.pointerId !== e.pointerId) return;   // 창에서 받으므로 다른 손가락은 거릅니다
+      if(Math.abs(ev.clientX - e.clientX) + Math.abs(ev.clientY - e.clientY) > 3) moved = true;
+      w.x = ev.clientX - dx;
+      w.y = ev.clientY - dy;
+      wgMoveTo(box, w);
+    };
+    const up = ()=>{
+      window.removeEventListener('pointermove', move, true);
+      window.removeEventListener('pointerup', up, true);
+      window.removeEventListener('pointercancel', up, true);
+      box.classList.remove('wg-dragging');
+      wgPopDragging = false;
+      /* 가둔 뒤의 값을 저장합니다 — 화면 밖으로 끌어다 놓고 새로고침하면
+         영영 안 보이는 일을 막습니다. */
+      const r2 = box.getBoundingClientRect();
+      w.x = r2.left; w.y = r2.top;
+      if(moved && isLoggedIn) saveWidgets();
+      /* 작은 아이콘은 '끌지 않았으면 누른 것' — 스티커와 같은 규칙 */
+      if(!moved && box.classList.contains('wg-mini')) wgSetMin(id, false);
+    };
+    /* **창에서 받습니다.** 손잡이에 달았더니, 손이 조금만 빨라 손잡이 밖으로
+       나가면 pointerup 이 거기로 가서 영영 안 왔습니다 — 끌리지도 않고 잠금
+       (wgPopDragging)도 안 풀려서 **새로고침 전까지 위젯 칸이 통째로 먹통**이
+       됐습니다(주인 지적). setPointerCapture 로도 되지만, 실패하면 똑같이 죽는
+       한 줄이 되어 버립니다. 창에서 받으면 어디서 떼든 반드시 옵니다. */
+    window.addEventListener('pointermove', move, true);
+    window.addEventListener('pointerup', up, true);
+    window.addEventListener('pointercancel', up, true);
+  });
+}
+
+/* ---- 바꾸기 ----
+   보기 모드에서도 켜고 끄고 옮길 수 있지만 **저장은 편집 모드에서만** 합니다 —
+   스티커와 같은 규칙입니다(손님은 Firestore 에 쓸 수 없어서, 써봐야 실패합니다). */
+function wgCommit(){ if(isLoggedIn) saveWidgets(); }
+function wgSetOn(id, on){
+  const w = wgFind(id); if(!w) return;
+  w.on = !!on; wgCommit(); renderWidgets();
+}
+function wgSetMin(id, min){
+  const w = wgFind(id); if(!w) return;
+  w.min = !!min; wgCommit(); renderWidgets();
+}
+function wgSetWhere(id, where){
+  const w = wgFind(id); if(!w) return;
+  w.where = where === 'popup' ? 'popup' : 'sidebar';
+  /* 사이드바로 돌아가면 '작게' 는 뜻이 없습니다 */
+  if(w.where === 'sidebar') w.min = false;
+  wgCommit(); renderWidgets();
+}
+function wgSetMobile(id, v){
+  const w = wgFind(id); if(!w) return;
+  w.mobile = !!v; wgCommit(); renderWidgets();
+}
+function wgSetIcon(id, icon){
+  const w = wgFind(id); if(!w || !WG_ICONS[icon]) return;
+  w.icon = icon; wgCommit(); renderWidgets();
+}
+function wgMove(id, toIdx){
+  const list = state.widgets;
+  const from = list.findIndex(w=> w.id === id);
+  if(from < 0) return;
+  const [w] = list.splice(from, 1);
+  list.splice(clamp(toIdx, 0, list.length), 0, w);
+  wgCommit(); renderWidgets();
+}
+
+/* 뮤직 위젯이 화면에서 빠졌으면 소리도 멈춥니다 — 요소를 떼는 것만으로는
+   유튜브 플레이어(#ytHost 안)도 <audio> 도 계속 돕니다. 둘 다 위젯 바깥에
+   살아 있기 때문입니다. */
+function wgSyncMusic(){
+  const w = wgFind('music');
+  const phone = isMobileWidth();
+  const live = !!(w && w.on && (phone ? (w.where !== 'popup' && w.mobile) : true));
+  if(live) return;
+  try{ if(audioEl) audioEl.pause(); }catch(e){}
+  try{ if(ytReady && ytPlayer) ytPlayer.pauseVideo(); }catch(e){}
+}
+
+/* ---- 끌어서 순서 바꾸기 ----
+   사이드바에서도 관리 탭에서도 씁니다. **끄는 동안 다시 그리지 않습니다** —
+   다시 그리면 끌던 요소가 사라져 손을 떼도 아무 일도 일어나지 않습니다
+   (사이드바 분류·갤러리에서 이미 겪은 덫입니다). 대신 지금 있는 요소를
+   insertBefore 로 옮겨 두고, 손을 뗄 때 그 차례를 읽어 저장합니다. */
+function wgBindReorder(handle, box, container, itemSel){
+  handle.addEventListener('pointerdown', (e)=>{
+    if(e.button !== 0) return;
+    e.preventDefault();
+    const startY = e.clientY;
+    let moved = false;
+    wgPopDragging = true;                 // renderWidgets 를 잠급니다
+    box.classList.add('wg-reordering');
+    const move = (ev)=>{
+      if(ev.pointerId !== e.pointerId) return;   // 창에서 받으므로 다른 손가락은 거릅니다
+      if(!moved && Math.abs(ev.clientY - startY) < 4) return;
+      moved = true;
+      const sibs = Array.from(container.querySelectorAll(itemSel)).filter(n=> n !== box);
+      let before = null;
+      for(const n of sibs){
+        const r = n.getBoundingClientRect();
+        if(ev.clientY < r.top + r.height / 2){ before = n; break; }
+      }
+      if(before) container.insertBefore(box, before);
+      else container.appendChild(box);
+    };
+    const up = ()=>{
+      window.removeEventListener('pointermove', move, true);
+      window.removeEventListener('pointerup', up, true);
+      window.removeEventListener('pointercancel', up, true);
+      box.classList.remove('wg-reordering');
+      wgPopDragging = false;
+      if(moved){
+        /* 화면에 보이는 차례를 그대로 목록의 차례로 삼습니다. 화면에 없는
+           위젯(꺼둔 것, 팝업으로 보낸 것)은 원래 자리를 지킵니다. */
+        const shown = Array.from(container.querySelectorAll(itemSel))
+          .map(n=> n.dataset.widget || n.dataset.wgrow).filter(Boolean);
+        const rest = state.widgets.filter(w=> !shown.includes(w.id));
+        const moved2 = shown.map(id=> wgFind(id)).filter(Boolean);
+        state.widgets = [...moved2, ...rest];
+        wgCommit();
+      }
+      renderWidgets();
+    };
+    /* 팝업 끌기와 같은 까닭으로 창에서 받습니다 — 손잡이는 18px 밖에 안 돼서
+       손이 거기 머무를 수가 없습니다. */
+    window.addEventListener('pointermove', move, true);
+    window.addEventListener('pointerup', up, true);
+    window.addEventListener('pointercancel', up, true);
+  });
+}
+
+/* **사이드바에서 바로 끌어 옮기는 손잡이는 없앴습니다.** 한때 위젯 위에 작은
+   `::` 를 얹었는데, 순서를 바꾸려면 어차피 WIDGET 화면을 열어야 해서 쓸모가 없는
+   데다 위젯 내용 위에 표식이 하나 더 얹히는 값만 치렀습니다(주인 판단).
+   순서는 관리 목록에서만 바꿉니다. */
+
+/* ---- 관리 탭 ---- */
+function renderWidgetManage(){
+  const box = document.getElementById('wgList');
+  if(!box) return;
+  box.innerHTML = '';
+  (state.widgets || []).forEach(w=>{
+    const row = document.createElement('div');
+    row.className = 'wg-row' + (w.on ? '' : ' wg-off-row');
+    row.dataset.wgrow = w.id;
+    row.innerHTML =
+      '<button class="wg-grip" type="button" title="끌어서 순서 바꾸기"><span aria-hidden="true">::</span></button>' +
+      '<span class="wg-row-ico">' + wgIconSvg(w.icon) + '</span>' +
+      '<span class="wg-row-name"></span>' +
+      '<span class="wg-row-ctl">' +
+        '<button class="wg-chip wg-c-on" type="button"></button>' +
+        '<button class="wg-chip wg-c-where" type="button"></button>' +
+        '<button class="wg-chip wg-c-mob" type="button"></button>' +
+        '<button class="wg-chip wg-c-icon" type="button">아이콘</button>' +
+        '<button class="wg-chip wg-c-name" type="button">이름</button>' +
+        (wgIsBuiltin(w.id) ? '' :
+          '<button class="wg-chip wg-c-edit" type="button">고치기</button>' +
+          '<button class="wg-chip wg-c-del" type="button">삭제</button>') +
+      '</span>';
+    row.querySelector('.wg-row-name').textContent = w.name;
+    const on = row.querySelector('.wg-c-on');
+    on.textContent = w.on ? '켜짐' : '꺼짐';
+    on.classList.toggle('wg-chip-on', w.on);
+    const where = row.querySelector('.wg-c-where');
+    where.textContent = w.where === 'popup' ? '팝업' : '사이드바';
+    const mob = row.querySelector('.wg-c-mob');
+    mob.textContent = w.mobile ? '폰 보임' : '폰 숨김';
+    mob.classList.toggle('wg-chip-on', w.mobile);
+    /* 팝업은 폰에서 어차피 숨기기로 했고, 스티커는 폰에서 쓰지 않기로 한 것이
+       위젯보다 앞선 결정입니다 — 둘 다 켜 봐야 소용없으므로 잠급니다. */
+    if(wgNoPhone(w.id)){
+      mob.disabled = true;
+      mob.textContent = '폰 없음';
+      mob.classList.remove('wg-chip-on');
+      mob.title = '스티커는 폰에서 쓰지 않습니다';
+    }else if(w.where === 'popup'){
+      mob.disabled = true;
+      mob.title = '팝업 위젯은 폰에서 늘 숨깁니다';
+    }
+
+    on.addEventListener('click', ()=> wgSetOn(w.id, !w.on));
+    where.addEventListener('click', ()=> wgSetWhere(w.id, w.where === 'popup' ? 'sidebar' : 'popup'));
+    mob.addEventListener('click', ()=>{ if(!mob.disabled) wgSetMobile(w.id, !w.mobile); });
+    row.querySelector('.wg-c-icon').addEventListener('click', (e)=>{
+      e.stopPropagation(); wgOpenIconPick(w.id, row);
+    });
+    row.querySelector('.wg-c-name').addEventListener('click', (e)=>{
+      e.stopPropagation(); wgStartRename(w.id, row);
+    });
+    const ed = row.querySelector('.wg-c-edit');
+    if(ed) ed.addEventListener('click', ()=> wgEditCustom(w.id));
+    const del = row.querySelector('.wg-c-del');
+    if(del) del.addEventListener('click', ()=> wgDeleteCustom(w.id));
+    wgBindReorder(row.querySelector('.wg-grip'), row, box, '.wg-row');
+    /* 줄을 누르면 **두 모습을 나란히** 펼칩니다 — 켜 두지 않아도, 지금 자리가
+       어느 쪽이든 사이드바와 팝업을 한눈에 견줄 수 있게. 손잡이·단추를 누른
+       것은 제외합니다(그건 그 단추의 일입니다). */
+    row.addEventListener('click', (e)=>{
+      if(e.target.closest('.wg-chip, .wg-grip, .wg-iconpick, .wg-prev, .wg-name-input')) return;
+      wgTogglePreview(w.id, row);
+    });
+    box.appendChild(row);
+    if(wgOpenPreview === w.id) wgBuildPreview(w, row);
+  });
+}
+
+/* ---- 미리보기 ----
+   **진짜 위젯을 가져다 쓰지 않습니다.** 위젯은 요소가 하나뿐이라, 미리보기로
+   끌어오면 원래 자리에서 사라집니다. 붙박이는 복제해서 보여 주고(복제본은 처리기가
+   없지만 보는 데는 상관없습니다), 직접 만든 위젯은 미리보기 전용 이름으로 새로
+   그립니다 — 같은 id 가 둘이 되지 않도록. */
+let wgOpenPreview = null;
+function wgTogglePreview(id, row){
+  const open = (wgOpenPreview === id);
+  document.querySelectorAll('.wg-prev').forEach(n=> n.remove());
+  document.querySelectorAll('.wg-row').forEach(n=> n.classList.remove('wg-row-open'));
+  wgOpenPreview = open ? null : id;
+  if(!open){
+    const w = wgFind(id);
+    if(w) wgBuildPreview(w, row);
+  }
+}
+function wgBuildPreview(w, row){
+  row.classList.add('wg-row-open');
+  const wrap = document.createElement('div');
+  wrap.className = 'wg-prev';
+  wrap.innerHTML =
+    '<div class="wg-prev-cell"><span class="wg-prev-tag">사이드바</span>' +
+      '<div class="wg-prev-side"></div></div>' +
+    '<div class="wg-prev-cell"><span class="wg-prev-tag">팝업</span>' +
+      '<div class="wg-pop wg-pop-demo">' +
+        '<div class="wg-pop-bar">' +
+          '<span class="wg-pop-grip" aria-hidden="true">' + WG_MARK_GRIP + '</span>' +
+          '<span class="wg-pop-name"></span>' +
+          '<span class="wg-pop-btn">' + WG_MARK_MIN + '</span>' +
+          '<span class="wg-pop-btn">' + WG_MARK_CLOSE + '</span>' +
+        '</div><div class="wg-pop-body"></div>' +
+      '</div></div>';
+  wrap.querySelector('.wg-pop-name').textContent = w.name;
+  wgPreviewInto(w, 'sidebar', wrap.querySelector('.wg-prev-side'));
+  wgPreviewInto(w, 'popup',   wrap.querySelector('.wg-pop-demo .wg-pop-body'));
+  row.appendChild(wrap);
+}
+function wgPreviewInto(w, place, holder){
+  holder.innerHTML = '';
+  if(wgIsBuiltin(w.id)){
+    const live = wgElement(w);
+    if(!live) return;
+    const c = live.cloneNode(true);
+    /* id 가 둘이 되면 getElementById 가 엉뚱한 쪽을 집습니다 — 복제본에서 전부 뗍니다 */
+    c.removeAttribute('id');
+    c.querySelectorAll('[id]').forEach(n=> n.removeAttribute('id'));
+    c.dataset.place = place;
+    c.classList.remove('open', 'closing');
+    c.setAttribute('aria-hidden', 'true');
+    /* 미리보기는 보는 것만 합니다 — 눌러도 아무 일도 일어나지 않게 */
+    c.querySelectorAll('button, input, select, textarea').forEach(n=>{
+      n.disabled = true; n.tabIndex = -1;
+    });
+    holder.appendChild(c);
+  }else{
+    const d = document.createElement('div');
+    d.className = 'wg-custom';
+    d.dataset.place = place;
+    const pid = 'wgprev-' + w.id + '-' + place;
+    d.id = pid;
+    if(place === 'popup'){
+      const f = document.createElement('iframe');
+      f.className = 'wg-frame';
+      f.setAttribute('sandbox', 'allow-scripts allow-popups');
+      f.srcdoc = '<!doctype html><meta charset="utf-8"><base target="_blank">'
+               + '<style>html,body{margin:0;padding:0;background:transparent;'
+               + 'font-family:' + WG_FRAME_FONT + ';font-size:12px;color:#1c1c1c;}'
+               + (w.css || '') + '</style>' + (w.html || '');
+      d.appendChild(f);
+    }else{
+      if(w.css){
+        const st = document.createElement('style');
+        st.textContent = wgScopeCss(w.css, '#' + pid);
+        d.appendChild(st);
+      }
+      const body = document.createElement('div');
+      body.className = 'wg-custom-body';
+      body.innerHTML = w.html || '';
+      body.querySelectorAll('script').forEach(n=> n.remove());
+      d.appendChild(body);
+    }
+    holder.appendChild(d);
+  }
+}
+
+/* 이름 바꾸기 — 그 자리에서 칸으로 바뀝니다(창을 띄울 만한 일이 아닙니다).
+   **이름은 한 군데서만 옵니다**: 목록의 이름, 팝업 제목줄, 작은 아이콘의 설명이
+   모두 w.name 을 읽으므로 여기서 고치면 전부 따라옵니다. */
+function wgStartRename(id, row){
+  const w = wgFind(id); if(!w) return;
+  const cell = row.querySelector('.wg-row-name');
+  if(!cell || cell.querySelector('input')) return;
+  const inp = document.createElement('input');
+  inp.type = 'text';
+  inp.className = 'wg-name-input';
+  inp.maxLength = 24;
+  inp.value = w.name;
+  cell.textContent = '';
+  cell.appendChild(inp);
+  inp.focus();
+  inp.select();
+  let done = false;
+  const finish = (save)=>{
+    if(done) return;
+    done = true;
+    const v = (inp.value || '').trim().slice(0, 24);
+    if(save && v && v !== w.name){ w.name = v; wgCommit(); }
+    renderWidgets();           // 목록·팝업 제목줄이 함께 새 이름을 받습니다
+  };
+  inp.addEventListener('keydown', (e)=>{
+    e.stopPropagation();                       // Escape 가 다른 곳까지 닫지 않게
+    if(e.key === 'Enter'){ e.preventDefault(); finish(true); }
+    else if(e.key === 'Escape'){ e.preventDefault(); finish(false); }
+  });
+  inp.addEventListener('blur', ()=> finish(true));
+  inp.addEventListener('click', (e)=> e.stopPropagation());
+}
+
+/* 아이콘 고르기 — 줄 아래에 조그맣게 펼칩니다(창을 띄울 만한 일이 아닙니다) */
+function wgOpenIconPick(id, row){
+  document.querySelectorAll('.wg-iconpick').forEach(n=> n.remove());
+  const pick = document.createElement('div');
+  pick.className = 'wg-iconpick';
+  WG_ICON_ORDER.forEach(name=>{
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'wg-ipick' + (wgFind(id) && wgFind(id).icon === name ? ' active' : '');
+    b.innerHTML = wgIconSvg(name);
+    b.addEventListener('click', ()=>{ wgSetIcon(id, name); });
+    pick.appendChild(b);
+  });
+  row.appendChild(pick);
+}
+document.addEventListener('click', (e)=>{
+  if(e.target.closest('.wg-iconpick') || e.target.closest('.wg-c-icon')) return;
+  document.querySelectorAll('.wg-iconpick').forEach(n=> n.remove());
+});
+
+/* ---- 직접 만든 위젯 ---- */
+let wgEditingId = null;
+function wgAddEls(){
+  return {
+    name: document.getElementById('wgNewName'),
+    html: document.getElementById('wgNewHtml'),
+    css:  document.getElementById('wgNewCss'),
+    save: document.getElementById('wgNewSave'),
+    cancel: document.getElementById('wgNewCancel'),
+    warn: document.getElementById('wgEditWarn')
+  };
+}
+function wgResetAddForm(){
+  const f = wgAddEls();
+  if(!f.name) return;
+  wgEditingId = null;
+  f.name.value = ''; f.html.value = ''; f.css.value = '';
+  f.save.textContent = '추가';
+  f.cancel.style.display = 'none';
+  f.warn.textContent = '';
+}
+function wgEditCustom(id){
+  const w = wgFind(id); if(!w) return;
+  const f = wgAddEls(); if(!f.name) return;
+  wgEditingId = id;
+  f.name.value = w.name; f.html.value = w.html || ''; f.css.value = w.css || '';
+  f.save.textContent = '저장';
+  f.cancel.style.display = '';
+  f.warn.textContent = '';
+  /* 고치기는 '추가' 장에서 합니다 — 같은 칸을 두 벌 만들지 않으려고. */
+  const tabs = document.querySelector('.mg-tabs[data-mgtabs="widget"]');
+  tabs?.querySelector('.mg-tab[data-mgpane="add"]')?.click();
+  f.name.focus();
+}
+async function wgDeleteCustom(id){
+  const w = wgFind(id); if(!w || wgIsBuiltin(id)) return;
+  if(!(await siteConfirm('‘' + w.name + '’ 위젯을 삭제할까요?\n내용(HTML·CSS)도 함께 지워집니다.'))) return;
+  state.widgets = state.widgets.filter(x=> x.id !== id);
+  wgCustomEls.get(id)?.remove();
+  wgCustomEls.delete(id);
+  if(wgEditingId === id) wgResetAddForm();
+  wgCommit(); renderWidgets();
+}
+function wgBindAddForm(){
+  const f = wgAddEls();
+  if(!f.save) return;
+  /* 파일은 **글자만** 읽어 칸에 넣습니다 — 올려서 보관하는 것이 아니라,
+     가져온 뒤에도 그 자리에서 고칠 수 있고 저장 용량도 글자만큼만 씁니다.
+     고르개 하나를 둘이 나눠 쓰고, 누가 눌렀는지만 기억해 둡니다. */
+  const pick = document.getElementById('wgFilePick');
+  let pickTarget = null;
+  const askFile = (which)=>{
+    pickTarget = which;
+    pick.value = '';          // 같은 파일을 다시 골라도 change 가 오도록
+    pick.click();
+  };
+  document.getElementById('wgHtmlFile')?.addEventListener('click', ()=> askFile('html'));
+  document.getElementById('wgCssFile')?.addEventListener('click',  ()=> askFile('css'));
+  pick?.addEventListener('change', ()=>{
+    const file = pick.files && pick.files[0];
+    if(!file || !pickTarget) return;
+    if(file.size > 300000){ f.warn.textContent = '파일이 너무 커요 (300KB 까지).'; return; }
+    const r = new FileReader();
+    r.onload = ()=>{
+      const box = pickTarget === 'css' ? f.css : f.html;
+      box.value = String(r.result || '');
+      f.warn.textContent = file.name + ' 을(를) 가져왔어요.';
+      box.focus();
+    };
+    r.onerror = ()=>{ f.warn.textContent = '파일을 읽지 못했어요.'; };
+    r.readAsText(file);
+  });
+  f.cancel.addEventListener('click', ()=>{ wgResetAddForm(); });
+  f.save.addEventListener('click', ()=>{
+    if(!isLoggedIn) return;
+    const name = (f.name.value || '').trim();
+    const html = f.html.value || '';
+    const css  = f.css.value  || '';
+    if(!name){ f.warn.textContent = '이름을 적어주세요.'; f.name.focus(); return; }
+    if(!html.trim() && !css.trim()){ f.warn.textContent = 'HTML 이나 CSS 중 하나는 있어야 해요.'; return; }
+    if(wgEditingId){
+      const w = wgFind(wgEditingId);
+      if(w){ w.name = name.slice(0,24); w.html = html; w.css = css;
+             const el = wgCustomEls.get(w.id); if(el) el._wgSig = null; }   // 다시 그리게
+    }else{
+      state.widgets.push({
+        id: 'wg' + Date.now().toString(36) + Math.random().toString(36).slice(2,5),
+        name: name.slice(0,24), on:true, where:'sidebar', mobile:true,
+        icon:'box', x:null, y:null, min:false, html, css
+      });
+    }
+    wgResetAddForm();
+    wgCommit(); renderWidgets();
+    document.querySelector('.mg-tabs[data-mgtabs="widget"] .mg-tab[data-mgpane="list"]')?.click();
+  });
+}
+wgBindAddForm();
+
+/* 창 크기가 바뀌면 팝업이 화면 밖에 남지 않게 다시 가둡니다 */
+let wgResizeTimer = 0;
+window.addEventListener('resize', ()=>{
+  clearTimeout(wgResizeTimer);
+  wgResizeTimer = setTimeout(()=>{
+    if(wgPopDragging) return;
+    const pops = document.getElementById('widgetPops');
+    if(!pops) return;
+    (state.widgets || []).forEach(w=>{
+      if(w.where !== 'popup' || !w.on) return;
+      const box = pops.querySelector('.wg-pop[data-wgpop="' + w.id + '"]')
+               || pops.querySelector('.wg-mini[data-wgmini="' + w.id + '"]');
+      if(box) wgMoveTo(box, w);
+    });
+  }, 120);
+});
+
+/* ============================================================
    INIT
    ------------------------------------------------------------
    Firestore에서 데이터를 받아온 뒤 화면을 그립니다.
@@ -11178,6 +11969,9 @@ placeArcSearch();
 function initResponsiveWatch(){
   const onChange = ()=>{
     placeArcSearch();
+    /* 위젯은 폰과 PC 에서 보이는 것이 다릅니다 — 팝업은 폰에서 숨기고,
+       사이드바 위젯은 '폰 숨김' 을 켜둔 것만 빠집니다. */
+    renderWidgets();
     galleryPage = 1;
     /* LOG 는 폰에서 줄 목록, PC 에서 카드로 아예 다르게 그리므로 함께 다시 그립니다.
        (host 는 지금 열려 있는 창 기준으로 이미 맞춰져 있습니다 — 창은 한 번에 하나뿐) */

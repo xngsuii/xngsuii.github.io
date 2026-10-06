@@ -69,7 +69,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
-<link rel="stylesheet" href="css/style.css?v=228" />
+<link rel="stylesheet" href="css/style.css?v=232" />
 </head>
 <body>
 <div class="app-window">
@@ -125,13 +125,29 @@
          장치(positionStickerDrawer)도 필요 없어졌습니다 — 이제 사이드바
          흐름 안에 그냥 놓입니다.
          스티커가 실제로 붙는 자리(.sticker-layer)는 그대로 창 위입니다. -->
-    <div class="sticker-drawer" id="stickerDrawer">
+    <!-- ================= 사이드바 위젯 =================
+         스티커 서랍과 뮤직 플레이어는 이제 '붙박이 위젯 두 칸' 입니다. 켜고 끄고,
+         순서를 바꾸고, 팝업으로 띄울 수 있습니다(main.js 의 renderWidgets).
+
+         **이 칸이 바닥 닻입니다.** 예전에는 margin-top:auto 가 스티커 서랍에
+         붙어 있었는데, 순서를 바꿀 수 있게 되면서 맨 위 위젯이 그때그때 달라져
+         닻이 따라다녀야 했습니다. 칸이 닻을 가지면 안쪽 순서는 아무래도 좋습니다.
+
+         안의 위젯은 **옮겨 다니는 바로 그 요소**입니다 — 팝업으로 바꾸면 이
+         요소를 팝업 상자 안으로 옮기고, 되돌리면 다시 여기로 데려옵니다.
+         사이드바용·팝업용을 따로 만들지 않는 까닭: 두 벌이면 한쪽만 고치다
+         어긋납니다. 생김새 차이는 data-place 로 CSS 가 가릅니다. -->
+    <div class="side-widgets" id="sideWidgets">
+    <div class="sticker-drawer" id="stickerDrawer" data-widget="sticker" data-place="sidebar">
       <!-- 열렸을 때 손잡이 위로 떠오르는 판 -->
       <div class="sticker-drawer-box">
         <!-- 그림자 켜기/끄기는 저장되는 설정입니다(모두에게 같게 보입니다) —
              그래서 고칠 수 있을 때만 나옵니다. -->
+        <!-- 이 줄에는 그림자 체크칸만 있습니다. 예전에는 왼쪽에 'Sticker' 라는
+             라벨이 있었는데, 팝업 제목줄과 위젯 목록이 이미 이름을 보여 주고
+             있어서 같은 말이 두 번 나왔습니다(주인 지시로 뺐습니다).
+             체크칸은 편집 전용이라, 보기 모드에서는 줄째 숨깁니다. -->
         <div class="sd-head">
-          <span class="sd-title">Sticker</span>
           <label class="sd-shadow" data-editonly>
             <input type="checkbox" id="sdShadowChk" />
             <span>그림자</span>
@@ -155,7 +171,7 @@
     <!-- mb-hold: 데이터가 오기 전까지 비워 둡니다. 그대로 두면 TITLE / ARTIST /
          0:00 이라는 '들어갈 모양'이 1초쯤 진짜처럼 떠 있습니다.
          (HOME 격자의 hg-hold 와 같은 장치 — main.js 의 revealAfterLoad 가 뗍니다) -->
-    <div class="music-block mb-hold">
+    <div class="music-block mb-hold" data-widget="music" data-place="sidebar">
       <div class="mb-body">
         <div class="mb-info">
           <div class="mb-top">
@@ -233,6 +249,9 @@
         <div class="mbp-list" id="mbPlaylistList"></div>
       </div>
     </div>
+    </div><!-- /.side-widgets -->
+    <!-- 유튜브 플레이어는 **위젯 칸 바깥**입니다. 뮤직 위젯을 팝업으로 옮길 때
+         같이 끌려가면 iframe 이 다시 불려 소리가 끊깁니다. -->
     <div id="ytHost"></div>
 
     <!-- 저장 용량 — 편집 모드에서만, 사이드바 맨 아래에 얇게.
@@ -565,8 +584,45 @@
         </div>
       </div>
       <div class="mg-body" data-mgbody="widget">
-        <div class="mg-pane active" data-mgpane="list"><p class="mg-soon">위젯 목록 — 준비 중입니다.</p></div>
-        <div class="mg-pane" data-mgpane="add"><p class="mg-soon">위젯 추가 — 준비 중입니다.</p></div>
+        <!-- 목록 — main.js 의 renderWidgetManage 가 그립니다. 줄마다 손잡이(::),
+             이름, 켬/끔, 놓을 자리, 폰에서 보이기, 아이콘이 있습니다. -->
+        <div class="mg-pane active" data-mgpane="list">
+          <div class="wg-list" id="wgList"></div>
+          <p class="mg-note">끌어서 순서를 바꿀 수 있어요. 사이드바에서도 같은 순서로 놓입니다.</p>
+        </div>
+        <!-- 추가 — 직접 만든 위젯. 사이드바에 놓으면 선택자 앞에 #wg-&lt;id&gt; 를
+             붙여 가두고, 팝업에 놓으면 격리된 칸(iframe)에서 그립니다. -->
+        <div class="mg-pane" data-mgpane="add">
+          <div class="wg-add">
+            <label class="wg-f">
+              <span class="wg-f-label">이름</span>
+              <input type="text" id="wgNewName" placeholder="내 위젯" maxlength="24" />
+            </label>
+            <!-- 적어 넣을 수도 있고 파일로 가져올 수도 있습니다. 파일은 **글자만**
+                 읽어 칸에 넣습니다 — 올려서 보관하는 것이 아니라서, 가져온 뒤에도
+                 그 자리에서 고칠 수 있고 저장 용량도 글자만큼만 씁니다. -->
+            <div class="wg-f">
+              <span class="wg-f-head">
+                <span class="wg-f-label">HTML</span>
+                <button class="wg-file" type="button" id="wgHtmlFile">파일에서 가져오기</button>
+              </span>
+              <textarea id="wgNewHtml" rows="7" placeholder="&lt;p&gt;안녕&lt;/p&gt;" spellcheck="false"></textarea>
+            </div>
+            <div class="wg-f">
+              <span class="wg-f-head">
+                <span class="wg-f-label">CSS</span>
+                <button class="wg-file" type="button" id="wgCssFile">파일에서 가져오기</button>
+              </span>
+              <textarea id="wgNewCss" rows="6" placeholder="p{ color:#ef3921; }" spellcheck="false"></textarea>
+            </div>
+            <input type="file" id="wgFilePick" accept=".html,.htm,.css,.txt,text/html,text/css,text/plain" style="display:none;" />
+            <p class="wg-warn" id="wgEditWarn"></p>
+            <div class="wg-add-row">
+              <button class="btn-ghost" type="button" id="wgNewCancel" style="display:none;">취소</button>
+              <button class="btn-primary" type="button" id="wgNewSave">추가</button>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -1121,6 +1177,11 @@
 </div>
 </div>
 
+<!-- 팝업 위젯이 사는 자리. **낫표(.app-window) 바깥**이라 패널이 잘라내지도
+     (.app-window 는 overflow:hidden) 굴러가지도 않습니다. 안의 상자는 저마다
+     position:fixed 이고, 폰에서는 통째로 숨깁니다. -->
+<div class="widget-pops" id="widgetPops"></div>
+
 <!-- ================= MODALS ================= -->
 
 <!-- 확인 창 — 브라우저 기본 창 대신 사이트 모양에 맞춘 것.
@@ -1453,7 +1514,7 @@
        (그 목록을 만드는 것도 JS인데 새 CSS 가 감싸이지 않은 select 를 폭 0 으로
        접습니다), 스티커 서랍이 엉뚱한 자리에 놓였습니다.
        **CSS 와 JS 를 함께 고쳤으면 번호도 함께 올리세요.** -->
-<script src="js/main.js?v=228"></script>
-<script type="module" src="js/firebase-store.js?v=116"></script>
+<script src="js/main.js?v=232"></script>
+<script type="module" src="js/firebase-store.js?v=117"></script>
 </body>
 </html>
