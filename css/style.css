@@ -5307,6 +5307,9 @@
   /* 고치는 중에는 없습니다 — 아직 저장되지 않은 글의 링크는 쓸 데가 없습니다 */
   .arcd-editing .rt-link-btn{display:none;}
 
+  /* 비밀 폴더 창의 '바깥 폴더' 칸 — 이중 자물쇠일 때만 섭니다 */
+  .fu-hide{display:none;}
+
   /* ---- 없는 글 ---- */
   .rt-404{min-height:58vh;display:flex;flex-direction:column;
     align-items:center;justify-content:center;gap:7px;text-align:center;padding:40px 20px;}

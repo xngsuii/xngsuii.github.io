@@ -967,6 +967,25 @@ A deep link must not bypass a folder password: `rtWithFolder` opens the list fir
 `SiteStore.isAdmin` directly, because auth can resolve *after* the data arrives and the owner
 would otherwise be asked for their own password in that gap.
 
+**Locks nest, and the router has to walk the whole chain.** A LOG article has *two* folders
+above it: the PAIR/OC post's own folder and the LOG folder. Walking in from the list passes
+the outer gate on the way (`renderPairPosts` unlocks it before `openPairDetail`), so the
+in-site flow only ever sees one at a time — but a link skips that walk. The first version
+checked only the LOG folder, so an article inside a locked PAIR folder opened straight from
+its link. `rtPostLock` supplies the outer folder and `rtOpen` hands `rtWithFolder` the chain,
+outermost first; `#pair=`/`#oc=` needed the same gate. Nothing is opened, not even the
+detail behind the article, until every lock in the chain is cleared.
+
+`openFolderUnlock` therefore takes either one folder or a list of `{folder, label}`. With two
+it reveals `#fuOuterRow` above the existing field (outer on top, matching the order you would
+walk them) and labels both, since two folders can share a name; with one it keeps the plain
+folder name, exactly as every other call site expects. Every field must verify, and the error
+names which folder failed.
+
+While that dialog is open, `rtRoute` restores the arriving hash (`rtReplace(raw)`): `rtGoMenu`
+has already rewritten the address to the list, and leaving it that way means cancelling throws
+away the link the visitor was given, with no way to retry but to paste it again.
+
 Placing a button left of the `⋮` in a detail bar gets the "takes its slot when logged out"
 behaviour for free: `.arc-kebab-btn` is `display:none` unless `body.logged-in`, and the bar
 is a plain flex row.

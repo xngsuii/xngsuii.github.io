@@ -3791,10 +3791,22 @@ function rtParse(hash){
    SiteStore.isAdmin 을 함께 보는 까닭: 로그인 확정이 데이터 도착보다 늦을 수
    있어서, isLoggedIn 에 아직 옮겨지지 않은 그 틈에 주인이 자기 글 링크를 열면
    자기 비밀번호를 묻게 됩니다. */
-function rtWithFolder(folder, show){
+/* 글이 든 **바깥 폴더**. PAIR·OC 글 자체가 비밀 폴더에 있으면 그 자물쇠가
+   LOG 폴더보다 먼저입니다 — 사이트 안에서는 목록을 지나며 이미 풀고 들어오지만
+   (renderPairPosts 의 잠긴 폴더 처리) 링크는 그 길을 건너뜁니다.
+   이것을 빼먹어서, 잠긴 페어 폴더의 LOG 글이 링크로는 그냥 열렸습니다. */
+function rtPostLock(post, host){
+  const folders = host === 'oc' ? ocFoldersOf(post.type) : pairFoldersOf(post.type);
+  const fid = host === 'oc' ? ocFolderIdOf(post) : pairFolderIdOf(post);
+  const f = (folders || []).find(x=> x.id === fid);
+  if(!f) return null;
+  return { folder:f, label:(host === 'oc' ? 'OC' : 'PAIR') + ' 폴더 · ' + f.name };
+}
+function rtWithFolder(chain, show){
   const admin = !!(window.SiteStore && window.SiteStore.isAdmin);
-  if(admin || !folderLocked(folder)){ show(); return true; }
-  openFolderUnlock(folder, show);
+  const list = fuRows(chain);
+  if(admin || !list.length){ show(); return true; }
+  openFolderUnlock(list, show);
   return true;
 }
 
@@ -3808,8 +3820,11 @@ function rtOpen(t){
     const post = (list || []).find(x=> rtSameId(x.id, t.id));
     if(!post) return false;
     rtGoMenu(t.kind);
-    if(t.kind === 'oc') openOcDetail(post.id); else openPairDetail(post.id);
-    return true;
+    /* 글이 비밀 폴더에 있으면 여기서 먼저 묻습니다 — 목록은 이미 켜 두었으니
+       그만두면 그 자리에 남습니다. */
+    return rtWithFolder(rtPostLock(post, t.kind), ()=>{
+      if(t.kind === 'oc') openOcDetail(post.id); else openPairDetail(post.id);
+    });
   }
 
   if(t.kind === 'arc'){
@@ -3822,6 +3837,7 @@ function rtOpen(t){
     setCurArcFolderId(fid, cat);
     openArchiveCategory(cat);
     const folder = arcFoldersOf(cat).find(f=> f.id === fid);
+    /* ARCHIVE 글은 폴더가 한 겹뿐이라 칸도 하나입니다 */
     return rtWithFolder(folder, ()=> openArcView(item));
   }
 
@@ -3831,14 +3847,24 @@ function rtOpen(t){
     if(!post) return false;
     const entry = (post.log || []).find(e=> rtSameId(e.id, t.id));
     if(!entry) return false;
-    currentLogFolderId = logFolderIdOf(post, entry);   // 상세를 그리기 전에
+    /* 자물쇠는 **바깥부터**입니다 — 글이 든 PAIR·OC 폴더가 먼저이고
+       LOG 폴더가 그 안입니다. 둘 다 걸려 있으면 창 하나에 칸 둘이 섭니다. */
+    const lfid = logFolderIdOf(post, entry);
+    const lf = (post.logFolders || []).find(f=> f.id === lfid);
+    const chain = [];
+    const outer = rtPostLock(post, t.host);
+    if(outer) chain.push(outer);
+    if(lf) chain.push({ folder:lf, label:'LOG 폴더 · ' + lf.name });
     rtGoMenu(t.host);
-    if(t.host === 'oc') openOcDetail(post.id); else openPairDetail(post.id);
-    /* 글 화면은 LOG 칸 위에 덮이므로 먼저 그 장으로 옮겨 둡니다 —
-       최신글 위젯의 recentGo 와 같은 까닭입니다(뒤로 나왔을 때 LOG 가 보이도록). */
-    try{ if(t.host === 'oc') setOcPage(2, false); else setPdPage(2, false); }catch(_){}
-    const folder = (post.logFolders || []).find(f=> f.id === currentLogFolderId);
-    return rtWithFolder(folder, ()=> openLogView(entry));
+    /* 풀기 전에는 상세조차 열지 않습니다 — 잠긴 폴더의 글이 뒤에 깔려서는 안 됩니다 */
+    return rtWithFolder(chain, ()=>{
+      currentLogFolderId = lfid;                        // 목록을 그리기 전에
+      if(t.host === 'oc') openOcDetail(post.id); else openPairDetail(post.id);
+      /* 글 화면은 LOG 칸 위에 덮이므로 먼저 그 장으로 옮겨 둡니다 —
+         최신글 위젯의 recentGo 와 같은 까닭입니다(뒤로 나왔을 때 LOG 가 보이도록). */
+      try{ if(t.host === 'oc') setOcPage(2, false); else setPdPage(2, false); }catch(_){}
+      openLogView(entry);
+    });
   }
   return false;
 }
@@ -3854,9 +3880,18 @@ function rtNotFound(){
 }
 
 function rtRoute(){
-  const t = rtParse(location.hash);
+  const raw = location.hash;
+  const t = rtParse(raw);
   rtReady = true;
-  if(t){ if(!rtOpen(t)) rtNotFound(); return; }
+  if(t){
+    if(!rtOpen(t)){ rtNotFound(); return; }
+    /* 비밀번호 창이 떠 있으면 주소를 **그 글 그대로** 둡니다.
+       rtGoMenu 가 목록을 켜면서 주소도 목록으로 돌려놓는데, 그대로 두면
+       그만두고 나왔을 때 받은 링크가 사라져 다시 시도할 수가 없습니다.
+       창을 닫고 다른 데로 가면 markCurrentView 가 알아서 바로잡습니다. */
+    if(fuTarget) rtReplace(raw);
+    return;
+  }
   /* 우리 모양으로 시작하는데 뜯지 못한 주소(#arc= 처럼 중간에 잘린 링크)도
      없는 글로 봅니다 — 그냥 두면 홈에 조용히 남아 링크가 깨진 줄도 모릅니다.
      그 밖의 아무 해시(#top 같은 것)는 우리 것이 아니므로 건드리지 않습니다. */
@@ -6536,29 +6571,64 @@ function initFolderModal(){
   });
 }
 
-/* 비밀 폴더 열람 */
-let fuTarget = null;   // { folder, onOk }
+/* 비밀 폴더 열람
+   첫 값은 폴더 하나이거나 **바깥부터 늘어놓은 목록**입니다. 목록의 각 칸은
+   폴더 그 자체이거나 { folder, label } 입니다 — label 은 자물쇠가 둘일 때
+   어느 쪽인지 알려 주는 말입니다(‘PAIR 폴더 · NSFW’ 처럼).
+
+   둘인 경우: 링크를 받아 글로 바로 들어올 때입니다. 사이트 안에서 걸어 들어오면
+   바깥 폴더를 지나며 이미 한 번 풀기 때문에 한 칸만 섭니다. 링크는 그 길을
+   건너뛰므로 두 자물쇠를 한 창에서 함께 받습니다(주인 지시). */
+let fuTarget = null;   // { rows:[{folder,label,input}], onOk }
+function fuRows(v){
+  return (Array.isArray(v) ? v : [v])
+    .map(x => (x && x.folder) ? x : { folder:x, label:'' })
+    .filter(x => x.folder && folderLocked(x.folder));
+}
 function openFolderUnlock(folder, onOk){
-  fuTarget = { folder, onOk };
-  document.getElementById('fuFolderName').innerText = folder.name;
-  document.getElementById('fuPw').value='';
-  document.getElementById('fuError').style.display='none';
+  const list = fuRows(folder);
+  /* 풀 것이 없으면 묻지 않고 그대로 엽니다 — 관리자이거나 이미 푼 폴더입니다 */
+  if(!list.length){ if(onOk) onOk(); return; }
+  const outerRow = document.getElementById('fuOuterRow');
+  const two = list.length > 1;
+  outerRow.classList.toggle('fu-hide', !two);
+  /* 칸이 하나면 지금까지처럼 폴더 이름만 적습니다 — 괜히 길어질 까닭이 없습니다 */
+  const name = (x)=> two ? (x.label || x.folder.name) : x.folder.name;
+  const rows = [];
+  if(two){
+    document.getElementById('fuOuterName').innerText = name(list[0]);
+    document.getElementById('fuOuterPw').value = '';
+    rows.push(Object.assign({}, list[0], { input:document.getElementById('fuOuterPw') }));
+  }
+  const inner = two ? list[1] : list[0];
+  document.getElementById('fuFolderName').innerText = name(inner);
+  document.getElementById('fuPw').value = '';
+  rows.push(Object.assign({}, inner, { input:document.getElementById('fuPw') }));
+  fuTarget = { rows, onOk };
+  document.getElementById('fuError').style.display = 'none';
   openModal('modalFolderUnlock');
-  setTimeout(()=> document.getElementById('fuPw').focus(), 30);
+  setTimeout(()=> rows[0].input.focus(), 30);
 }
 function initFolderUnlock(){
   const pw=document.getElementById('fuPw'), btn=document.getElementById('fuSubmitBtn'), err=document.getElementById('fuError');
   if(!pw || !btn) return;
   const submit = async ()=>{
     if(!fuTarget) return;
-    const h = await hashPw(pw.value);
-    if(h !== fuTarget.folder.pwHash){
-      err.innerText='비밀번호가 일치하지 않습니다.';
-      err.style.display='block';
-      pw.select();
-      return;
+    const rows = fuTarget.rows;
+    /* **둘 다 맞아야 엽니다.** 하나라도 틀리면 어느 쪽이 틀렸는지 집어 줍니다 —
+       칸이 둘이면 '비밀번호가 다릅니다' 만으로는 어느 칸인지 알 수 없습니다. */
+    for(const r of rows){
+      const h = await hashPw(r.input.value);
+      if(h !== r.folder.pwHash){
+        err.innerText = rows.length > 1
+          ? '‘' + r.folder.name + '’ 의 비밀번호가 일치하지 않습니다.'
+          : '비밀번호가 일치하지 않습니다.';
+        err.style.display = 'block';
+        r.input.select();
+        return;
+      }
     }
-    unlockedFolders.add(fuTarget.folder.id);
+    rows.forEach(r=> unlockedFolders.add(r.folder.id));
     const cb = fuTarget.onOk;
     closeModal('modalFolderUnlock');
     fuTarget = null;
@@ -6566,6 +6636,8 @@ function initFolderUnlock(){
   };
   btn.addEventListener('click', submit);
   pw.addEventListener('keydown', (e)=>{ if(e.key==='Enter') submit(); });
+  const opw = document.getElementById('fuOuterPw');
+  if(opw) opw.addEventListener('keydown', (e)=>{ if(e.key==='Enter') submit(); });
 }
 
 /* ---- 폴더 탭 순서 바꾸기 (갤러리 / PROMPT / OC 공용) ----
