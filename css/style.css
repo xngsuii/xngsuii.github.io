@@ -315,19 +315,62 @@
      사진을 두 번 눌러도 그 누름을 이 막이 먼저 삼켜 버립니다 — 자리 맞추기가
      아예 열리지 않았던 까닭입니다(주인 지적). 글자 칸(.dday-mid)은 이미 같은
      이유로 꺼 두었습니다. */
-  .dday-scrim{position:absolute;inset:0;background:rgba(0,0,0,.34);pointer-events:none;}
+  /* 막과 글자색은 설정에서 정해져 main.js 가 변수로 꽂습니다.
+     기본값을 여기 두는 것은 설정이 없을 때도 지금까지와 똑같게 보이게 하려고입니다. */
+  .dday-banner{--dd-scrim:rgba(0,0,0,.34);--dd-text:#fff;--dd-bg:#f1f0ee;
+    --dd-shadow:0 1px 3px rgba(0,0,0,.45);}
+  .dday-scrim{position:absolute;inset:0;background:var(--dd-scrim);pointer-events:none;}
   .dday-widget.dday-empty .dday-scrim{background:transparent;}
+  .dday-date{font-family:var(--mono);font-size:9.5px;line-height:1.3;color:var(--dd-text);
+    letter-spacing:.06em;font-variant-numeric:tabular-nums;text-shadow:var(--dd-shadow);
+    opacity:.85;white-space:nowrap;}
+  .dday-widget.dd-no-date .dday-date{display:none;}
+
+  /* ---------- 템플릿 ----------
+     세 줄(디데이·문장·날짜)은 마크업에서 항상 같은 차례로 놓여 있고,
+     어디에 사느냐만 여기서 갈립니다. 마크업을 템플릿마다 따로 두면 세 벌을
+     나란히 고쳐야 하고, 그러다 하나를 빼먹습니다. */
+  /* 템플릿 2 — 바탕은 단색이고 사진은 오른쪽 동그라미 안으로 들어갑니다.
+     네모와 동그라미 중에서 동그라미를 골랐습니다 — 배너가 32:9 로 낮아서
+     네모를 놓으면 배너랑 같은 각진 꼴이 두 번 곹쳐 보이고, 동그라미는 이 사이트가
+     LP·점으로 써 온 모양과 맞습니다. */
+  .dday-widget.dd-t-2 .dday-banner{background:var(--dd-bg);}
+  .dday-widget.dd-t-2 .dday-scrim{display:none;}
+  .dday-widget.dd-t-2 .dday-photo{left:auto;right:3.2%;top:8%;bottom:8%;width:auto;
+    aspect-ratio:1/1;border-radius:50%;overflow:hidden;}
+  .dday-widget.dd-t-2 .dday-photo .adj-layer{border-radius:50%;}
+  .dday-widget.dd-t-2 .dday-mid{padding:8px 11px;}
   .dday-mid{position:absolute;inset:0;display:flex;flex-direction:column;
     align-items:center;justify-content:center;gap:2px;padding:0 26px;pointer-events:none;}
-  .dday-count{font-family:var(--mono);font-size:20px;line-height:1.1;color:#fff;
+  .dday-count{font-family:var(--mono);font-size:20px;line-height:1.1;color:var(--dd-text);
     font-variation-settings:'wght' 800;font-variant-numeric:tabular-nums;
     text-shadow:0 1px 6px rgba(0,0,0,.45);}
-  .dday-note{font-family:var(--mono);font-size:10.5px;line-height:1.3;color:#fff;
+  .dday-note{font-family:var(--mono);font-size:10.5px;line-height:1.3;color:var(--dd-text);
     text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;
     text-shadow:0 1px 6px rgba(0,0,0,.45);}
   .dday-widget.dday-empty .dday-count,
   .dday-widget.dday-empty .dday-note{color:var(--text-muted);text-shadow:none;}
   .dday-widget.dday-empty .dday-count{font-size:11px;font-variation-settings:'wght' 500;}
+  /* 템플릿 1 — 문장이 왼위, 바로 아랫줄에 날짜, 디데이는 오른아래.
+     날짜는 이 템플릿에서는 항상 켭니다(주인 지시) — main.js 가 .dd-no-date 를 안 달아줍니다. */
+  .dday-widget.dd-t-1 .dday-mid{display:grid;align-content:stretch;justify-items:start;
+    grid-template-columns:1fr auto;grid-template-rows:auto auto 1fr;
+    padding:7px 10px;text-align:left;}
+  .dday-widget.dd-t-1 .dday-note{grid-column:1;grid-row:1;}
+  .dday-widget.dd-t-1 .dday-date{grid-column:1;grid-row:2;}
+  .dday-widget.dd-t-1 .dday-count{grid-column:2;grid-row:3;align-self:end;justify-self:end;}
+  /* 템플릿 2 — 디데이가 왼위, 문장과 날짜가 왼아래. 오른쪽은 사진 자리라
+     글자 칸이 그만큼 비켜 줍니다(padding-right). */
+  /* **칸을 한 칸(1fr)으로 못 박아 두면 왼쪽으로 안 붙습니다.** 기본 .dday-mid 에는
+     가운데 모음(justify-content:center)이 걸려 있고, 그것은 격자에서 '칸 덭어리를
+     통째로 가운데 모으라'는 뜻이 됩니다 — justify-items:start 를 주어도 덭어리 자체가
+     가운데로 가버려 글자가 가운데 섬니다(실제로 그러였습니다). 1fr 은 칸이 폭을 다
+     채워 모으고 말 것이 없게 만듭니다. 템플릿1 은 1fr auto 라 이미 괜찮았습니다. */
+  .dday-widget.dd-t-2 .dday-mid{display:grid;justify-items:start;grid-template-columns:1fr;
+    grid-template-rows:auto 1fr auto auto;padding-right:30%;text-align:left;}
+  .dday-widget.dd-t-2 .dday-count{grid-row:1;}
+  .dday-widget.dd-t-2 .dday-note{grid-row:3;}
+  .dday-widget.dd-t-2 .dday-date{grid-row:4;}
   .dday-nav{position:absolute;top:50%;transform:translateY(-50%);width:22px;height:30px;
     display:flex;align-items:center;justify-content:center;padding:0;
     background:transparent;border:none;border-radius:0;
@@ -339,12 +382,6 @@
   .dday-banner:hover .dday-nav{opacity:.85;}
   .dday-nav:hover{opacity:1 !important;}
   .dday-widget.dday-one .dday-nav{display:none;}
-  .dday-edit{position:absolute;top:4px;right:4px;width:20px;height:20px;padding:0;
-    display:none;align-items:center;justify-content:center;
-    background:rgba(0,0,0,.4);border:none;border-radius:var(--radius-sm);
-    font-size:10px;color:#fff;opacity:0;transition:opacity .18s ease;}
-  body.logged-in .dday-edit[data-editonly]{display:flex;}
-  .dday-banner:hover .dday-edit{opacity:1;}
   /* 쪽을 알리는 동그란 점은 뺐습니다 — 화살표만으로 충분하다는 주인 판단입니다. */
   /* 디데이 관리 창 */
   .dd-list{display:flex;flex-direction:column;max-height:50vh;overflow-y:auto;}
@@ -388,26 +425,128 @@
   .rc-head{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:7px;}
   .rc-title{font-family:var(--mono);font-size:10px;font-weight:500;text-transform:uppercase;
     letter-spacing:.16em;color:var(--text-muted);}
-  .rc-opt{display:none;width:18px;height:18px;padding:0;align-items:center;justify-content:center;
-    background:transparent;border:none;font-size:10px;color:var(--text-muted);opacity:.5;}
-  body.logged-in .rc-opt[data-editonly]{display:flex;}
-  .rc-opt:hover{opacity:1;color:var(--accent);}
   .rc-list{display:flex;flex-direction:column;}
+
+  /* ---------- 위젯 안의 편집 표시는 WIDGET 화면에서만 ----------
+     글을 쓰려면 보통 편집 모드로 사이트를 보게 되는데, 그때마다 사이드바의
+     위젯이 전부 '고칠 수 있는 모습'으로 보였습니다(주인 판단). 단어사전에만
+     있던 규칙을 위젯 전체로 넓힙니다 — main.js 가 WIDGET 화면일 때만 body 에
+     .wg-editing 을 달고, 그렇지 않은 동안에는 위젯 안의 [data-editonly] 를 감춥니다.
+
+     **숨기는 쪽만 씁니다.** 보이는 규칙은 저마다 display 값이 달라서
+     (flex·inline-flex·block) 여기서 다시 말하면 그 차이가 무너집니다.
+     body.logged-in [data-editonly] 는 (0,2,0), 이 줄은 (0,4,0) 이라 이깁니다. */
+  body.logged-in:not(.wg-editing) [data-widget] [data-editonly]{display:none;}
   /* 글 한 줄 — 제목과 어디 글인지. 상자 없이 글자만 놓습니다(사이드바와 같은 말투). */
   .rc-item{display:flex;flex-direction:column;align-items:flex-start;gap:1px;
     padding:5px 0;background:transparent;border:none;border-radius:0;text-align:left;width:100%;}
   .rc-item + .rc-item{border-top:1px solid var(--rule-soft);}
-  .rc-item-title{width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  /* 앞머리와 제목은 **항상 한 줄**입니다(.rc-line). 두 줄로 볼 때는 그 줄 아래로
+     갈래가 내려오고, 한 줄로 볼 때는 같은 줄 오른쪽 끝으로 붙습니다 — 칸을 두 벌
+     만들지 않고 방향만 바꿉니다. */
+  .rc-line{display:flex;align-items:baseline;gap:6px;width:100%;min-width:0;}
+  .rc-bul{flex:none;font-family:var(--mono);font-size:9px;line-height:1;color:var(--text-muted);
+    transition:color .18s ease;}
+  .rc-item:hover .rc-bul{color:var(--accent);}
+  .rc-item-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
     font-family:var(--mono);font-size:12px;color:var(--text);
     font-variation-settings:'wght' 400;transition:color .18s ease,font-variation-settings .18s ease;}
   .rc-item:hover .rc-item-title{color:var(--accent);font-variation-settings:'wght' 800;}
   .rc-item-sub{font-family:var(--mono);font-size:9px;letter-spacing:.06em;color:var(--text-muted);}
+  .rc-item.rc-one{flex-direction:row;align-items:baseline;gap:8px;}
+  .rc-item.rc-one .rc-line{flex:1;min-width:0;width:auto;}
+  .rc-item.rc-one .rc-item-sub{flex:none;margin-left:auto;white-space:nowrap;}
+  /* 앞머리 고르는 줄 — 켜고끕 단추 뒤로 기호들이 이어집니다 */
+  .rc-bul-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px;}
+  .rc-bul-picks .opt-pick{padding:0 6px;font-size:12px;}
   .rc-none{font-family:var(--mono);font-size:10.5px;color:var(--text-muted);padding:4px 0;}
 
   /* ---------- 단어사전 위젯 ----------
      사전 한 쪽을 그대로 옮긴 모양입니다. 편집 모드에서는 글자 자리가 그 자리에서
      고쳐 쓰는 칸이 되고(.dict-edit), 비어 있으면 안내 글이 보입니다. */
   .dict-widget{position:relative;padding:0 0 16px;}
+  /* 넘기는 칸. 디데이 배너와 같은 장치지만 한 가지가 다릅니다 — 배너는 비율이
+     정해져 있어 속을 다 띄워도 높이가 같지만, 사전은 장마다 키가 다릅니다.
+     그래서 진짜 칸(.dict-slide)은 흐름 그대로 두어 키를 정하게 하고, 나가는
+     복제본만 위에 띄우게 합니다. */
+  /* ---------- 디데이 설정 창의 겹모습 칸 ---------- */
+  /* 칸끼리 벌어집니다 — 예전에는 2px 이라 템플릿·색·날짜가 한 덩어리로 보였습니다(주인 지적) */
+  .dd-cfg{display:flex;flex-direction:column;gap:17px;padding-bottom:6px;}
+  /* 글자로 고르는 단추 — 디데이의 색·최신글의 보기·앞머리가 같이 씁니다 */
+  .opt-picks{display:flex;flex-wrap:wrap;gap:5px;}
+  .opt-pick{height:24px;min-width:24px;padding:0 9px;display:inline-flex;align-items:center;
+    justify-content:center;
+    background:transparent;border:1px solid var(--border);border-radius:var(--radius-sm);
+    font-family:var(--mono);font-size:11px;color:var(--text-muted);cursor:pointer;}
+  .opt-pick:hover{border-color:var(--text-muted);color:var(--text);}
+  .opt-pick.active{border-color:var(--accent);color:var(--accent);font-variation-settings:'wght' 800;}
+
+  /* ---------- 디데이 템플릿 고르기 ----------
+     글자로 '템플릿1' 이라고만 하면 무엇이 어떻게 놓이는지를 누르기 전에는 알 수
+     없습니다(주인 지시). 배너 모양을 작게 그려 보여 줍니다 — 진짜 위젯을 복제하지
+     않고 선과 네모로만 짓는 까닭은, 내용(사진·글자)에 눈이 가면 정작 비교해야 할
+     '자리'가 안 보이기 때문입니다. 가로 둘씩, 배너보다 놓게. */
+  /* ⚙ 창의 켜고끕 단추는 글자만큼만 — .wg-f 가 세로 줄이라 그냥 두면 칸 폭을 다 먹습니다 */
+  .dd-cfg .wg-chip{align-self:flex-start;}
+  .dd-tpls{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
+  .dd-tpl{display:flex;flex-direction:column;gap:5px;padding:0;background:transparent;
+    border:none;cursor:pointer;text-align:left;}
+  .dd-tpl-box{position:relative;display:block;height:62px;border-radius:var(--radius-sm);
+    border:1px solid var(--border);overflow:hidden;background:#6f7a86;
+    transition:border-color .15s ease;}
+  .dd-tpl:hover .dd-tpl-box{border-color:var(--text-muted);}
+  .dd-tpl.active .dd-tpl-box{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
+  .dd-tpl-name{font-family:var(--mono);font-size:11px;color:var(--text-muted);}
+  .dd-tpl.active .dd-tpl-name{color:var(--accent);font-variation-settings:'wght' 800;}
+  /* 안에 들어가는 조각 — d 디데이, n 문장 줄, t 날짜 줄, c 동그라미 사진 */
+  .dd-tpl-box > span{position:absolute;}
+  .dd-tpl-d{font-family:var(--mono);font-size:11px;font-variation-settings:'wght' 800;
+    color:#fff;line-height:1;}
+  .dd-tpl-n,.dd-tpl-t{height:3px;border-radius:2px;background:rgba(255,255,255,.72);}
+  .dd-tpl-t{opacity:.6;}
+  .dd-tpl-c{border-radius:50%;background:#9aa6b2;}
+  /* 기본 — 가운데 */
+  .dd-tpl-base .dd-tpl-d{left:0;right:0;top:19px;text-align:center;}
+  .dd-tpl-base .dd-tpl-n{left:28%;right:28%;top:36px;}
+  .dd-tpl-base .dd-tpl-t{left:36%;right:36%;top:43px;}
+  /* 템플릿1 — 문장·날짜 왼위, 디데이 오른아래 */
+  .dd-tpl-1 .dd-tpl-n{left:9px;width:46%;top:11px;}
+  .dd-tpl-1 .dd-tpl-t{left:9px;width:32%;top:19px;}
+  .dd-tpl-1 .dd-tpl-d{right:9px;bottom:9px;}
+  /* 템플릿2 — 단색 바탕, 디데이 왼위, 글자 왼아래, 사진 오른쪽 동그라미 */
+  .dd-tpl-box.dd-tpl-2{background:#2b2b33;}
+  .dd-tpl-2 .dd-tpl-d{left:9px;top:10px;}
+  .dd-tpl-2 .dd-tpl-n{left:9px;width:40%;bottom:17px;}
+  .dd-tpl-2 .dd-tpl-t{left:9px;width:28%;bottom:9px;}
+  .dd-tpl-2 .dd-tpl-c{right:9px;top:9px;bottom:9px;width:44px;}
+  .dd-cols{display:flex;align-items:center;gap:12px;}
+  .dd-col{display:inline-flex;align-items:center;gap:5px;
+    font-family:var(--mono);font-size:11px;color:var(--text-muted);}
+  .dd-col input[type=color]{width:26px;height:20px;padding:0;border:1px solid var(--border);
+    border-radius:var(--radius-sm);background:transparent;cursor:pointer;}
+  /* 쓸데가 없는 칸은 감춥니다 — 자유 색은 '자유'일 때만, 배경색은 템플릿2 일 때만. */
+  .dd-cfg .wg-f.dd-hide{display:none;}
+  /* 작은 제목 — 위에 있는 설정 칸과 확실히 떨어발 만큼 비우고, 글자도 1px 타움니다
+     (주인 지시). 디데이의 '목록' 과 뮤직의 '노래' 가 같은 줄입니다. */
+  .mg-sub{margin:26px 0 9px;padding-top:16px;border-top:1px solid var(--rule-soft);
+    font-family:var(--mono);font-size:11px;font-weight:500;
+    text-transform:uppercase;letter-spacing:.16em;color:var(--text-muted);}
+
+  .dict-stage{position:relative;overflow:hidden;}
+  .dict-slide{position:relative;z-index:1;}
+  .dict-ghost{position:absolute;top:0;left:0;right:0;z-index:0;}
+  /* 장 넘기기 — **상자 없이 글자만**, 단어 줄 오른쪽 끝에. 예전에는 칸 양쪽
+     모서리에 테두리 있는 단추였는데 주인이 못생겼다고 했고, 글자 위를 덮고 있어
+     자리도 나쁘었습니다. 항상 보이고, 올리면 신호색으로 바뀝니다. */
+  .dict-nav-pair{margin-left:auto;display:flex;align-items:baseline;gap:1px;}
+  .dict-nav{padding:0 2px;background:transparent;border:none;
+    font-family:var(--mono);font-size:19px;line-height:1;color:var(--text-muted);
+    transition:color .15s ease;cursor:pointer;}
+  .dict-nav:hover{color:var(--accent);}
+  /* 갈 장이 없으면 그 쪽 화살표는 그리지 않습니다. 위젯 목록 안에서는
+     › 가 '새 장 만들기'라 마지막 장에서도 남아 있습니다(main.js 가 갈라줍니다). */
+  .dict-widget.dict-no-prev .dict-prev,
+  .dict-widget.dict-no-next .dict-next{display:none;}
   .dict-photo{position:relative;height:64px;margin-bottom:9px;border-radius:var(--radius-sm);
     background:var(--surface-2) center/cover no-repeat;overflow:hidden;}
   .dict-photo.dict-photo-empty{background-image:none;}
@@ -491,6 +630,9 @@
   /* 데이터가 오기 전 — 비워 둡니다. visibility 인 까닭은 HOME 격자와 같습니다:
      자리를 남겨야 사이드바가 뒤늦게 밀려 내려가지 않습니다. */
   .music-block.mb-hold{visibility:hidden;}
+  /* 위젯 칸은 **다 그려진 뒤에** 엽니다 — 빈 배너·빈 목록이 잠긐 보이는 것을
+     막습니다(주인 지적). display 가 아니라 visibility 인 것은 자리를 비워 두기 위해서입니다. */
+  .side-widgets.wg-hold,.widget-pops.wg-hold{visibility:hidden;}
   .mb-body{display:flex;align-items:center;gap:8px;}
   .mb-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px;}
   .mb-top{display:flex;align-items:baseline;justify-content:space-between;gap:4px;}
@@ -586,6 +728,74 @@
      펼쳐지는 높이(max-height)에 그 여백까지 포함시켜 메뉴가 먼저 툭 밀리지 않게
      하려는 것입니다. 끝 값 116 = 목록 104 + 위 여백 12 이고, 실제 높이가 그보다
      짧으면 max-height 는 아무것도 하지 않습니다. */
+  /* ---------- 음량 단추 ----------
+     보통 모양에서는 감싼 칸들이 없는 셔이고(display:contents), 바만 정리한 줄로
+     놓입니다 — 지금까지와 똑같은 모습. 단추는 미니에서만 나옵니다. */
+  .mb-vol-wrap{display:contents;}
+  .mb-vol-pop{display:contents;}
+  .mb-vol-btn{display:none;}
+
+  /* ---------- 뮤직 — 미니 모양 ----------
+     한 줄에 다 담습니다: 전/재생/후 · NOW PLAYING · 제목 · 음량 · 레코드.
+     **칸을 따로 만들지 않습니다** — 같은 요소를 그대로 두고 감싼 칸들만
+     display:contents 로 풀어, 안에 있는 것들이 한 줄의 식구가 되게 합니다.
+     사이드바↔팝업과 같은 생각입니다 — 두 벌을 두면 한쪽만 고치다 어긋납니다.
+     키는 .mb-lp 가 정합니다(26px) — 나머지는 가운데 정렬로 그 줄에 걸립니다. */
+  .music-block.mb-mini .mb-body{align-items:center;gap:7px;}
+  .music-block.mb-mini .mb-info,
+  .music-block.mb-mini .mb-top,
+  .music-block.mb-mini .mb-song,
+  .music-block.mb-mini .mb-song-text{display:contents;}
+  .music-block.mb-mini .mb-time,
+  .music-block.mb-mini .mb-note,
+  .music-block.mb-mini .mb-artist{display:none;}
+  .music-block.mb-mini .mb-controls{order:1;flex:none;margin-top:0;gap:0;}
+  .music-block.mb-mini .mb-label{order:2;flex:none;}
+  /* 사이드바처럼 좁은 자리에서는 NOW PLAYING 을 접습니다 — 도려놓으면
+     제목이 알아볼 수 없게 줄어듭니다(재보고 갈라주는 것은 main.js 의 mbFitMini). */
+  .music-block.mb-mini.mb-mini-tight .mb-label{display:none;}
+  .music-block.mb-mini .mb-title{order:3;flex:1 1 auto;min-width:0;font-size:12.5px;line-height:1.2;}
+  .music-block.mb-mini .mb-vol-wrap{order:4;flex:none;position:relative;display:flex;align-items:center;}
+  .music-block.mb-mini .mb-lp{order:5;width:26px;height:26px;}
+  /* 만들기(＋)는 노래를 넣는 유일한 문이라 미니에서도 남깁니다 —
+     어차피 WIDGET 화면에서만 보입니다. */
+  .music-block.mb-mini .mb-manage{margin-left:2px;}
+  .music-block.mb-mini .mb-btn{width:18px;height:18px;font-size:10px;}
+  .music-block.mb-mini .mb-play{font-size:10px;}
+  /* 레코드는 톤암을 접고 판만 보여 줍니다(viewBox 는 main.js 가 줄입니다) */
+  .music-block.mb-mini .mb-arm{display:none;}
+  /* 음량 — 단추를 누르면 바가 위로 떠오릅니다 */
+  .music-block.mb-mini .mb-vol-btn{display:flex;align-items:center;justify-content:center;
+    width:18px;height:18px;padding:0;background:transparent;border:none;cursor:pointer;
+    color:var(--text-muted);opacity:.7;}
+  .music-block.mb-mini .mb-vol-btn:hover,
+  .music-block.mb-mini .mb-vol-wrap.open .mb-vol-btn{opacity:1;color:var(--accent);}
+  .mb-vol-btn svg{width:14px;height:14px;display:block;}
+  .mb-vol-btn svg path:first-child{fill:currentColor;stroke:none;}
+  .mb-vol-btn svg path.mb-vol-wave1,
+  .mb-vol-btn svg path.mb-vol-wave2{fill:none;stroke:currentColor;stroke-width:1.3;stroke-linecap:round;}
+  .music-block.mb-mini .mb-vol-pop{display:none;position:absolute;left:50%;bottom:calc(100% + 6px);
+    transform:translateX(-50%);width:26px;height:84px;z-index:6;
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);
+    box-shadow:0 6px 18px rgba(0,0,0,.12);}
+  .music-block.mb-mini .mb-vol-wrap.open .mb-vol-pop{display:block;}
+  /* **margin 을 반드시 지워야 합니다.** 보통 모양의 .mb-vol 은 margin:6px 0 0 으로
+     위에 틈을 두는데, 제자리를 떠나면 top:50% 가 잡는 것은 테두리가 아니라 **바깥여백**
+     이라, 바가 그 6px 만큼 아래로 내려가 있었습니다(주인 지적). 돌리는 것은 가운데를
+     축으로 도는 것이라 기울어진 자리가 그대로 남습니다. */
+  .music-block.mb-mini .mb-vol{position:absolute;top:50%;left:50%;width:68px;margin:0;
+    transform:translate(-50%,-50%) rotate(-90deg);}
+  /* 앞·뒤 곡은 미니에서 접습니다 — 재생만 남깁니다(주인 지시).
+     곡을 넘기려면 레코드를 눌러 목록에서 고르면 됩니다. */
+  .music-block.mb-mini .mb-skip{display:none;}
+  /* 팝업에서는 **레코드가 눌리지 않습니다** — 재생 목록이 어차피 항상 아래에
+     펼쳐 있어(.wg-pop-body .mb-playlist{display:block}) 눌러 봐야 할 일이 없습니다. */
+  .wg-pop-body .mb-lp{pointer-events:none;cursor:default;}
+  /* 팝업에서는 음량 바를 **아래로** 폼니다. 팝업 상자는 overflow:hidden 이라
+     위로 떠우면 상단바에 잘립니다(주인 지적). 아래에는 재생 목록 자리가 있습니다.
+     방향은 main.js 가 재 보고 정합니다(mbVolSide). */
+  .music-block.mb-mini .mb-vol-wrap.vol-down .mb-vol-pop{bottom:auto;top:calc(100% + 6px);}
+
   .mb-playlist{display:none;overflow:hidden;padding-top:12px;}
   .mb-playlist.open{display:block;animation:mbp-drop .34s cubic-bezier(.22,1,.36,1);}
   @keyframes mbp-drop{
@@ -965,6 +1175,7 @@
   .wg-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:9px 2px;position:relative;
     border-bottom:1px solid var(--rule-soft);cursor:pointer;}
   .wg-row .wg-chip{cursor:pointer;}
+  .wg-row .wg-sw,.wg-row .wg-row-ico,.wg-row .wg-c-rename{cursor:pointer;}
   .wg-row .wg-grip{cursor:grab;}
   .wg-row .wg-prev{cursor:default;}
   .wg-row .wg-name-input{cursor:text;}
@@ -975,13 +1186,41 @@
     font-family:var(--mono);font-size:10px;letter-spacing:.06em;line-height:1;
     color:var(--text-muted);opacity:.5;cursor:grab;touch-action:none;}
   .wg-grip:hover{opacity:1;color:var(--accent);}
-  .wg-row-ico{flex:none;display:flex;color:var(--text-muted);}
-  .wg-row-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  /* 아이콘은 눌러 바꾸는 단추입니다 — 생김새는 글자 옆 표식 그대로이고,
+     올려봐야 누를 수 있다는 것이 드러납니다. */
+  .wg-row-ico{flex:none;display:flex;padding:0;background:transparent;border:none;
+    color:var(--text-muted);cursor:pointer;transition:color .15s ease;}
+  .wg-row-ico:hover{color:var(--accent);}
+  /* 이름과 펜은 한 식구 — 이름이 길면 이름만 줄어들고 펜은 바로 그 옆에 남습니다.
+     (이름에 flex:1 을 주면 펜이 줄 끝까지 밀려나가 누구 것인지 알 수 없게 됩니다.) */
+  .wg-row-id{flex:1;min-width:0;display:flex;align-items:center;gap:6px;}
+  .wg-row-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
     font-family:var(--mono);font-size:12.5px;color:var(--text);}
+  .wg-c-rename{flex:none;width:20px;height:20px;padding:0;display:flex;align-items:center;
+    justify-content:center;background:transparent;border:none;
+    color:var(--text-muted);opacity:.55;cursor:pointer;transition:opacity .15s ease,color .15s ease;}
+  .wg-c-rename:hover{opacity:1;color:var(--accent);}
+  .wg-pen{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1.4;
+    stroke-linecap:round;stroke-linejoin:round;display:block;}
   .wg-row-ctl{flex:none;display:flex;align-items:center;gap:5px;}
+  /* ---- 켜고끕 스위치 ----
+     글자로 '켜짐/꺼짐' 을 써 두었더니 그게 지금 상태인지 누르면 될 일인지가
+     구분이 안 됐습니다(주인 지적). 모서리를 둥글게 말지 않는 것은 이 사이트가
+     --radius 를 0 으로 두고 있어서입니다 — 동그란 스위치만 혼자 둥떠다니면 떠보입니다. */
+  .wg-sw{flex:none;position:relative;width:34px;height:18px;padding:0;
+    background:transparent;border:1px solid var(--border);border-radius:var(--radius-sm);
+    cursor:pointer;transition:border-color .18s ease,background .18s ease;}
+  .wg-sw-k{position:absolute;top:2px;left:2px;width:12px;height:12px;
+    background:var(--text-muted);transition:transform .18s ease,background .18s ease;}
+  .wg-sw:hover{border-color:var(--text-muted);}
+  .wg-sw[aria-checked="true"]{border-color:var(--accent);background:rgba(239,57,33,.09);}
+  .wg-sw[aria-checked="true"] .wg-sw-k{transform:translateX(16px);background:var(--accent);}
+  .wg-sw[aria-checked="true"]:hover{border-color:var(--accent);}
   /* 이름을 그 자리에서 고칩니다 — 줄 높이가 흔들리지 않게 글자 크기·높이를
      이름표(.wg-row-name)와 맞춰 둡니다. */
-  .wg-name-input{width:100%;max-width:220px;height:22px;padding:0 6px;
+  /* 이름칸은 이제 **줄어든 이름표 안**에 들어갑니다 — width:100% 로 두면
+     길이가 글자 폭만큼으로 줌아들어 고칠 수가 없습니다. 고정 폭을 줍니다. */
+  .wg-name-input{width:170px;max-width:100%;height:22px;padding:0 6px;
     font-family:var(--mono);font-size:12.5px;color:var(--text);
     background:var(--bg);border:1px solid var(--accent);border-radius:var(--radius-sm);}
   .wg-name-input:focus{outline:none;}
@@ -995,7 +1234,9 @@
   .wg-chip:disabled{opacity:.35;}
   .wg-chip:disabled:hover{color:var(--text-muted);border-color:var(--border);}
   .wg-c-del:hover{color:#c0392b;border-color:#c0392b;}
-  .wg-iconpick{position:absolute;right:2px;top:100%;z-index:6;display:flex;gap:2px;padding:5px;
+  /* left·top 은 main.js 가 아이콘을 재서 다시 적습니다(펼쳐진 줄에서도 같은 자리에 서게).
+     여기 값은 그 전까지의 받침입니다. */
+  .wg-iconpick{position:absolute;left:2px;top:100%;z-index:6;display:flex;gap:2px;padding:5px;
     background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);
     box-shadow:0 5px 14px rgba(0,0,0,.14);}
   .wg-ipick{width:28px;height:28px;display:flex;align-items:center;justify-content:center;
@@ -4326,7 +4567,7 @@
     /* 서랍은 손가락으로 쓰므로 손잡이를 키웁니다 */
     .wg-grip{width:30px;height:34px;font-size:12px;}
     .wg-row{gap:6px;padding:10px 2px;flex-wrap:wrap;}
-    .wg-row-name{flex:1 1 100%;order:-1;}
+    .wg-row-id{flex:1 1 100%;order:-1;}
     .wg-chip{height:30px;padding:0 9px;}
     /* 좁으니 두 모습을 위아래로 */
     .wg-prev{flex-direction:column;padding-left:0;}
@@ -4341,7 +4582,7 @@
     .cur-code-box{padding-left:0;}
     /* 손가락에는 hover 가 없습니다 — 화살표와 ✎ 를 늘 보이게 두고 키웁니다 */
     .dday-nav{opacity:.85;width:30px;height:38px;font-size:19px;}
-    .dday-edit{opacity:1;width:26px;height:26px;}
+    .dict-nav{font-size:22px;padding:0 4px;}
     
     .rc-item{padding:8px 0;}
     .dict-photo{height:76px;}

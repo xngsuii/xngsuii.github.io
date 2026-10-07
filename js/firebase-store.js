@@ -78,6 +78,9 @@ const SCALAR_KEYS = ['profile', 'siteName', 'homeIntro', 'homeBanner', 'archiveS
                      /* 디데이 배너 — [{id,name,date,note,photo}]. 사진은 data: 라서
                         사진 창고로 빠져나갑니다. */
                      'ddays',
+                     /* 디데이 배너의 겹모습 — 템플릿·색·날짜 표시. 담긴 디데이
+                        전부에 같이 적용되므로 항목이 아니라 위젯 한 벌입니다(주인 결정). */
+                     'ddayCfg',
                      /* 단어사전 위젯 한 쪽 — 단어·발음·품사·뜻·예문·사진. */
                      'dictWord',
                      /* 최신글 위젯 설정 — {source, count}. 아주 작습니다. */

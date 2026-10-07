@@ -13,6 +13,8 @@ function safely(label, fn){
 }
 function applyEditMode(){
   document.body.classList.toggle('logged-in', isLoggedIn);
+  /* 나가면 위젯의 편집 표시도 함께 내려야 합니다 */
+  if(typeof syncWidgetEditing === 'function') safely('위젯 편집', syncWidgetEditing);
   /* 예전의 LOCKED/UNLOCKED 배지는 없앴습니다 — 이 글자가 그 역할을 합니다 */
   const pcBtn = document.getElementById('postcardBtn');
   loginLabel(isLoggedIn ? 'Sign out' : 'Sign in');
@@ -746,7 +748,8 @@ async function loadState(){
   state.navNames = normalizeNavNames(await storageGet('navNames', null));
   state.showStorage = (await storageGet('showStorage', true)) !== false;
   state.ddays = normalizeDdays(await storageGet('ddays', null));
-  state.dictWord = normalizeDictWord(await storageGet('dictWord', null));
+  state.ddayCfg = normalizeDdayCfg(await storageGet('ddayCfg', null));
+  state.dictWord = normalizeDictWords(await storageGet('dictWord', null));
   state.recentCfg = normalizeRecentCfg(await storageGet('recentCfg', null));
   state.ocCats = normalizeOcCats(await storageGet('ocCats', null), await storageGet('ocFolders', null));
   state.ocPosts = (await storageGet('ocPosts', [])).map(migrateOcPost);
@@ -1105,6 +1108,10 @@ function coverPercent(container, src){
 }
 
 function createAdjustable(container, getObj, setObj, opts={}){
+  /* **고칠 수 있는가**는 보통 '로그인했는가' 와 같지만, 위젯 안의 사진은
+     WIDGET 화면을 보고 있을 때만 손뎀 수 있습니다(주인 지시). 그 판단을 부르는
+     쪽이 넘겨 줍니다 — 안 넘기면 지금까지처럼 로그인 여부만 봅니다. */
+  const canEdit = ()=> opts.canEdit ? !!opts.canEdit() : isLoggedIn;
   const layer = container.querySelector('.adj-layer');
   const emptyBtn = container.querySelector('.adj-empty');
   const changeBtn = container.querySelector('.adj-change');
@@ -1132,7 +1139,7 @@ function createAdjustable(container, getObj, setObj, opts={}){
       layer.style.backgroundImage = '';
       layer.style.visibility = 'hidden';
       if(emptyBtn) emptyBtn.style.display='none';
-      if(changeBtn) changeBtn.style.display = isLoggedIn?'flex':'none';
+      if(changeBtn) changeBtn.style.display = canEdit()?'flex':'none';
       whenImgArrives(o.src, container, paint);
       return;
     }
@@ -1166,11 +1173,11 @@ function createAdjustable(container, getObj, setObj, opts={}){
       layer.style.backgroundSize = useCover ? 'cover' : (fill.toFixed(2)+'% auto');
       layer.style.backgroundPosition = (o.x!=null?o.x:50)+'% '+(o.y!=null?o.y:50)+'%';
       if(emptyBtn) emptyBtn.style.display='none';
-      if(changeBtn) changeBtn.style.display = isLoggedIn?'flex':'none';
+      if(changeBtn) changeBtn.style.display = canEdit()?'flex':'none';
     }else{
       layer.style.backgroundImage='';
       layer.style.visibility='';
-      if(emptyBtn) emptyBtn.style.display = isLoggedIn?'flex':'none';
+      if(emptyBtn) emptyBtn.style.display = canEdit()?'flex':'none';
       if(changeBtn) changeBtn.style.display='none';
     }
   }
@@ -1199,7 +1206,7 @@ function createAdjustable(container, getObj, setObj, opts={}){
   }
 
   function openPanel(){
-    if(!isLoggedIn) return;
+    if(!canEdit()) return;
     const o = getObj();
     if(!o || !o.src) return;
     closePanel();
@@ -1226,12 +1233,12 @@ function createAdjustable(container, getObj, setObj, opts={}){
   }
 
   container.addEventListener('dblclick', (e)=>{
-    if(!isLoggedIn) return;
+    if(!canEdit()) return;
     e.stopPropagation(); e.preventDefault();
     if(container.classList.contains('adjust-active')) closePanel(); else openPanel();
   });
   layer.addEventListener('mousedown', (e)=>{
-    if(!isLoggedIn || !container.classList.contains('adjust-active')) return;
+    if(!canEdit() || !container.classList.contains('adjust-active')) return;
     e.preventDefault(); dragging=true;
     const o=getObj(); startX=e.clientX; startY=e.clientY; startPX=o.x!=null?o.x:50; startPY=o.y!=null?o.y:50;
   });
@@ -1445,8 +1452,8 @@ let draggedCatId = null;
    옮긴 뒤에도 그 메뉴에서 마지막에 고른 카테고리가 계속 굵게 보입니다. */
 function markCurrentView(view){
   document.body.dataset.view = view;
-  /* 단어사전은 WIDGET 화면에서만 고칠 수 있습니다 — 화면이 바뀐 지금 맞춥니다 */
-  if(typeof renderDict === 'function') safely('단어사전', renderDict);
+  /* 위젯은 WIDGET 화면에서만 고칠 수 있습니다 — 화면이 바뀐 지금 맞춥니다 */
+  if(typeof syncWidgetEditing === 'function') syncWidgetEditing();
   /* 다른 메뉴로 옮기면 로그인 창은 접어 둡니다 — 돌아왔을 때 로그인 창이 아니라
      엽서가 보여야 합니다. 화면 밖에서 일어나는 일이라 되감기 없이 곧바로 닫습니다. */
   closeLoginSheet(true);
@@ -2327,6 +2334,44 @@ function paintMusicState(){
   if(play){ play.innerText = musicPlaying ? '❚❚' : '▶'; play.title = musicPlaying ? '멈춤' : '재생'; }
   paintMusicTime();
 }
+/* ---- 뮤직 모양 고르기 ----
+   위젯 목록의 ⚙ 가 엽니다. 고르면 그 자리에서 바뀜 모양이 보입니다. */
+const MB_LAYOUTS = [
+  { key:'normal', name:'보통', hint:'레코드와 두 줄 글자' },
+  { key:'mini',   name:'미니', hint:'한 줄로 짧게' }
+];
+function openMusicOpt(){
+  renderMusicOpt();
+  /* 같은 창에 노래 관리가 들어 있습니다 — 열 때마다 적던 칸을 비우고 목록을 다시 그립니다 */
+  if(typeof clearMusicForm === 'function') safely('노래 칸', clearMusicForm);
+  if(typeof renderMusicManageList === 'function') safely('노래 목록', renderMusicManageList);
+  openModal('modalMusicOpt');
+}
+function renderMusicOpt(){
+  const box = document.getElementById('mbLayoutPicks');
+  if(!box) return;
+  const w = wgFind('music');
+  const cur = (w && w.layout === 'mini') ? 'mini' : 'normal';
+  box.innerHTML = '';
+  MB_LAYOUTS.forEach(L=>{
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'fx-pick' + (cur === L.key ? ' active' : '');
+    b.innerHTML = '<span class="fx-pick-name"></span><span class="fx-pick-hint"></span>';
+    b.querySelector('.fx-pick-name').textContent = L.name;
+    b.querySelector('.fx-pick-hint').textContent = L.hint;
+    b.addEventListener('click', ()=>{
+      const m = wgFind('music');
+      if(!m) return;
+      m.layout = L.key;
+      renderWidgets();
+      renderMusicOpt();
+      if(isLoggedIn) saveWidgets();
+    });
+    box.appendChild(b);
+  });
+}
+
 /* 지금 플레이어에 물려 있는 곡. 화면을 다시 그릴 때마다 곡을 다시 읽어
    처음부터 재생되는 일이 없도록 견줍니다. */
 let musicLoadedId = null;
@@ -2367,6 +2412,7 @@ function applyMarquee(box){
 }
 /* 사이드바 폭은 고정이지만 창을 줄이면 바뀔 수 있습니다 */
 window.addEventListener('resize', ()=>{
+  if(typeof mbFitMini === 'function') mbFitMini();
   applyMarquee(document.getElementById('mbTitle'));
   applyMarquee(document.getElementById('mbArtist'));
 });
@@ -2459,6 +2505,33 @@ function toggleMusic(){
 bindOnce(document.getElementById('mbPlay'), toggleMusic);
 bindOnce(document.getElementById('mbPrev'), ()=> stepMusic(-1, musicPlaying));
 bindOnce(document.getElementById('mbNext'), ()=> stepMusic(1, musicPlaying));
+/* 미니에서는 바가 단추 위로 떠오릅니다. 다른 곳을 누르면 접힙니다. */
+(function(){
+  const wrap = document.getElementById('mbVolWrap');
+  const btn = document.getElementById('mbVolBtn');
+  if(!wrap || !btn) return;
+  /* 여는 쪽을 열기 직전에 한 번 재봅니다. 팝업 상자는 overflow:hidden 이라
+     위로 떠우면 상단바에 잘립니다(주인 지적). 위에 자리가 모자라면 아래로 폴니다 —
+     ARCHIVE 돋보기·고르개(.pick-up)가 쓰는 것과 같은 장치입니다. */
+  const VOL_POP_H = 92;
+  btn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    const open = !wrap.classList.contains('open');
+    if(open){
+      const r = btn.getBoundingClientRect();
+      const box = wrap.closest('.wg-pop-body') || wrap.closest('.sidebar');
+      const topLimit = box ? box.getBoundingClientRect().top : 0;
+      wrap.classList.toggle('vol-down', (r.top - topLimit) < VOL_POP_H);
+    }
+    wrap.classList.toggle('open', open);
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  wrap.addEventListener('click', (e)=> e.stopPropagation());
+  document.addEventListener('click', ()=>{
+    wrap.classList.remove('open');
+    btn.setAttribute('aria-expanded', 'false');
+  });
+})();
 document.getElementById('mbVol').addEventListener('input', (e)=>{
   const v = Number(e.target.value);
   try{ localStorage.setItem(MUSIC_VOL_KEY, String(v)); }catch(err){}
@@ -2649,12 +2722,8 @@ document.getElementById('mmCoverBtn')?.addEventListener('click', ()=>{
   if(!isLoggedIn) return;
   pickCoverImage((dataUrl)=>{ pickedCover = dataUrl; paintPickedCover(); });
 });
-bindOnce(document.getElementById('mbManage'), ()=>{
-  if(!isLoggedIn) return;
-  clearMusicForm();
-  renderMusicManageList();
-  openModal('modalMusic');
-});
+/* 위젯에 따로 달려 있던 ＋ 단추는 없어졌습니다 — 노래 관리는 위젯 목록의
+   ⚙ 창 안에 함께 들어 있습니다(openMusicOpt). */
 /* 음원은 사진과 달리 줄이지 않고 그대로 넣습니다 —
    compressImage 는 그림용이라 소리 파일에 쓰면 안 됩니다. */
 document.getElementById('mmFileBtn').addEventListener('click', ()=>{
@@ -10868,9 +10937,16 @@ const WG_ICONS = {
   box:    '<rect x="2.6" y="2.6" width="10.8" height="10.8" rx="1.4" fill="none"/>',
   dot:    '<circle cx="8" cy="8" r="4.6" fill="none"/>',
   moon:   '<path d="M12.6 9.8A5.4 5.4 0 0 1 6.2 3.4a5.4 5.4 0 1 0 6.4 6.4z" fill="none"/>',
-  cloud:  '<path d="M4.6 12a2.8 2.8 0 0 1 .3-5.6 3.6 3.6 0 0 1 6.9.6 2.5 2.5 0 0 1-.3 5z" fill="none"/>'
+  cloud:  '<path d="M4.6 12a2.8 2.8 0 0 1 .3-5.6 3.6 3.6 0 0 1 6.9.6 2.5 2.5 0 0 1-.3 5z" fill="none"/>',
+  /* 비스듬한 연필 — 길게 누운 몸과 촉 줄 하나. 촉 줄이 없으면 그냥 막대로 보입니다. */
+  pen:    '<path d="M3.2 12.8h2.3l7.2-7.2a1.63 1.63 0 0 0-2.3-2.3L3.2 10.5z" fill="none"/>'
+        + '<path d="M9.6 4.5l1.9 1.9" fill="none"/>',
+  /* 마름모 */
+  gem:    '<path d="M8 2.3 13.7 8 8 13.7 2.3 8z" fill="none"/>',
+  /* 체크 */
+  check:  '<path d="M3.1 8.5 6.3 11.7 12.9 4.7" fill="none"/>'
 };
-const WG_ICON_ORDER = ['note','peel','star','heart','box','dot','moon','cloud'];
+const WG_ICON_ORDER = ['note','peel','star','heart','box','dot','moon','cloud','pen','gem','check'];
 function wgIconSvg(name, cls){
   const body = WG_ICONS[name] || WG_ICONS.box;
   return '<svg class="' + (cls || 'wg-ico') + '" viewBox="0 0 16 16" aria-hidden="true">' + body + '</svg>';
@@ -10885,18 +10961,27 @@ const WG_MARK_CLOSE = '<svg class="wg-mk" viewBox="0 0 16 16" aria-hidden="true"
    스티커를 쓰지 않기로 한 것은 위젯보다 앞선 결정이고, CSS 도 .sticker-drawer 와
    .sticker-layer 를 통째로 숨깁니다. 그 결정을 위젯 쪽에서도 그대로 따라야
    '폰 보임' 을 켜 두었는데 안 보이는' 거짓말이 생기지 않습니다. */
+/* opt: 줄 오른쪽 ⚙ 를 누르면 열리는 설정 창. **예전에는 위젯 안에 들어 있었습니다**
+   (배너 위의 ✎, LATEST 옆의 ✎). 그러면 글을 읽는 동안에도 고칠 수 있는 표시가
+   사이드바에 떠 있게 되어, 위젯을 손보는 자리로 모았습니다(주인 판단).
+   단어사전처럼 **내용**을 적는 위젯은 여기에 넣지 않습니다 — 그건 설정이 아니라 글이고,
+   창 안에 칸을 늘어놓으면 된 모양을 보면서 고칠 수 없게 됩니다. */
 const WG_BUILTIN = [
   { id:'sticker', name:'스티커', icon:'peel', noPhone:true,
     el:()=> document.getElementById('stickerDrawer') },
   { id:'music',   name:'뮤직',   icon:'note',
-    el:()=> document.querySelector('.music-block') },
+    el:()=> document.querySelector('.music-block'),
+    opt:()=> openMusicOpt() },
   { id:'dday',    name:'디데이', icon:'heart',
-    el:()=> document.getElementById('ddayWidget') },
+    el:()=> document.getElementById('ddayWidget'),
+    opt:()=> openDdayManage() },
   { id:'recent',  name:'최신글', icon:'box',
-    el:()=> document.getElementById('recentWidget') },
+    el:()=> document.getElementById('recentWidget'),
+    opt:()=> openRecentOpt() },
   { id:'dict',    name:'단어사전', icon:'star',
     el:()=> document.getElementById('dictWidget') }
 ];
+function wgOptOf(id){ const b = wgBuiltin(id); return (b && b.opt) || null; }
 function wgNoPhone(id){ const b = wgBuiltin(id); return !!(b && b.noPhone); }
 const WG_BUILTIN_IDS = WG_BUILTIN.map(w=> w.id);
 function wgBuiltin(id){ return WG_BUILTIN.find(w=> w.id === id) || null; }
@@ -10930,6 +11015,9 @@ function normalizeWidgets(list){
       x: Number.isFinite(+x.x) ? +x.x : null,
       y: Number.isFinite(+x.y) ? +x.y : null,
       min: !!x.min,
+      /* 뮤직의 보통/미니. **여기서 옮겨 주지 않으면 불러올 때마다 지워집니다**
+         — 이 파일의 normalize* 들이 모두 빠뜨리는 지뢰입니다. */
+      layout: x.layout === 'mini' ? 'mini' : 'normal',
       html: builtin ? '' : String(x.html || ''),
       css:  builtin ? '' : String(x.css  || '')
     });
@@ -10938,7 +11026,7 @@ function normalizeWidgets(list){
   WG_BUILTIN.forEach(b=>{
     if(seen.has(b.id)) return;
     out.push({ id:b.id, name:b.name, on:true, where:'sidebar', mobile:true,
-               icon:b.icon, x:null, y:null, min:false, html:'', css:'' });
+               icon:b.icon, x:null, y:null, min:false, layout:'normal', html:'', css:'' });
   });
   /* 순서는 배열 차례로 둡니다 — order 를 따로 저장하면 둘이 어긋납니다 */
   return out;
@@ -10976,6 +11064,32 @@ function wgElement(w){
    사이드바는 내용만큼 늘어나야 합니다). 대신 CSS 선택자 앞에 #wg-<id> 를 붙여
    그 위젯 안쪽만 칠하게 가둡니다. 팝업은 상자 크기가 정해져 있으므로 격리 칸을
    써서 바깥 쪽에 아무 영향도 못 주게 합니다. */
+/* 붙박이가 가진 제 모양. 지금은 뮤직 하나뿐입니다 — 보통/미니.
+   레코드의 viewBox 는 CSS 로 못 바꿉니다. 미니에서는 판만 남기고 톤암을 접어야
+   하는데, 톤암은 그림판 오른쪽 끝에 그려져 있어 감추기만 하면 빈 자리가 남습니다.
+   그래서 판이 들어안 네모만큼으로 viewBox 를 줄입니다(판은 29,32 중심 반지름 28). */
+function wgPaintBuiltin(w, el){
+  if(w.id !== 'music') return;
+  const mini = w.layout === 'mini';
+  el.classList.toggle('mb-mini', mini);
+  const svg = el.querySelector('.mb-lp svg');
+  if(svg) svg.setAttribute('viewBox', mini ? '1 4 56 56' : '0 0 72 64');
+  /* 모양이 바뀜면 제목 칸 폭이 달라져 흐르는 글자를 다시 재야 합니다 */
+  setTimeout(()=>{ mbFitMini(el); applyMarquee(document.getElementById('mbTitle')); }, 40);
+}
+/* 한 줄에 다섯이 다 들어가는지는 **재 봐야 압니다** — 같은 위젯이 사이드바에도
+   팝업에도 놀 수 있고, 팝업은 끌어 키울 수도 있어 폭이 한 가지가 아닙니다.
+   좁으면 NOW PLAYING 을 접습니다 — 제목이 먼저입니다.
+   **재기 전에 반드시 접었던 것을 펴니다.** 그러지 않으면 접은 덕에 자리가 남아
+   다시 펼치고, 펼쳐서 모자라 다시 접는 일을 끝없이 되풀이합니다. */
+function mbFitMini(el){
+  el = el || document.querySelector('.music-block');
+  if(!el || !el.classList.contains('mb-mini')) return;
+  el.classList.remove('mb-mini-tight');
+  const title = el.querySelector('.mb-title');
+  if(!title) return;
+  if(title.clientWidth < 76) el.classList.add('mb-mini-tight');
+}
 function wgPaintCustom(w, el){
   if(wgIsBuiltin(w.id)) return;
   const sig = w.where + '\u0000' + w.html + '\u0000' + w.css;
@@ -11063,6 +11177,7 @@ function renderWidgets(){
     const show = w.on && (phone ? (!popup && w.mobile && !wgNoPhone(w.id)) : true);
     if(!show){ el.remove(); return; }
     wgPaintCustom(w, el);
+    wgPaintBuiltin(w, el);
     el.dataset.place = popup ? 'popup' : 'sidebar';
     if(popup){
       keep.add(w.id);
@@ -11325,24 +11440,32 @@ function renderWidgetManage(){
     const row = document.createElement('div');
     row.className = 'wg-row' + (w.on ? '' : ' wg-off-row');
     row.dataset.wgrow = w.id;
+    /* 단추가 너무 많아 헷갈리길래 정리했습니다(주인 지시).
+       · 아이콘은 **제목 왼쪽의 그 아이콘을 눌러** 바꿉니다 — '아이콘' 단추는 없악니다.
+       · 이름은 제목 오른쪽 펜 단추로 — '이름' 단추도 없악니다.
+       · 켜고끕은 맨 오른쪽 스위치로 — '켜짐/꺼짐' 글자는 눌러야 바뀜다는 것이
+         전혀 드러나지 않았습니다.
+       · ⚙ 는 단추 중 맨 앞. */
     row.innerHTML =
       '<button class="wg-grip" type="button" title="끌어서 순서 바꾸기"><span aria-hidden="true">::</span></button>' +
-      '<span class="wg-row-ico">' + wgIconSvg(w.icon) + '</span>' +
-      '<span class="wg-row-name"></span>' +
+      '<button class="wg-row-ico" type="button" title="아이콘 바꾸기">' + wgIconSvg(w.icon) + '</button>' +
+      '<span class="wg-row-id">' +
+        '<span class="wg-row-name"></span>' +
+        '<button class="wg-c-rename" type="button" title="이름 바꾸기">' + wgIconSvg('pen', 'wg-pen') + '</button>' +
+      '</span>' +
       '<span class="wg-row-ctl">' +
-        '<button class="wg-chip wg-c-on" type="button"></button>' +
+        (wgOptOf(w.id) ? '<button class="wg-chip wg-c-opt" type="button" title="설정">⚙</button>' : '') +
         '<button class="wg-chip wg-c-where" type="button"></button>' +
         '<button class="wg-chip wg-c-mob" type="button"></button>' +
-        '<button class="wg-chip wg-c-icon" type="button">아이콘</button>' +
-        '<button class="wg-chip wg-c-name" type="button">이름</button>' +
         (wgIsBuiltin(w.id) ? '' :
           '<button class="wg-chip wg-c-edit" type="button">고치기</button>' +
           '<button class="wg-chip wg-c-del" type="button">삭제</button>') +
+        '<button class="wg-sw wg-c-on" type="button" role="switch" title="켜고끕">' +
+          '<span class="wg-sw-k" aria-hidden="true"></span></button>' +
       '</span>';
     row.querySelector('.wg-row-name').textContent = w.name;
     const on = row.querySelector('.wg-c-on');
-    on.textContent = w.on ? '켜짐' : '꺼짐';
-    on.classList.toggle('wg-chip-on', w.on);
+    on.setAttribute('aria-checked', w.on ? 'true' : 'false');
     const where = row.querySelector('.wg-c-where');
     where.textContent = w.where === 'popup' ? '팝업' : '사이드바';
     const mob = row.querySelector('.wg-c-mob');
@@ -11363,10 +11486,16 @@ function renderWidgetManage(){
     on.addEventListener('click', ()=> wgSetOn(w.id, !w.on));
     where.addEventListener('click', ()=> wgSetWhere(w.id, w.where === 'popup' ? 'sidebar' : 'popup'));
     mob.addEventListener('click', ()=>{ if(!mob.disabled) wgSetMobile(w.id, !w.mobile); });
-    row.querySelector('.wg-c-icon').addEventListener('click', (e)=>{
+    const optBtn = row.querySelector('.wg-c-opt');
+    if(optBtn) optBtn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const fn = wgOptOf(w.id);
+      if(fn) fn();
+    });
+    row.querySelector('.wg-row-ico').addEventListener('click', (e)=>{
       e.stopPropagation(); wgOpenIconPick(w.id, row);
     });
-    row.querySelector('.wg-c-name').addEventListener('click', (e)=>{
+    row.querySelector('.wg-c-rename').addEventListener('click', (e)=>{
       e.stopPropagation(); wgStartRename(w.id, row);
     });
     const ed = row.querySelector('.wg-c-edit');
@@ -11378,7 +11507,8 @@ function renderWidgetManage(){
        어느 쪽이든 사이드바와 팝업을 한눈에 견줄 수 있게. 손잡이·단추를 누른
        것은 제외합니다(그건 그 단추의 일입니다). */
     row.addEventListener('click', (e)=>{
-      if(e.target.closest('.wg-chip, .wg-grip, .wg-iconpick, .wg-prev, .wg-name-input')) return;
+      if(e.target.closest('.wg-chip, .wg-sw, .wg-grip, .wg-row-ico, .wg-c-rename, '
+                        + '.wg-iconpick, .wg-prev, .wg-name-input')) return;
       wgTogglePreview(w.id, row);
     });
     box.appendChild(row);
@@ -11506,7 +11636,11 @@ function wgStartRename(id, row){
 
 /* 아이콘 고르기 — 줄 아래에 조그맣게 펼칩니다(창을 띄울 만한 일이 아닙니다) */
 function wgOpenIconPick(id, row){
+  /* **다시 누르면 닫힙니다.** 열기만 하고 닫는 길이 바깥뿐이면,
+     마음을 바꾸고 돌아설 사람은 엉뙡곣을 눌러야 합니다(주인 지적). */
+  const already = row.querySelector('.wg-iconpick');
   document.querySelectorAll('.wg-iconpick').forEach(n=> n.remove());
+  if(already) return;
   const pick = document.createElement('div');
   pick.className = 'wg-iconpick';
   WG_ICON_ORDER.forEach(name=>{
@@ -11518,9 +11652,18 @@ function wgOpenIconPick(id, row){
     pick.appendChild(b);
   });
   row.appendChild(pick);
+  /* **자리는 아이콘을 재서 정합니다.** CSS 의 top:100% 는 '줄 전체의 아래'라,
+     미리보기를 펼쳐 줄이 길어지면 고르개가 그 밑까지 내려갑니다(주인 지적).
+     줄이 position:relative 이므로 단추의 offset 이 곧 줄 안에서의 자리입니다 —
+     펼쳐져 있건 아니건 아이콘 바로 아래로 가서 서게 됩니다. */
+  const btn = row.querySelector('.wg-row-ico');
+  if(btn){
+    pick.style.left = btn.offsetLeft + 'px';
+    pick.style.top = (btn.offsetTop + btn.offsetHeight + 5) + 'px';
+  }
 }
 document.addEventListener('click', (e)=>{
-  if(e.target.closest('.wg-iconpick') || e.target.closest('.wg-c-icon')) return;
+  if(e.target.closest('.wg-iconpick') || e.target.closest('.wg-row-ico')) return;
   document.querySelectorAll('.wg-iconpick').forEach(n=> n.remove());
 });
 
@@ -11950,6 +12093,14 @@ function normalizeCursorFx(v){
 }
 function saveCursorFx(){ return storageSet('cursorFx', state.cursorFx); }
 
+/* **폰에서는 이펙트를 아예 돌리지 않습니다.** 만들어 넣은 코드가 도는 거리(.fx-frame)는
+   화면을 덮는 칸이라, 폰에서 스크롤 바로 굴리는 칸이 아예 움직이지 않았습니다
+   (주인 지적). 어차피 이펙트는 마우스 자리를 따라가는 장식이니, 만지는 기기에서는
+   생기지도 않게 말립니다 — 네모도, 거리도. 줄었다 다시 늘리면(onChange) 다시 컵니다. */
+function fxAllowed(){
+  return !isMobileWidth() && window.matchMedia('(hover:hover)').matches;
+}
+
 let fxLayer = null, fxCtx = null, fxBits = [], fxTimer = 0, fxFrame = null;
 function fxCanvas(){
   if(fxLayer) return fxLayer;
@@ -12010,6 +12161,7 @@ function fxTick(){
   fxTimer = setTimeout(fxTick, 24);
 }
 function fxAdd(kind, x, y){
+  if(!fxAllowed()) return;
   fxCanvas().style.display = 'block';
   const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#ef3921';
   fxBits.push({ kind, x, y, t0:Date.now(), life: kind === 'ripple' ? 520 : 620, c:accent });
@@ -12061,6 +12213,7 @@ function fxCodeStart(code){
 }
 function fxSend(t, x, y){
   if(!fxFrameEl || !fxFrameEl.contentWindow) return;
+  if(!fxAllowed()) return;
   try{ fxFrameEl.contentWindow.postMessage({ __fx:1, t, x, y }, '*'); }catch(_){}
 }
 document.addEventListener('pointermove', (e)=> fxSend('move', e.clientX, e.clientY), { passive:true });
@@ -12069,9 +12222,10 @@ document.addEventListener('pointerup',   (e)=> fxSend('up',   e.clientX, e.clien
 
 function applyCursorFx(){
   const fx = state.cursorFx || { preset:'none', code:'' };
-  if(fx.preset === 'none') fxStop();
+  const on = fxAllowed();
+  if(fx.preset === 'none' || !on) fxStop();
   else fxCanvas().style.display = 'block';
-  fxCodeStart(fx.code);
+  fxCodeStart(on ? fx.code : '');   /* 빈 코드는 거리를 거듬니다 */
 }
 function renderFxPane(){
   const box = document.getElementById('fxPicks');
@@ -12419,6 +12573,91 @@ function normalizeDdays(list){
   }));
 }
 function saveDdays(){ return storageSet('ddays', state.ddays); }
+
+/* ---- 배너 겹모습 ----
+   **담긴 디데이 전부에 같이 걸립니다**(주인 결정) — 옆으로 넘겨도 생김새가
+   바뀜지 않아야 배너가 한 덩어리로 보입니다. 그래서 항목이 아니라 따로 둡니다.
+     template  base 가운데 / t1 문장·날짜 왼위 + 디데이 오른아래 / t2 단색 바탕 + 동그라미 사진
+     theme     dark 어두운 막·흰 글자 / light 흰 막·검은 글자 / free 직접 고릅니다
+     showDate  시작 날짜(2026.05.21) 보이기. 템플릿1 은 항상 켭니다. */
+const DD_TEMPLATES = [
+  { key:'base', name:'기본' },
+  { key:'t1',   name:'템플릿1' },
+  { key:'t2',   name:'템플릿2' }
+];
+const DD_THEMES = [
+  { key:'dark',  name:'어두움' },
+  { key:'light', name:'밝음' },
+  { key:'free',  name:'자유' }
+];
+function normalizeDdayCfg(v){
+  const t = (v && String(v.template)) || 'base';
+  const th = (v && String(v.theme)) || 'dark';
+  const col = (x, dflt)=> /^#[0-9a-fA-F]{6}$/.test(String(x || '')) ? String(x).toLowerCase() : dflt;
+  return {
+    template: DD_TEMPLATES.some(x=> x.key === t) ? t : 'base',
+    theme:    DD_THEMES.some(x=> x.key === th) ? th : 'dark',
+    scrim:    col(v && v.scrim, '#000000'),
+    text:     col(v && v.text,  '#ffffff'),
+    bg:       col(v && v.bg,    '#f1f0ee'),
+    showDate: !!(v && v.showDate)
+  };
+}
+function saveDdayCfg(){ return storageSet('ddayCfg', state.ddayCfg); }
+function ddayCfg(){
+  if(!state.ddayCfg) state.ddayCfg = normalizeDdayCfg(null);
+  return state.ddayCfg;
+}
+/* #rrggbb 를 rgba() 로. 색 고르개는 투명도를 못 주므로 짙은 정도는 여기서 정합니다 —
+   어두움·밝음·자유가 같은 비율로 비칠어야 골라 가면서 눈에 뒤후려지지 않습니다. */
+function ddHexRgba(hex, a){
+  const n = parseInt(String(hex).slice(1), 16);
+  return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+}
+const DD_SCRIM_A = .34;
+/* 밝기 — 0(검정)~1(흰색). 사람 눈이 느끼는 밝기라 녹색에 가장 큰 못을 줍니다. */
+function ddLum(hex){
+  const n = parseInt(String(hex).slice(1), 16);
+  return (0.299*((n>>16)&255) + 0.587*((n>>8)&255) + 0.114*(n&255)) / 255;
+}
+function ddLook(){
+  const c = ddayCfg();
+  /* **템플릿2 는 막이 없습니다** — 글자가 단색 바탕 위에 바로 않습니다. 그래서
+     어두움/밝음 을 그대로 따르면 밝은 바탕에 흰 글자가 올라와 안 보입니다(실제로 그러였습니다).
+     골라 둔 바탕의 밝기를 재서 검은 글자와 흰 글자 중 읽힐 쪽을 골라 줍니다.
+     '자유'는 주인이 직접 고른 색이므로 손대지 않습니다. */
+  if(c.template === 't2' && c.theme !== 'free'){
+    return { scrim:'rgba(0,0,0,0)', text: ddLum(c.bg) > .62 ? '#1c1c1c' : '#ffffff',
+             shadow:'none' };
+  }
+  if(c.template === 't2') return { scrim:'rgba(0,0,0,0)', text:c.text, shadow:'none' };
+  if(c.theme === 'light') return { scrim:'rgba(255,255,255,.58)', text:'#1c1c1c',
+                                   shadow:'0 1px 2px rgba(255,255,255,.55)' };
+  if(c.theme === 'free')  return { scrim:ddHexRgba(c.scrim, DD_SCRIM_A), text:c.text,
+                                   shadow:'0 1px 3px rgba(0,0,0,.35)' };
+  return { scrim:'rgba(0,0,0,.34)', text:'#ffffff', shadow:'0 1px 3px rgba(0,0,0,.45)' };
+}
+/* 날짜는 2026-05-21 로 담겨 있고 2026.05.21 로 보여 줍니다 */
+function ddDateText(v){
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || ''));
+  return m ? (m[1] + '.' + m[2] + '.' + m[3]) : '';
+}
+function applyDdayCfg(){
+  const wrap = document.getElementById('ddayWidget');
+  if(!wrap) return;
+  const c = ddayCfg();
+  const look = ddLook();
+  DD_TEMPLATES.forEach(t=> wrap.classList.toggle('dd-t-' + (t.key === 'base' ? 'base' : t.key.slice(1)),
+                                                 c.template === t.key));
+  /* 템플릿1 은 날짜가 줄의 일부라 항상 켭니다(주인 지시) */
+  wrap.classList.toggle('dd-no-date', !(c.showDate || c.template === 't1'));
+  const banner = document.getElementById('ddayBanner');
+  if(!banner) return;
+  banner.style.setProperty('--dd-scrim', look.scrim);
+  banner.style.setProperty('--dd-text', look.text);
+  banner.style.setProperty('--dd-shadow', look.shadow);
+  banner.style.setProperty('--dd-bg', c.bg);
+}
 let ddayIdx = 0;      // 지금 보고 있는 것 — 기기마다 달라도 되는 값이라 담지 않습니다
 
 /* 시작한 날을 1일로 셉니다(기념일 세는 방식). 앞날이면 D-n 입니다. */
@@ -12447,7 +12686,8 @@ function ensureDdayAdj(){
       if(!it) return;
       it.photo = v;
       if(isLoggedIn) saveDdays();
-    });
+    },
+    { canEdit: wgEditable });
   return ddayAdj;
 }
 function renderDday(){
@@ -12459,9 +12699,12 @@ function renderDday(){
   const it = list[ddayIdx] || null;
   const cnt = document.getElementById('ddayCount');
   const note = document.getElementById('ddayNote');
+  const dateEl = document.getElementById('ddayDate');
+  applyDdayCfg();
+  if(dateEl) dateEl.innerText = it ? ddDateText(it.date) : '';
   if(!it){
     cnt.innerText = isLoggedIn ? '디데이 없음' : '';
-    note.innerText = isLoggedIn ? '✎ 로 추가하세요' : '';
+    note.innerText = isLoggedIn ? '위젯 목록의 ⚙ 에서 추가하세요' : '';
   }else{
     cnt.innerText = ddayText(it.date) || it.name || '';
     note.innerText = it.note || '';
@@ -12579,16 +12822,92 @@ async function ddayPickPhoto(it){
   renderDdayManage(); renderDday();
   if(isLoggedIn) saveDdays();
 }
+/* 위젯 목록의 ⚙ 가 부릅니다 — 예전에는 배너 위의 ✎ 였습니다 */
+function openDdayManage(){
+  renderDdayCfgPane();
+  renderDdayManage();
+  openModal('modalDday');
+}
+/* 겹모습 칸 — 템플릿·색·날짜. 쓸데가 없는 줄은 감춥니다
+   (자유 색은 '자유'일 때만, 배경색은 템플릿2 일 때만 — 단색 바탕은 그때뿐입니다). */
+function renderDdayCfgPane(){
+  const tplBox = document.getElementById('ddTplPicks');
+  if(!tplBox) return;
+  const c = ddayCfg();
+  const commit = ()=>{
+    renderDday(); renderDdayCfgPane();
+    if(isLoggedIn) saveDdayCfg();
+  };
+  const picks = (box, list, cur, set)=>{
+    box.innerHTML = '';
+    list.forEach(o=>{
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'opt-pick' + (cur === o.key ? ' active' : '');
+      b.textContent = o.name;
+      b.addEventListener('click', ()=>{ set(o.key); commit(); });
+      box.appendChild(b);
+    });
+  };
+  /* 템플릿은 **모양을 그려 보입니다** — 이름만 써 두면 눌러 보기 전에는 무엇이 어디 놓이는지
+     알 길이 없습니다(주인 지시). 진짜 위젯을 복제하지 않고 선과 네모로만 짓는 것은,
+     사진과 글자가 들어가면 정작 비교해야 할 '자리'가 안 보이기 때문입니다. */
+  tplBox.className = 'dd-tpls';
+  tplBox.innerHTML = '';
+  DD_TEMPLATES.forEach(t=>{
+    const key = (t.key === 'base') ? 'base' : t.key.slice(1);
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'dd-tpl' + (c.template === t.key ? ' active' : '');
+    b.innerHTML =
+      '<span class="dd-tpl-box dd-tpl-' + key + '">' +
+        '<span class="dd-tpl-d">D+00</span>' +
+        '<span class="dd-tpl-n"></span>' +
+        '<span class="dd-tpl-t"></span>' +
+        (t.key === 't2' ? '<span class="dd-tpl-c"></span>' : '') +
+      '</span><span class="dd-tpl-name"></span>';
+    b.querySelector('.dd-tpl-name').textContent = t.name;
+    b.addEventListener('click', ()=>{ c.template = t.key; commit(); });
+    tplBox.appendChild(b);
+  });
+  picks(document.getElementById('ddThemePicks'), DD_THEMES, c.theme, (k)=>{ c.theme = k; });
+
+  document.getElementById('ddFreeRow').classList.toggle('dd-hide', c.theme !== 'free');
+  document.getElementById('ddBgRow').classList.toggle('dd-hide', c.template !== 't2');
+
+  const bind = (id, get, set)=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.value = get();
+    if(el._ddBound) return;
+    el._ddBound = true;
+    el.addEventListener('input', ()=>{ set(el.value); renderDday(); });
+    el.addEventListener('change', ()=>{ set(el.value); commit(); });
+  };
+  bind('ddScrimCol', ()=> c.scrim, (v)=>{ ddayCfg().scrim = v; });
+  bind('ddTextCol',  ()=> c.text,  (v)=>{ ddayCfg().text  = v; });
+  bind('ddBgCol',    ()=> c.bg,    (v)=>{ ddayCfg().bg    = v; });
+
+  const chip = document.getElementById('ddDateChip');
+  const forced = (c.template === 't1');
+  chip.textContent = (c.showDate || forced) ? '보임' : '숨김';
+  chip.classList.toggle('wg-chip-on', c.showDate || forced);
+  chip.disabled = forced;
+  chip.title = forced ? '템플릿1 은 날짜가 줄의 일부입니다' : '';
+  if(!chip._ddBound){
+    chip._ddBound = true;
+    chip.addEventListener('click', ()=>{
+      if(chip.disabled) return;
+      ddayCfg().showDate = !ddayCfg().showDate;
+      commit();
+    });
+  }
+}
 function initDday(){
   const prev = document.getElementById('ddayPrev');
   if(!prev) return;
   prev.addEventListener('click', (e)=>{ e.stopPropagation(); ddayStep(-1); });
   document.getElementById('ddayNext').addEventListener('click', (e)=>{ e.stopPropagation(); ddayStep(1); });
-  document.getElementById('ddayEdit').addEventListener('click', (e)=>{
-    e.stopPropagation();
-    renderDdayManage();
-    openModal('modalDday');
-  });
   document.getElementById('ddAdd').addEventListener('click', ()=>{
     const d = new Date();
     const iso = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
@@ -12610,10 +12929,23 @@ const RECENT_SOURCES = [
   { key:'archive', name:'ARCHIVE' },
   { key:'log',     name:'LOG' }
 ];
+/* 제목 앞에 붙일 수 있는 표시. 첫 것이 기본입니다. */
+const RECENT_BULLETS = ['▪', '✦', '♥', '❥', '•', '◦', '▸', '◈', '⋄'];
+const RECENT_ROWS = [
+  { key:'two', name:'두 줄로' },
+  { key:'one', name:'한 줄로' }
+];
 function normalizeRecentCfg(v){
   const key = RECENT_SOURCES.some(s=> s.key === (v && v.source)) ? v.source : 'all';
   const n = Math.max(1, Math.min(20, parseInt((v && v.count) || 5, 10) || 5));
-  return { source:key, count:n };
+  /* **여기서 옮겨 주지 않으면 불러올 때마다 지워집니다** — 이 파일의 normalize* 공통 지뢰. */
+  return {
+    source: key,
+    count: n,
+    rows: (v && v.rows === 'one') ? 'one' : 'two',
+    bulletOn: !!(v && v.bulletOn),
+    bullet: RECENT_BULLETS.includes(v && v.bullet) ? v.bullet : RECENT_BULLETS[0]
+  };
 }
 function saveRecentCfg(){ return storageSet('recentCfg', state.recentCfg); }
 
@@ -12698,21 +13030,79 @@ function renderRecent(){
     box.appendChild(n);
     return;
   }
+  const cfg = state.recentCfg || normalizeRecentCfg(null);
   items.forEach(it=>{
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'rc-item';
-    b.innerHTML = '<span class="rc-item-title"></span><span class="rc-item-sub"></span>';
+    b.className = 'rc-item' + (cfg.rows === 'one' ? ' rc-one' : '');
+    b.innerHTML = '<span class="rc-line">'
+      + (cfg.bulletOn ? '<span class="rc-bul"></span>' : '')
+      + '<span class="rc-item-title"></span></span>'
+      + '<span class="rc-item-sub"></span>';
+    if(cfg.bulletOn) b.querySelector('.rc-bul').textContent = cfg.bullet;
     b.querySelector('.rc-item-title').textContent = it.title;
     b.querySelector('.rc-item-sub').textContent = it.sub;
     b.addEventListener('click', ()=> recentGo(it));
     box.appendChild(b);
   });
 }
-function initRecent(){
-  const opt = document.getElementById('rcOpt');
-  if(!opt) return;
+/* 위젯 목록의 ⚙ 가 부릅니다 */
+function openRecentOpt(){
   const sel = document.getElementById('rcSource');
+  if(!sel) return;
+  const cfg = state.recentCfg || normalizeRecentCfg(null);
+  sel.value = cfg.source;
+  if(sel._pdd) sel._pdd.sync();
+  document.getElementById('rcCount').value = cfg.count;
+  renderRecentOpt();
+  openModal('modalRecent');
+}
+/* 보기(한 줄/두 줄)와 앞머리 — 고르면 그 자리에서 위젯이 바뀝니다 */
+function renderRecentOpt(){
+  const rowsBox = document.getElementById('rcRowsPicks');
+  if(!rowsBox) return;
+  const cfg = state.recentCfg || normalizeRecentCfg(null);
+  state.recentCfg = cfg;
+  const commit = ()=>{
+    renderRecent(); renderRecentOpt();
+    if(isLoggedIn) saveRecentCfg();
+  };
+  rowsBox.innerHTML = '';
+  RECENT_ROWS.forEach(o=>{
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'opt-pick' + (cfg.rows === o.key ? ' active' : '');
+    b.textContent = o.name;
+    b.addEventListener('click', ()=>{ cfg.rows = o.key; commit(); });
+    rowsBox.appendChild(b);
+  });
+
+  const chip = document.getElementById('rcBulChip');
+  chip.textContent = cfg.bulletOn ? '켬' : '끔';
+  chip.classList.toggle('wg-chip-on', cfg.bulletOn);
+  if(!chip._rcBound){
+    chip._rcBound = true;
+    chip.addEventListener('click', ()=>{
+      state.recentCfg.bulletOn = !state.recentCfg.bulletOn;
+      commit();
+    });
+  }
+  const bulBox = document.getElementById('rcBulPicks');
+  bulBox.innerHTML = '';
+  RECENT_BULLETS.forEach(mk=>{
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'opt-pick' + (cfg.bullet === mk ? ' active' : '');
+    b.textContent = mk;
+    b.disabled = !cfg.bulletOn;
+    b.addEventListener('click', ()=>{ state.recentCfg.bullet = mk; commit(); });
+    bulBox.appendChild(b);
+  });
+  bulBox.style.opacity = cfg.bulletOn ? '' : '.4';
+}
+function initRecent(){
+  const sel = document.getElementById('rcSource');
+  if(!sel) return;
   RECENT_SOURCES.forEach(s=>{
     const o = document.createElement('option');
     o.value = s.key; o.textContent = s.name;
@@ -12722,18 +13112,18 @@ function initRecent(){
      없으면 '어디서' 라벨만 있고 고르개가 통째로 안 보입니다 — 만들다 만 것처럼
      보였던 까닭입니다(주인 지적). 사이트의 다른 고르개와 같은 장치입니다. */
   bindPickDD(sel);
-  opt.addEventListener('click', ()=>{
-    const cfg = state.recentCfg || normalizeRecentCfg(null);
-    sel.value = cfg.source;
-    document.getElementById('rcCount').value = cfg.count;
-    openModal('modalRecent');
-  });
+  /* **지금 담긴 것 위에 고친 둘만 엊습니다.** 예전에는 source 와 count 만 담아
+     새로 만들었는데, 그러면 normalizeRecentCfg 가 나머지를 기본값으로 채워
+     보기(한 줄/두 줄)와 앞머리가 통째로 되돌려졌습니다 — 글 수만 바꿨는데
+     줄이 두 줄로 돌아가고 앞머리가 꺼졌던 까닭입니다(주인 지적).
+     **normalize* 를 부를 때는 항상 전체를 넘길 것** — 이 파일의 공통 지뢰입니다. */
   const commit = ()=>{
-    state.recentCfg = normalizeRecentCfg({
+    state.recentCfg = normalizeRecentCfg(Object.assign({}, state.recentCfg, {
       source: sel.value,
       count: document.getElementById('rcCount').value
-    });
+    }));
     renderRecent();
+    if(typeof renderRecentOpt === 'function') renderRecentOpt();
     if(isLoggedIn) saveRecentCfg();
   };
   sel.addEventListener('change', commit);
@@ -12759,12 +13149,63 @@ function normalizeDictWord(v){
     photo: normalizeImg(v && v.photo)
   };
 }
+/* **여러 장입니다.** 예전에는 한 장만 담겨 났습니다 — 그때 써 둔 것은 객체 하나라,
+   올려둔 것이 객체면 한 장으로 감싸서 들입니다. 주인의 사전은 그렇게 그대로
+   1장이 됩니다(올려둔 것은 손대지 않습니다). */
+function normalizeDictWords(v){
+  const arr = Array.isArray(v) ? v : ((v && typeof v === 'object') ? [v] : []);
+  const out = arr.map(normalizeDictWord);
+  return out.length ? out : [normalizeDictWord(null)];
+}
 function saveDictWord(){ return storageSet('dictWord', state.dictWord); }
+let dictIdx = 0;
+function dictPages(){
+  if(!Array.isArray(state.dictWord)) state.dictWord = normalizeDictWords(state.dictWord);
+  return state.dictWord;
+}
+function dictCur(){
+  const pages = dictPages();
+  if(dictIdx >= pages.length) dictIdx = pages.length - 1;
+  if(dictIdx < 0) dictIdx = 0;
+  return pages[dictIdx];
+}
+/* 아무것도 적히지 않은 장 — 사진까지 없어야 빈 장입니다 */
+function dictPageEmpty(d){
+  if(!d) return true;
+  if(d.word || d.hanja || d.pron || d.ex) return false;
+  if((d.pos || []).length) return false;
+  if(d.photo && d.photo.src) return false;
+  return !(d.means || []).some(m=> String(m || '').trim());
+}
+/* 빈 장을 걸러냅니다 — **지금 보고 있는 장만 빼고**. 마지막 장에서 › 를
+   눌렀을 때 막 만든 빈 장이 그 자리에서 지워지면 알 수가 없으니까요.
+   거기에 아무것도 적지 않고 떠나면 그때 사라집니다(주인이 말한 '내용 전부
+   삭제하면 그 장은 없어지게'와 같은 규칙입니다). 줄었으면 true. */
+function dictPrune(){
+  const pages = dictPages();
+  const cur = pages[dictIdx];
+  const kept = pages.filter((d, i)=> i === dictIdx || !dictPageEmpty(d));
+  if(!kept.length) kept.push(normalizeDictWord(null));
+  const changed = kept.length !== pages.length;
+  state.dictWord = kept;
+  dictIdx = Math.max(0, kept.indexOf(cur));
+  return changed;
+}
 
-/* **단어사전은 WIDGET 화면을 보고 있을 때만 고칠 수 있습니다.** 다른 화면에서는
-   로그인해 있어도 읽는 모습 그대로입니다 — 글을 읽다가 사전 글자에 커서가 들어가
-   엉뚱하게 고쳐지는 일이 없도록(주인 지시). 위젯을 손보는 자리에서만 손봅니다. */
-function dictEditable(){ return isLoggedIn && document.body.dataset.view === 'widget'; }
+/* **위젯은 WIDGET 화면을 보고 있을 때만 고칠 수 있습니다.** 다른 화면에서는 로그인해
+   있어도 읽는 모습 그대로입니다. 처음엔 단어사전에만 둔 규칙이었는데 — 글을 읽다가
+   사전 글자에 커서가 들어가 엉뚱하게 고쳐지는 일을 막으려고 — 글을 쓰려면 보통 편집
+   모드로 사이트를 보게 되므로 같은 일이 모든 위젯에서 일어납니다. 그래서 위젯 전체로
+   넓혔습니다(주인 판단). 눈에 보이는 표시는 CSS 가 body.wg-editing 을 보고 감추고,
+   손짓으로 일어나는 일(사진 두 번 누르기 등)은 이 함수를 보고 갈라줍니다. */
+function wgEditable(){ return isLoggedIn && document.body.dataset.view === 'widget'; }
+function dictEditable(){ return wgEditable(); }
+/* 화면이나 로그인 상태가 바뀜 때 한 번에 맞춥니다 */
+function syncWidgetEditing(){
+  document.body.classList.toggle('wg-editing', wgEditable());
+  if(typeof renderDict === 'function') safely('단어사전', renderDict);
+  if(typeof renderDday === 'function') safely('디데이', renderDday);
+}
 
 /* 고쳐 쓸 수 있는 글자 자리를 하나 만듭니다. 편집 모드에서만 칸이 되고,
    비어 있을 때는 안내 글이 보입니다(CSS 의 :empty:before). */
@@ -12783,18 +13224,75 @@ function dictField(el, value, placeholder, onSave, multi){
     if(e.key === 'Enter' && !multi){ e.preventDefault(); el.blur(); }
     if(e.key === 'Escape'){ e.preventDefault(); renderDict(); }
   });
-  /* 붙여넣기는 글자만 받습니다 — 서식이 따라오면 사전 모양이 깨집니다 */
-  el.addEventListener('paste', (e)=>{
-    e.preventDefault();
-    const t = (e.clipboardData || window.clipboardData).getData('text');
-    document.execCommand('insertText', false, String(t || '').replace(/\r\n/g, '\n'));
-  });
+  /* 붙여넣기는 여기서 따로 받지 않습니다. document 에 모든 고칠 수 있는 자리를
+     돌바는 처리가 이미 있어(normalizePastedText) 서식은 그 잊에서 벗긜니다.
+     여기에 똑같은 처리를 한 번 더 달았더니 글자가 **두 번 웃혔습니다**
+     (promise 를 붙이면 promisepromise) — 이 처리가 글자를 가진 뒤 거품을
+     막지 않고 올려보내, document 처리가 같은 글자를 다시 가진 것입니다.
+     같은 일을 하는 처리는 한 지분에 하나여야 합니다. */
 }
+/* 넘기기 — 디데이 배너와 같은 장치입니다(나가는 쪽은 복제본, 이음은 setTimeout).
+   다른 점 하나: 디데이는 돌려가며 도는 띄우개지만, 사전은 **끝이 있습니다** —
+   마지막 장 다음은 빈 장을 만드는 자리라 돌려세우면 알 수가 없습니다. */
+const DICT_SWIPE_MS = 330;
+let dictSwiping = false;
+function dictStep(dir){
+  if(dictSwiping) return;
+  const pages = dictPages();
+  let target = dictIdx + dir;
+  if(target < 0) return;
+  if(target >= pages.length){
+    if(!dictEditable()) return;            // 보기 모습에서는 갈 장이 없으면 그만입니다
+    pages.push(normalizeDictWord(null));   // 목록 안에서는 빈 장을 한 장 열어 줍니다
+  }
+  const stage = document.getElementById('dictStage');
+  const slide = document.getElementById('dictSlide');
+  const move = ()=>{
+    dictIdx = target;
+    const changed = dictPrune();
+    renderDict();
+    if(changed && isLoggedIn) saveDictWord();
+  };
+  if(!stage || !slide){ move(); return; }
+
+  /* 지금 모습을 복제해 두고, 그 복제본을 밖으로 보냅니다.
+     진짜 칸에는 사진 조정 장치와 글자 칸이 달려 있어 복제하면 엉뚱한 쪽에 남습니다. */
+  const ghost = slide.cloneNode(true);
+  ghost.removeAttribute('id');
+  ghost.classList.add('dict-ghost');
+  ghost.querySelectorAll('[id]').forEach(el=> el.removeAttribute('id'));
+  /* 화살표는 단어 줄 안에 있어 복제본에도 따라갑니다 — 떼어내지 않으면
+     넘기는 동안 화살표가 두 벌로 보입니다. */
+  ghost.querySelectorAll('.dict-nav-pair').forEach(el=> el.remove());
+  ghost.style.height = slide.offsetHeight + 'px';
+  stage.insertBefore(ghost, slide.nextSibling);
+
+  dictSwiping = true;
+  move();
+
+  const from = dir > 0 ? 100 : -100;
+  slide.style.transition = 'none';
+  slide.style.transform = 'translateX(' + from + '%)';
+  void slide.offsetWidth;
+  const anim = 'transform ' + DICT_SWIPE_MS + 'ms ' + DDAY_SWIPE_EASE;
+  slide.style.transition = anim;
+  ghost.style.transition = anim;
+  slide.style.transform = 'translateX(0)';
+  ghost.style.transform = 'translateX(' + (-from) + '%)';
+
+  setTimeout(()=>{
+    ghost.remove();
+    slide.style.transition = '';
+    slide.style.transform = '';
+    dictSwiping = false;
+  }, DICT_SWIPE_MS + 30);
+}
+
 function renderDict(){
   const wrap = document.getElementById('dictWidget');
   if(!wrap) return;
-  const d = state.dictWord || normalizeDictWord(null);
-  state.dictWord = d;
+  const pages = dictPages();
+  const d = dictCur();
   /* 편집 단추들(＋뜻·사진)은 CSS 가 이 표시를 보고 켭니다 */
   wrap.classList.toggle('dict-can-edit', dictEditable());
   const commit = ()=>{ if(isLoggedIn) saveDictWord(); };
@@ -12827,7 +13325,7 @@ function renderDict(){
       /* **지금 담긴 것을 보고 판단합니다.** 그릴 때의 on 을 가둬 쓰면, 누른 뒤
          다시 그려진 알약과 손에 든 알약이 서로 다른 답을 들고 있게 됩니다. */
       b.addEventListener('click', ()=>{
-        const cur = state.dictWord;
+        const cur = dictCur();
         cur.pos = cur.pos.includes(name)
           ? cur.pos.filter(x=> x !== name)
           : cur.pos.concat(name);
@@ -12870,6 +13368,11 @@ function renderDict(){
   /* 보기 모드에서 예문이 비면 인용 틀만 남으므로 통째로 숨깁니다 */
   wrap.querySelector('.dict-ex-wrap').style.display =
     (!d.ex && !dictEditable()) ? 'none' : '';
+
+  /* 화살표 — 앞으로는 첫 장에서 갈 곳이 없습니다. 뒤로는 보기 모습에서만
+     막히고, 위젯 목록 안에서는 '새 장 만들기'라 마지막 장에서도 남아 있습니다. */
+  wrap.classList.toggle('dict-no-prev', dictIdx <= 0);
+  wrap.classList.toggle('dict-no-next', !dictEditable() && dictIdx >= pages.length - 1);
 }
 let dictAdj = null;
 function ensureDictAdj(){
@@ -12877,33 +13380,35 @@ function ensureDictAdj(){
   const box = document.getElementById('dictPhoto');
   if(!box) return null;
   dictAdj = createAdjustable(box,
-    ()=> (state.dictWord && state.dictWord.photo) || blankImg(),
+    ()=> (dictCur().photo || blankImg()),
     (v)=>{
-      if(!state.dictWord) state.dictWord = normalizeDictWord(null);
-      state.dictWord.photo = v;
+      dictCur().photo = v;
       document.getElementById('dictPhoto')
         .classList.toggle('dict-photo-empty', !v || !v.src);
       if(isLoggedIn) saveDictWord();
-    });
+    },
+    { canEdit: wgEditable });
   return dictAdj;
 }
 function initDict(){
   const add = document.getElementById('dictAddMean');
   if(!add) return;
   add.addEventListener('click', ()=>{
-    const d = state.dictWord || normalizeDictWord(null);
-    d.means.push('');
-    state.dictWord = d;
+    dictCur().means.push('');
     renderDict();
     if(isLoggedIn) saveDictWord();
+  });
+  document.getElementById('dictPrev').addEventListener('click', (e)=>{
+    e.stopPropagation(); dictStep(-1);
+  });
+  document.getElementById('dictNext').addEventListener('click', (e)=>{
+    e.stopPropagation(); dictStep(1);
   });
   /* 넣기·바꾸기는 조정 칸이 가진 ＋사진 / 사진 단추가 맡습니다(createAdjustable).
      여기서는 지우기만 답니다. */
   document.getElementById('dictPhotoDel').addEventListener('click', (e)=>{
     e.stopPropagation();
-    const d = state.dictWord || normalizeDictWord(null);
-    d.photo = blankImg();
-    state.dictWord = d;
+    dictCur().photo = blankImg();
     renderDict();
     if(isLoggedIn) saveDictWord();
   });
@@ -13368,6 +13873,8 @@ function initResponsiveWatch(){
        클립이 붙는 자리도 창 모양을 따라 달라집니다 */
     renderStickers();
     positionStickerDrawer();
+    /* 커서 이펙트는 폰에서 도는 일이 없으니, 경계를 넘을 때 켜고 끔니다 */
+    applyCursorFx();
   };
   window.matchMedia(MOBILE_MQ).addEventListener('change', onChange);
   window.matchMedia(SHORT_MQ).addEventListener('change', onChange);
@@ -14114,6 +14621,11 @@ function initPhotoIndicator(){
 function revealAfterLoad(){
   document.querySelector('#home-intro-page .home-grid')?.classList.remove('hg-hold');
   document.querySelector('.music-block')?.classList.remove('mb-hold');
+  /* 위젯은 칸째 기다립니다 — 뮤직 하나만 가려도 그 옆에서 빈 배너와 빈 목록이
+     같이 떠 있었습니다. loadState 가 renderWidgets·renderBuiltinWidgets 를 마친 뒤에
+     이 함수가 불리므로, 여는 시점은 이미 다 그려진 뒤입니다. */
+  document.getElementById('sideWidgets')?.classList.remove('wg-hold');
+  document.getElementById('widgetPops')?.classList.remove('wg-hold');
 }
 /* 어떤 이유로든 boot 이 끝나지 않는 경우를 위한 안전줄 */
 setTimeout(revealAfterLoad, 8000);

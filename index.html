@@ -69,7 +69,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
-<link rel="stylesheet" href="css/style.css?v=239" />
+<link rel="stylesheet" href="css/style.css?v=246" />
 </head>
 <body>
 <div class="app-window">
@@ -137,7 +137,11 @@
          요소를 팝업 상자 안으로 옮기고, 되돌리면 다시 여기로 데려옵니다.
          사이드바용·팝업용을 따로 만들지 않는 까닭: 두 벌이면 한쪽만 고치다
          어긋납니다. 생김새 차이는 data-place 로 CSS 가 가릅니다. -->
-    <div class="side-widgets" id="sideWidgets">
+    <!-- wg-hold: 데이터가 오기 전까지 칸을 통째로 비워 둡니다. 예전에는 뮤직 한 칸만
+         기다려서(mb-hold), 나머지 위젯은 빈 배너·빈 목록·빈 사전이 한 순간 진짜처럼
+         떠 있었습니다(주인 지적). main.js 의 revealAfterLoad 가 뗄니다 —
+         visibility 라 자리는 그대로 차지해, 열릴 때 사이드바가 튀지 않습니다. -->
+    <div class="side-widgets wg-hold" id="sideWidgets">
     <div class="sticker-drawer" id="stickerDrawer" data-widget="sticker" data-place="sidebar">
       <!-- 열렸을 때 손잡이 위로 떠오르는 판 -->
       <div class="sticker-drawer-box">
@@ -187,12 +191,28 @@
             </div>
           </div>
           <div class="mb-controls">
-            <button type="button" class="mb-btn" id="mbPrev" title="이전 곡">≪</button>
+            <!-- 앞·뒤 곡은 .mb-skip — 미니에서는 이 둘을 접습니다(주인 지시).
+                 노래 관리(＋)는 여기 없습니다 — 위젯 목록의 ⚙ 창으로 옮겨습니다. -->
+            <button type="button" class="mb-btn mb-skip" id="mbPrev" title="이전 곡">≪</button>
             <button type="button" class="mb-btn mb-play" id="mbPlay" title="재생">▶</button>
-            <button type="button" class="mb-btn" id="mbNext" title="다음 곡">≫</button>
-            <button type="button" class="mb-btn mb-manage" id="mbManage" data-editonly title="노래 관리">＋</button>
+            <button type="button" class="mb-btn mb-skip" id="mbNext" title="다음 곡">≫</button>
           </div>
-          <input type="range" class="mb-vol" id="mbVol" min="0" max="100" value="70" title="음량" />
+          <!-- 음량. **보통 모양에서는 감싼 칸이 없는 셔입니다**(display:contents) —
+               바가 지금처럼 한 줄로 놓입니다. 미니 모양에서만 감싼 칸이 살아나고,
+               바는 단추 위로 떠오르는 상자 안으로 들어갑니다. 칸을 두 벌 만들지 않는
+               까닭은 위젯이 사이드바↔팝업을 오갈 때와 같습니다 — 두 벌이면 어긋납니다. -->
+          <div class="mb-vol-wrap" id="mbVolWrap">
+            <button type="button" class="mb-vol-btn" id="mbVolBtn" title="음량" aria-expanded="false">
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M2.5 6.2h2.3L8 3.4v9.2L4.8 9.8H2.5z" />
+                <path class="mb-vol-wave1" d="M10.3 6.1a2.6 2.6 0 0 1 0 3.8" />
+                <path class="mb-vol-wave2" d="M12.1 4.3a5.2 5.2 0 0 1 0 7.4" />
+              </svg>
+            </button>
+            <div class="mb-vol-pop" id="mbVolPop">
+              <input type="range" class="mb-vol" id="mbVol" min="0" max="100" value="70" title="음량" />
+            </div>
+          </div>
         </div>
         <!-- 턴테이블. 검은 LP 한가운데에 앨범아트가 들어가고, 재생 중에는
              LP 가 돌면서 오른쪽 위의 톤암이 LP 위로 내려옵니다.
@@ -265,14 +285,17 @@
             <div class="adj-layer"></div>
           </div>
           <div class="dday-scrim"></div>
+          <!-- 세 줄은 항상 이 차례로 있고, **어디에 놓일지만 템플릿이 정합니다**
+               (CSS 의 .dd-t-base / .dd-t-1 / .dd-t-2). 템플릿마다 칸을 따로 두면
+               세 벌을 나란히 고쳐야 합니다. -->
           <div class="dday-mid">
             <div class="dday-count" id="ddayCount"></div>
             <div class="dday-note" id="ddayNote"></div>
+            <div class="dday-date" id="ddayDate"></div>
           </div>
         </div>
         <button class="dday-nav dday-prev" type="button" id="ddayPrev" title="이전">‹</button>
         <button class="dday-nav dday-next" type="button" id="ddayNext" title="다음">›</button>
-        <button class="dday-edit" type="button" id="ddayEdit" data-editonly title="디데이 관리">✎</button>
       </div>
     </div>
 
@@ -280,9 +303,10 @@
          어느 목록에서 몇 개를 보여줄지는 편집 모드에서 고릅니다.
          글을 누르면 그 글로 바로 갑니다(renderRecent 의 go 참고). -->
     <div class="recent-widget" id="recentWidget" data-widget="recent" data-place="sidebar">
+      <!-- 설정(어디서 몇 개)은 **위젯 목록의 ⚙** 에 있습니다. 위젯 안에 두면
+           글을 읽는 동안에도 고칠 수 있는 표시가 떠 있게 됩니다(주인 판단). -->
       <div class="rc-head">
         <span class="rc-title">LATEST</span>
-        <button class="rc-opt" type="button" id="rcOpt" data-editonly title="최신글 설정">✎</button>
       </div>
       <div class="rc-list" id="rcList"></div>
     </div>
@@ -292,6 +316,13 @@
          품사 알약 / 뜻(여럿이면 번호) / 예문.
          편집 모드에서는 글자 자리가 그대로 고쳐 쓰는 칸이 됩니다. -->
     <div class="dict-widget" id="dictWidget" data-widget="dict" data-place="sidebar">
+      <!-- **여러 장입니다.** 디데이 배너처럼 옆으로 넘깁니다 — 넘어가는 모양도
+           같은 장치(나가는 쪽은 복제본)입니다. 화살표는 위젯 목록 밖에서는 **갈 장이
+           있을 때만** 보이고, 목록 안에서는 늘 들어있습니다 — 마지막 장에서 › 를
+           누르면 빈 장이 한 장 생기고, 거기에 아무것도 적지 않고 떠나면 그 장은
+           저절로 사라집니다(dictPrune). -->
+      <div class="dict-stage" id="dictStage">
+      <div class="dict-slide" id="dictSlide">
       <!-- 사진은 두 번 눌러 자리를 맞춥니다. 한 번 누르면 바뀌던 예전 방식은
            자리를 맞출 길이 없어서, 바꾸는 일은 오른쪽 '사진' 단추로 옮겼습니다. -->
       <div class="dict-photo adjustable-img" id="dictPhoto">
@@ -305,12 +336,22 @@
       <div class="dict-headline">
         <span class="dict-word" id="dictWord"></span>
         <span class="dict-hanja" id="dictHanja"></span>
+        <!-- 장 넘기기 — 단어 줄 오른쪽 끝. 상자 없이 글자만 놓고, 올리면 신호색으로.
+             미끄러지는 칸 안에 있지만 복제본에서는 떼어냅니다(main.js 의 dictStep) —
+             둘이 같이 미끄러지면 화살표가 두 벌로 보입니다. -->
+        <span class="dict-nav-pair">
+          <button class="dict-nav dict-prev" type="button" id="dictPrev" title="앞 장">‹</button>
+          <button class="dict-nav dict-next" type="button" id="dictNext" title="다음 장">›</button>
+        </span>
       </div>
       <div class="dict-pron" id="dictPron"></div>
       <div class="dict-pos" id="dictPos"></div>
       <ol class="dict-means" id="dictMeans"></ol>
       <button class="dict-add" type="button" id="dictAddMean" data-editonly>＋ 뜻 추가</button>
       <div class="dict-ex-wrap"><blockquote class="dict-ex" id="dictEx"></blockquote></div>
+      </div><!-- /.dict-slide -->
+      </div><!-- /.dict-stage -->
+      <!-- 고르는 칸은 미끄러지는 칸 **밖**에 둡니다 — 복제본에 따라가지 않게. -->
       <input type="file" id="dictPhotoPick" accept="image/*" style="display:none;" />
     </div>
     </div><!-- /.side-widgets -->
@@ -1311,7 +1352,7 @@
 <!-- 팝업 위젯이 사는 자리. **낫표(.app-window) 바깥**이라 패널이 잘라내지도
      (.app-window 는 overflow:hidden) 굴러가지도 않습니다. 안의 상자는 저마다
      position:fixed 이고, 폰에서는 통째로 숨깁니다. -->
-<div class="widget-pops" id="widgetPops"></div>
+<div class="widget-pops wg-hold" id="widgetPops"></div>
 
 <!-- ================= MODALS ================= -->
 
@@ -1320,10 +1361,64 @@
   <div class="modal gf-modal">
     <button class="modal-close" type="button" data-close="modalDday">✕</button>
     <h3>디데이</h3>
+    <!-- 겹모습은 **위젯 한 벌**입니다(주인 결정) — 옆으로 넘겨도 생김새가
+         바뀜지 않아야 배너가 한 덩어리로 보입니다. -->
+    <div class="dd-cfg">
+      <div class="wg-f"><span class="wg-f-label">템플릿</span>
+        <div class="dd-tpls" id="ddTplPicks"></div></div>
+      <div class="wg-f"><span class="wg-f-label">색</span>
+        <div class="opt-picks" id="ddThemePicks"></div></div>
+      <div class="wg-f" id="ddFreeRow">
+        <span class="wg-f-label">자유 색</span>
+        <div class="dd-cols">
+          <label class="dd-col"><span>막</span><input type="color" id="ddScrimCol" /></label>
+          <label class="dd-col"><span>글자</span><input type="color" id="ddTextCol" /></label>
+        </div>
+      </div>
+      <div class="wg-f" id="ddBgRow">
+        <span class="wg-f-label">배경색</span>
+        <div class="dd-cols">
+          <label class="dd-col"><span>바탕</span><input type="color" id="ddBgCol" /></label>
+        </div>
+      </div>
+      <div class="wg-f"><span class="wg-f-label">시작 날짜</span>
+        <button type="button" class="wg-chip" id="ddDateChip"></button></div>
+    </div>
+    <h4 class="mg-sub">목록</h4>
     <div class="dd-list" id="ddList"></div>
     <div class="form-actions">
       <button type="button" class="btn-ghost" id="ddAdd">＋ 추가</button>
       <button type="button" class="btn-primary" data-close="modalDday">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 뮤직 모양 — 위젯 목록의 ⚙ 에서 열립니다 -->
+<div class="modal-overlay" id="modalMusicOpt">
+  <div class="modal">
+    <button class="modal-close" type="button" data-close="modalMusicOpt">✕</button>
+    <h3>뮤직 플레이어</h3>
+    <div class="fx-picks" id="mbLayoutPicks"></div>
+    <!-- 노래 관리는 예전에 위젯의 ＋ 단추가 여는 따로 된 창이었습니다.
+         단추를 없애면서 이 창 안으로 들였습니다(주인 지시).
+         id 는 그대로라 짓던 쪽(main.js)은 손대지 않았습니다. -->
+    <h4 class="mg-sub">노래</h4>
+    <div class="form-row"><label>유튜브 링크</label>
+      <input type="text" id="mmUrl" placeholder="https://youtu.be/... 또는 https://www.youtube.com/watch?v=..." /></div>
+    <div class="mm-or"><span>또는</span></div>
+    <div class="form-row"><label>음원 파일</label>
+      <div class="mm-file-row">
+        <button type="button" class="btn-ghost" id="mmFileBtn">파일 고르기</button>
+        <span class="mm-file-name" id="mmFileName">선택된 파일 없음</span>
+        <button type="button" class="btn-ghost mm-cover-btn" id="mmCoverBtn" title="앨범아트">앨범아트</button>
+      </div>
+    </div>
+    <div class="form-row"><label>제목</label><input type="text" id="mmTitle" placeholder="TITLE" /></div>
+    <div class="form-row"><label>아티스트</label><input type="text" id="mmArtist" placeholder="ARTIST" /></div>
+    <div class="form-actions" style="margin-bottom:4px;"><button class="btn-primary" id="mmAddBtn">추가</button></div>
+    <div class="mm-list" id="mmList"></div>
+    <div class="form-actions">
+      <button type="button" class="btn-primary" data-close="modalMusicOpt">닫기</button>
     </div>
   </div>
 </div>
@@ -1341,6 +1436,19 @@
       <span class="wg-f-label">표시 글 수</span>
       <input type="number" id="rcCount" min="1" max="20" />
     </label>
+    <!-- 한 줄로 보기 — 제목은 왼쪽, 갈래는 오른쪽 끝에 붙습니다. -->
+    <div class="wg-f">
+      <span class="wg-f-label">보기</span>
+      <div class="opt-picks" id="rcRowsPicks"></div>
+    </div>
+    <!-- 제목 앞에 붙는 작은 표시. 끄면 글자만 남습니다. -->
+    <div class="wg-f">
+      <span class="wg-f-label">앞머리</span>
+      <div class="rc-bul-row">
+        <button type="button" class="wg-chip" id="rcBulChip"></button>
+        <div class="opt-picks rc-bul-picks" id="rcBulPicks"></div>
+      </div>
+    </div>
     <div class="form-actions">
       <button type="button" class="btn-primary" data-close="modalRecent">닫기</button>
     </div>
@@ -1433,30 +1541,6 @@
 
 <!-- Archive write / view modals -->
 <!-- 노래 관리 (편집 모드에서 사이드바 위젯의 ＋) -->
-<div class="modal-overlay" id="modalMusic">
-  <div class="modal">
-    <button class="modal-close" data-close>✕</button>
-    <h3>노래 관리</h3>
-    <!-- 유튜브 링크 아니면 음원 파일, 둘 중 하나만 채우면 됩니다 -->
-    <div class="form-row"><label>유튜브 링크</label>
-      <input type="text" id="mmUrl" placeholder="https://youtu.be/... 또는 https://www.youtube.com/watch?v=..." /></div>
-    <div class="mm-or"><span>또는</span></div>
-    <div class="form-row"><label>음원 파일</label>
-      <div class="mm-file-row">
-        <button type="button" class="btn-ghost" id="mmFileBtn">파일 고르기</button>
-        <span class="mm-file-name" id="mmFileName">선택된 파일 없음</span>
-        <!-- 앨범아트 — LP 한가운데에 들어갑니다. 유튜브 곡에도 쓰입니다.
-             고르면 버튼 자리에 그림이 작게 보입니다. -->
-        <button type="button" class="btn-ghost mm-cover-btn" id="mmCoverBtn" title="앨범아트">앨범아트</button>
-      </div>
-    </div>
-    <div class="form-row"><label>제목</label><input type="text" id="mmTitle" placeholder="TITLE" /></div>
-    <div class="form-row"><label>아티스트</label><input type="text" id="mmArtist" placeholder="ARTIST" /></div>
-    <div class="form-actions" style="margin-bottom:4px;"><button class="btn-primary" id="mmAddBtn">추가</button></div>
-    <div class="mm-list" id="mmList"></div>
-    <div class="form-actions"><button class="btn-ghost" data-close>닫기</button></div>
-  </div>
-</div>
 
 <!-- LOVE INTEREST 카드에 거는 링크. 보기 모드에서 카드 사진을 누르면 이 주소가
      새 탭으로 열립니다. 비워서 저장하거나 '링크 삭제'를 누르면 떼어집니다. -->
@@ -1677,7 +1761,7 @@
        (그 목록을 만드는 것도 JS인데 새 CSS 가 감싸이지 않은 select 를 폭 0 으로
        접습니다), 스티커 서랍이 엉뚱한 자리에 놓였습니다.
        **CSS 와 JS 를 함께 고쳤으면 번호도 함께 올리세요.** -->
-<script src="js/main.js?v=239"></script>
-<script type="module" src="js/firebase-store.js?v=119"></script>
+<script src="js/main.js?v=246"></script>
+<script type="module" src="js/firebase-store.js?v=120"></script>
 </body>
 </html>
