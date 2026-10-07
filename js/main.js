@@ -1,4 +1,59 @@
 /* ============================================================
+   링크로 들어왔을 때의 로딩 막
+   ============================================================
+   이 한 덩어리만 파일 맨 앞에 있습니다. 까닭: 글을 찾으려면 파이어스토어가
+   와야 하고 그게 대략 800ms 인데, 그 사이 HOME 이 보였다가 글로 넘어가면
+   사이트가 고장난 것처럼 보입니다. main.js 는 </body> 바로 앞에서 읽히므로
+   여기가 **사진 한 장 없이 막을 띄울 수 있는 가장 이른 자리**입니다.
+
+   길잡이(rtParse·rtRoute …)는 저 아래 '주소로 글 가리키기' 칸에 있습니다.
+   여기서 그 함수들을 부르지 않는 것이 중요합니다 — 함수 선언은 끌어올려지지만
+   그 칸의 const·let 은 아직 만들어지지 않아 손대면 터집니다. 그래서 이 함수는
+   정규식 하나로 혼자 판단합니다. */
+function rtHoldIfDeepLink(){
+  if(!/^#(pair|oc|archive)(=|$)|^#(arc|log)=/.test(location.hash || '')) return;
+  document.getElementById('rtBoot')?.classList.add('on');
+}
+rtHoldIfDeepLink();
+
+function rtBootUp(){
+  const el = document.getElementById('rtBoot');
+  return !!(el && el.classList.contains('on'));
+}
+/* 막이 걷힐 때까지 미뤄 둔 '떠 있는 위젯'이 있는지. var 인 까닭은 아래
+   rtReady 와 같습니다 — revealAfterLoad 가 이 줄보다 먼저 불릴 수 있습니다. */
+var rtPopsPending = false;
+
+/* 막대를 끝까지 채우고 걷습니다. 두 번 불러도 한 번만 걷힙니다. */
+function rtBootDone(){
+  const el = document.getElementById('rtBoot');
+  if(!el || !el.classList.contains('on')) return;
+  const bar = document.getElementById('rtBootBar');
+  if(bar){
+    /* **지금 차 있는 만큼을 먼저 못 박습니다.** 애니메이션을 끊고 나서 재면
+       규칙에 적힌 4% 가 나와서 막대가 뒤로 튑니다. */
+    const now = getComputedStyle(bar).width;
+    bar.style.animation = 'none';
+    bar.style.width = now;
+    void bar.offsetWidth;
+    bar.style.transition = 'width .2s ease-out';
+    bar.style.width = '100%';
+  }
+  setTimeout(()=>{
+    el.classList.add('rt-off');
+    setTimeout(()=>{
+      el.classList.remove('on', 'rt-off');
+      /* 미뤄 둔 떠 있는 위젯을 이제 엽니다 (revealAfterLoad 쪽 설명 참고).
+         .on 을 먼저 떼었으므로 rtBootUp 은 이미 false 이고, 되돌이는 없습니다. */
+      if(rtPopsPending){ rtPopsPending = false; rtRevealPops(); }
+    }, 260);
+  }, 210);
+}
+function rtRevealPops(){
+  document.getElementById('widgetPops')?.classList.remove('wg-hold');
+}
+
+/* ============================================================
    AUTH
    ============================================================ */
 /* 로그인 상태는 Firebase Authentication이 관리합니다.
@@ -1452,6 +1507,9 @@ let draggedCatId = null;
    옮긴 뒤에도 그 메뉴에서 마지막에 고른 카테고리가 계속 굵게 보입니다. */
 function markCurrentView(view){
   document.body.dataset.view = view;
+  /* 주소를 지금 화면에 맞춥니다. 화면을 바꾸는 길이 여럿이어도 body.dataset.view
+     를 적는 자리는 여기 하나뿐이라, 주소도 여기 한 곳에서만 씁니다. */
+  rtSync();
   /* 위젯은 WIDGET 화면에서만 고칠 수 있습니다 — 화면이 바뀐 지금 맞춥니다 */
   if(typeof syncWidgetEditing === 'function') syncWidgetEditing();
   /* 다른 메뉴로 옮기면 로그인 창은 접어 둡니다 — 돌아왔을 때 로그인 창이 아니라
@@ -3494,10 +3552,15 @@ let pairListPage = 1, ocListPage = 1, arcListPage = 1;
    안드로이드의 뒤로가기 단추와 아이폰 사파리의 왼쪽 모서리 스와이프는 둘 다
    '히스토리를 한 칸 되돌리는' 같은 동작이라, 한 번 쌓아 두면 둘 모두가 아래
    popstate 로 들어옵니다 — 따로 손댈 것이 없습니다.
-   주소는 그대로 둡니다(칸만 쌓습니다). 이 사이트는 주소로 화면을 가리키지
-   않으므로, 주소를 바꾸면 새로고침했을 때 갈 곳이 없어집니다. */
+   **주소도 함께 적습니다.** 예전에는 칸만 쌓고 주소는 그대로 두었습니다 —
+   주소로 화면을 가리킬 수 없으니 새로고침했을 때 갈 곳이 없었기 때문입니다.
+   지금은 아래 '주소로 글 가리키기' 가 그 길을 만들어 두었으므로, 주소가
+   지금 보고 있는 글을 가리킵니다(= 주소창을 긁어도 그 글 링크입니다).
+   rtWantHash 는 '지금 열려 있는 상세'를 읽으므로, 이 함수를 부르는 자리는
+   모두 상세를 이미 열어 둔 뒤입니다(부르는 자리 넷 다 그렇습니다). */
 function pushDetailHistory(name){
-  try{ history.pushState({ ghDetail:name }, ''); }catch(_){}
+  const url = location.pathname + location.search + (rtWantHash() || '');
+  try{ history.pushState({ ghDetail:name }, '', url); }catch(_){}
 }
 function openDetailView(name){
   /* 이미 상세를 보고 있으면 쌓지 않습니다 — ARCHIVE 는 읽기와 고치기가 같은
@@ -3516,12 +3579,14 @@ function backToPairList(){
   pairPage = pairListPage;
   renderPairPosts();
   activateView('pair');
+  rtSync();
 }
 function backToOcList(){
   closeDetailView();
   ocPage = ocListPage;
   renderOcPosts();
   activateView('oc');
+  rtSync();
 }
 /* ARCHIVE 는 폴더까지 함께 돌아옵니다 — 폴더는 화면을 옮겨도 그대로 기억되므로
    (currentArcFolderIds) 여기서는 쪽만 되돌리면 됩니다.
@@ -3535,6 +3600,7 @@ function backToArchiveList(){
   arcPage = arcListPage;
   renderArchive();
   activateView('archive');
+  rtSync();
 }
 /* 실제로 화면을 닫는 일만 합니다 — 물어보는 것은 requestLeaveDetail 이 끝냈고,
    여기까지 왔다는 것은 나가도 좋다는 뜻입니다. */
@@ -3614,6 +3680,234 @@ window.addEventListener('popstate', async ()=>{
   if(!d) return;
   if(arcEditing() && !(await leaveArcEdit())){ pushDetailHistory(d); return; }
   closeDetailNow(d);
+});
+
+/* ============================================================
+   주소로 글 가리키기 (길잡이)
+   ============================================================
+   예전에는 주소가 아무것도 가리키지 않았습니다 — 어느 글을 열어도 주소창은
+   늘 사이트 첫 주소였고, 뒤로가기만 pushDetailHistory 로 따로 배선했습니다.
+   그래서 글 하나를 남에게 보낼 길이 아예 없었습니다.
+
+   지금은 **지금 보고 있는 곳**이 주소에 적힙니다.
+
+     #pair · #oc · #archive            큰 메뉴(목록)
+     #pair=<글id> · #oc=<글id>          PAIR·OC 상세
+     #arc=<글id>                        ARCHIVE 글
+     #log=pair.<글id>.<칸id>            LOG 글 (pair 자리에 oc 도 옵니다)
+
+   **쪽수·탭·폴더는 적지 않습니다.** 남에게 보내고 싶은 것은 글이지 '3쪽'이
+   아니고, 거기까지 적기 시작하면 화면을 건드리는 모든 곳이 주소를 쓰게 되어
+   품이 몇 배로 뜁니다(주인과 합의한 선입니다).
+
+   GitHub Pages 는 정적이라 /log/123 같은 길은 404 입니다. 그래서 # 뒤에 씁니다.
+   id 는 Date.now() 라 13자리인데 **줄이지 않습니다** — 길어도 해가 없고,
+   눈으로 읽히는 편이 나중에 들여다볼 때 낫습니다(주인 지시).
+
+   ---- 칸(히스토리)은 하나도 더 쌓지 않았습니다 ----
+   이게 이 칸의 설계에서 가장 중요한 대목입니다. 칸을 쌓는 것은 예나 지금이나
+   **상세를 열 때뿐**이고(pushDetailHistory), 메뉴 사이를 오가는 것은
+   replaceState 로 주소만 갈아끼웁니다. 그래서 위 popstate 를 한 줄도 손대지
+   않았고 뒤로가기 동작이 예전과 똑같습니다. 메뉴까지 pushState 로 쌓았다면
+   '고치던 중이면 물어보기'(.nav 가로채기)와 엮여 길이 두 겹이 됐을 겁니다. */
+
+/* 큰 메뉴인지. const 가 아니라 함수인 까닭: markCurrentView 는 이 칸보다 먼저
+   불릴 수 있고(applyEditMode), 그때 const 를 만지면 TDZ 로 터집니다. */
+function rtIsMenu(v){ return v === 'pair' || v === 'oc' || v === 'archive'; }
+/* 예전 글의 id 가 글자일 수도 있어 느슨하게 견줍니다 */
+function rtSameId(a, b){ return String(a) === String(b); }
+/* var 입니다 — 위와 같은 까닭으로, 아직 안 만들어졌어도 undefined 로 읽혀
+   rtSync 가 조용히 돌아갑니다. 이 값이 켜지기 전에는 주소를 건드리지 않으므로
+   **링크로 들어온 주소가 화면이 그려지는 동안 지워지지 않습니다.** */
+var rtReady = false;
+
+/* 지금 열려 있는 상세의 주소. 상세가 아니면 빈 문자열입니다. */
+function rtDetailHash(){
+  if(typeof logDetailOpen === 'function' && logDetailOpen() && currentLogViewId != null){
+    const host = ocDetailOpen() ? 'oc' : 'pair';
+    const pid = host === 'oc' ? currentOcId : currentPairPostId;
+    if(pid != null) return '#log=' + host + '.' + pid + '.' + currentLogViewId;
+  }
+  const d = document.body.dataset.detail;
+  if(d === 'archive-detail' && currentArcViewId != null) return '#arc=' + currentArcViewId;
+  if(d === 'pair-detail' && currentPairPostId != null) return '#pair=' + currentPairPostId;
+  if(d === 'oc-detail' && currentOcId != null) return '#oc=' + currentOcId;
+  return '';
+}
+/* 상세가 아닐 때 — 지금 보고 있는 큰 메뉴. HOME·SETTING·WIDGET 은 비웁니다
+   (혼자 보는 화면이라 남에게 보낼 주소가 없습니다). */
+function rtMenuHash(){
+  const v = document.body.dataset.view;
+  return rtIsMenu(v) ? '#' + v : '';
+}
+function rtWantHash(){ return rtDetailHash() || rtMenuHash(); }
+
+/* 주소만 갈아끼웁니다 — 칸은 쌓지 않습니다. */
+function rtReplace(hash){
+  const want = location.pathname + location.search + (hash || '');
+  const now  = location.pathname + location.search + (location.hash || '');
+  if(want === now) return;
+  try{ history.replaceState(history.state, '', want); }catch(_){}
+}
+function rtSync(){ if(!rtReady) return; rtReplace(rtWantHash()); }
+
+/* 큰 메뉴로 갑니다 — 사이드바의 굵은 표시와 펼친 목록까지, 메뉴를 직접 누른
+   것과 같은 모습으로 맞춥니다(위 navItems 처리기와 같은 줄들입니다).
+   링크로 글에 바로 들어왔을 때 **그 글의 목록을 먼저 켜 두려고** 씁니다 —
+   그래야 뒤로가기가 사이트를 떠나지 않고 목록으로 갑니다. */
+function rtGoMenu(view){
+  navItems.forEach(b=> b.classList.remove('active'));
+  document.querySelector('.nav-item[data-view="' + view + '"]')?.classList.add('active');
+  activateView(view);
+  markCurrentView(view);
+  pairSub.classList.toggle('open', view === 'pair');
+  ocSub.classList.toggle('open', view === 'oc');
+  archiveSub.classList.toggle('open', view === 'archive');
+  portalSub?.classList.remove('open');
+}
+
+/* 주소를 뜯습니다. 모르는 모양이면 null — 부르는 쪽이 '없는 글'로 넘깁니다. */
+function rtParse(hash){
+  const h = String(hash || '').replace(/^#/, '');
+  if(!h) return null;
+  if(rtIsMenu(h)) return { kind:'menu', view:h };
+  const eq = h.indexOf('=');
+  if(eq < 1) return null;
+  const key = h.slice(0, eq), val = h.slice(eq + 1);
+  if(!val) return null;
+  if(key === 'pair' || key === 'oc' || key === 'arc') return { kind:key, id:val };
+  if(key === 'log'){
+    const bits = val.split('.');
+    if(bits.length !== 3) return null;
+    return { kind:'log', host: bits[0] === 'oc' ? 'oc' : 'pair', postId:bits[1], id:bits[2] };
+  }
+  return null;
+}
+
+/* 비밀 폴더의 글이면 **비밀번호를 먼저 묻습니다.** 링크를 받았다는 것이
+   자물쇠를 여는 열쇠가 되어서는 안 됩니다. 맞히면 글이 열리고, 그만두면
+   목록만 남습니다 — 목록은 이 함수에 오기 전에 이미 켜 두었으니 창만 닫히면
+   바로 그 자리입니다.
+   SiteStore.isAdmin 을 함께 보는 까닭: 로그인 확정이 데이터 도착보다 늦을 수
+   있어서, isLoggedIn 에 아직 옮겨지지 않은 그 틈에 주인이 자기 글 링크를 열면
+   자기 비밀번호를 묻게 됩니다. */
+function rtWithFolder(folder, show){
+  const admin = !!(window.SiteStore && window.SiteStore.isAdmin);
+  if(admin || !folderLocked(folder)){ show(); return true; }
+  openFolderUnlock(folder, show);
+  return true;
+}
+
+/* 찾아가는 자리. 글이 없으면 false 를 돌려줍니다(지워졌거나 옮겨진 링크). */
+function rtOpen(t){
+  if(!t) return false;
+  if(t.kind === 'menu'){ rtGoMenu(t.view); return true; }
+
+  if(t.kind === 'pair' || t.kind === 'oc'){
+    const list = t.kind === 'oc' ? state.ocPosts : state.pairPosts;
+    const post = (list || []).find(x=> rtSameId(x.id, t.id));
+    if(!post) return false;
+    rtGoMenu(t.kind);
+    if(t.kind === 'oc') openOcDetail(post.id); else openPairDetail(post.id);
+    return true;
+  }
+
+  if(t.kind === 'arc'){
+    const item = (state.archive || []).find(x=> rtSameId(x.id, t.id));
+    if(!item) return false;
+    const cat = item.category || 'ooc';
+    /* 폴더를 **먼저** 맞춥니다 — openArchiveCategory 가 목록을 그리므로,
+       뒤에 맞추면 엉뚱한 폴더의 목록이 글 뒤에 남습니다. */
+    const fid = arcFolderIdOf(item);
+    setCurArcFolderId(fid, cat);
+    openArchiveCategory(cat);
+    const folder = arcFoldersOf(cat).find(f=> f.id === fid);
+    return rtWithFolder(folder, ()=> openArcView(item));
+  }
+
+  if(t.kind === 'log'){
+    const posts = t.host === 'oc' ? state.ocPosts : state.pairPosts;
+    const post = (posts || []).find(x=> rtSameId(x.id, t.postId));
+    if(!post) return false;
+    const entry = (post.log || []).find(e=> rtSameId(e.id, t.id));
+    if(!entry) return false;
+    currentLogFolderId = logFolderIdOf(post, entry);   // 상세를 그리기 전에
+    rtGoMenu(t.host);
+    if(t.host === 'oc') openOcDetail(post.id); else openPairDetail(post.id);
+    /* 글 화면은 LOG 칸 위에 덮이므로 먼저 그 장으로 옮겨 둡니다 —
+       최신글 위젯의 recentGo 와 같은 까닭입니다(뒤로 나왔을 때 LOG 가 보이도록). */
+    try{ if(t.host === 'oc') setOcPage(2, false); else setPdPage(2, false); }catch(_){}
+    const folder = (post.logFolders || []).find(f=> f.id === currentLogFolderId);
+    return rtWithFolder(folder, ()=> openLogView(entry));
+  }
+  return false;
+}
+
+/* 지워진 글의 링크. 조용히 홈에 남기면 링크가 제대로 열렸는지 알 수 없습니다.
+   주소는 지웁니다 — 같은 주소로 새로고침해도 계속 이 화면만 보지 않도록. */
+function rtNotFound(){
+  rtReplace('');
+  navItems.forEach(b=> b.classList.remove('active'));
+  [pairSub, ocSub, archiveSub, portalSub].forEach(el=> el && el.classList.remove('open'));
+  activateView('notfound');
+  markCurrentView('notfound');
+}
+
+function rtRoute(){
+  const t = rtParse(location.hash);
+  rtReady = true;
+  if(t){ if(!rtOpen(t)) rtNotFound(); return; }
+  /* 우리 모양으로 시작하는데 뜯지 못한 주소(#arc= 처럼 중간에 잘린 링크)도
+     없는 글로 봅니다 — 그냥 두면 홈에 조용히 남아 링크가 깨진 줄도 모릅니다.
+     그 밖의 아무 해시(#top 같은 것)는 우리 것이 아니므로 건드리지 않습니다. */
+  if(/^#(pair|oc|archive|arc|log)=/.test(location.hash || '')) rtNotFound();
+}
+
+/* 주소를 직접 고쳐 넣거나 다른 링크를 같은 창에 붙여 넣었을 때.
+   pushState·replaceState 는 이 사건을 일으키지 않으므로 되돌이는 없습니다. */
+window.addEventListener('hashchange', ()=>{
+  if(!rtReady) return;
+  if((location.hash || '') === (rtWantHash() || '')) return;
+  rtRoute();
+});
+
+/* ---- 링크 복사 ----
+   글(LOG·ARCHIVE)에만 답니다 — PAIR·OC 상세는 글이라기보다 자료 묶음이라
+   남에게 보낼 일이 없습니다(주인 판단). 주소에는 그래도 적히므로 주소창을
+   긁으면 그 상세 링크가 나옵니다. */
+function rtShareUrl(){
+  const h = rtDetailHash();
+  return h ? location.origin + location.pathname + h : '';
+}
+/* 알림 창을 띄우지 않고 단추 자신이 바뀝니다 — 글을 읽는 중에 창이 뜨는 것보다
+   조용하고, 새 UI 를 만들지 않아도 됩니다. */
+function rtFlashLink(btn, ok){
+  if(!btn) return;
+  if(btn._rtTimer) clearTimeout(btn._rtTimer);
+  if(btn._rtGlyph == null) btn._rtGlyph = btn.textContent;
+  btn.textContent = ok ? '✓' : '✕';
+  btn.classList.add('rt-link-done');
+  btn._rtTimer = setTimeout(()=>{
+    btn.textContent = btn._rtGlyph;
+    btn.classList.remove('rt-link-done');
+  }, 1300);
+}
+async function rtCopyLink(btn){
+  const url = rtShareUrl();
+  if(!url){ rtFlashLink(btn, false); return; }
+  /* copyText 는 아이폰에서 'OOC:' 가 주소로 읽히던 것까지 손본 함수입니다 —
+     붙임판에 올리는 길은 그쪽 하나로만 둡니다. */
+  rtFlashLink(btn, await copyText(url));
+}
+['logLinkBtn', 'arcLinkBtn'].forEach(id=>{
+  const btn = document.getElementById(id);
+  if(btn) btn.addEventListener('click', ()=> rtCopyLink(btn));
+});
+document.getElementById('rt404Home')?.addEventListener('click', ()=>{
+  const btn = document.querySelector('.nav-item[data-view="home"]');
+  if(btn){ btn.click(); return; }
+  activateView('home');
+  markCurrentView('home');
 });
 /* Escape 로도 목록으로. 글을 쓰는 중(입력칸에 커서)에는 가로채지 않습니다 —
    그때 Escape 는 그 칸의 것이고, 창(모달)이 떠 있으면 그쪽이 먼저입니다. */
@@ -5813,6 +6107,9 @@ function closeLogDetail(){
   el.classList.remove('open');
   currentLogViewId = null;
   editingLogId = null;
+  /* 글에서 나오면 주소도 한 겹 물러납니다 — 아직 PAIR·OC 상세 안이므로
+     그 상세의 주소가 됩니다(목록까지 나가는 것은 activateView 쪽입니다). */
+  rtSync();
 }
 
 let logEditBaseline = null;
@@ -14494,6 +14791,10 @@ async function boot(){
   /* 기다리던 자리를 이제 엽니다 — 사이드바는 어느 화면에서든 보이므로
      HOME 이 켜져 있는지와 상관없이 부릅니다. */
   revealAfterLoad();
+  /* 링크로 들어왔으면 이제 그 글로 갑니다 — 글을 찾으려면 데이터가 있어야
+     하므로 여기가 가장 이른 자리입니다(그 전까지는 로딩 막이 덮고 있습니다). */
+  safely('주소 길잡이', rtRoute);
+  rtBootDone();
   /* HOME 들어오는 움직임은 여기서 처음 겁니다. 첫 화면은 index.html 에서
      .active 로 켜져 있어 activateView 를 지나가지 않고, 데이터가 오기 전에
      걸면 빈 배너와 빈 이름이 들어왔다가 나중에 채워집니다. */
@@ -14625,13 +14926,20 @@ function revealAfterLoad(){
      같이 떠 있었습니다. loadState 가 renderWidgets·renderBuiltinWidgets 를 마친 뒤에
      이 함수가 불리므로, 여는 시점은 이미 다 그려진 뒤입니다. */
   document.getElementById('sideWidgets')?.classList.remove('wg-hold');
-  document.getElementById('widgetPops')?.classList.remove('wg-hold');
+  /* **떠 있는 위젯만 막이 걷힌 뒤에 엽니다.** 로딩 막은 낫표 안쪽 패널만 덮는데
+     팝업으로 빼둔 위젯(.wg-pop)은 패널 바깥까지 걸쳐 있어서, 막보다 먼저 켜지면
+     막의 왼쪽 모서리에서 **반쯤 잘린 채** 나타납니다(실제로 그렇게 보였습니다).
+     사이드바 쪽 위젯은 막과 겹치지 않으므로 곧바로 엽니다 — 링크로 들어온
+     사람도 왼쪽 열은 보통 방문과 똑같이 보게 됩니다. */
+  if(rtBootUp()){ rtPopsPending = true; }
+  else rtRevealPops();
 }
 /* 어떤 이유로든 boot 이 끝나지 않는 경우를 위한 안전줄 */
-setTimeout(revealAfterLoad, 8000);
+setTimeout(()=>{ revealAfterLoad(); rtBootDone(); }, 8000);
 
 function showLoadError(){
   revealAfterLoad();
+  rtBootDone();   // 막이 덮고 있으면 이 알림조차 안 보입니다
   const bar = document.createElement('div');
   bar.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:9999;background:#c1440e;color:#fff;'
     + 'font-size:12px;padding:8px 12px;text-align:center;font-family:inherit;';

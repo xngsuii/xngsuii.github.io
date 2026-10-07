@@ -905,6 +905,99 @@ Verify without eyes: re-parse the file and check the CRCs, then print an ASCII r
 
 `index.html` references its assets with a version query — `css/style.css?v=N`, `js/main.js?v=N`, `js/firebase-store.js?v=N` (and `firebase-store.js` imports `./firebase-config.js?v=N`). **Bump every one of those `N`s together whenever you change a CSS or JS file.** GitHub Pages serves the HTML with a short cache but assets with a long one, so without a bump a returning visitor gets new HTML with stale JS — and since `main.js` wires up elements at top level, a mismatch used to kill the whole script. The top-level init blocks now bail out politely when their elements are missing, but that only degrades gracefully; it does not make the page correct. The version bump is the actual fix.
 
+## Deep links (hash routing)
+
+The address bar points at what you are looking at. Shapes: `#pair` / `#oc` / `#archive` for
+the lists, `#pair=<id>` / `#oc=<id>` for those details, `#arc=<id>` for an ARCHIVE article,
+`#log=pair.<postId>.<entryId>` (or `oc.`) for a LOG article. Page numbers, tabs and folders
+are deliberately **not** encoded — the thing worth sharing is an article, and encoding the
+rest would force every screen-changing call site to write the address.
+
+Four things make this cheap, and all four are load-bearing:
+
+- **`recentGo` already did the hard part.** The LATEST widget had to jump to an arbitrary
+  article from `{host, postId, id}`, so the "walk to this article" path existed before the
+  router did. `rtOpen` is that logic plus the menu and the folder lock.
+- **Menus use `replaceState`, details use `pushState`.** History entries are still pushed
+  only when a detail opens (`pushDetailHistory`), exactly as before, so the existing
+  `popstate` handler and the "ask before leaving an edit" `.nav` interception needed no
+  changes at all. Pushing entries for menus too would have put two layers in that path.
+- **`rtReady` starts false and `rtSync` returns early while it is.** `markCurrentView` is the
+  one place that records the current screen, so it is also the one place that writes the
+  address — but it can run before the router block has executed (`applyEditMode` calls it),
+  and more importantly it must not wipe the arriving hash before `rtRoute` has read it.
+  Declare that flag with `var`, not `let`: a `let` read before its line executes throws
+  (TDZ), while a hoisted `var` reads `undefined` and the guard just works. Same reason
+  `rtIsMenu` is a function instead of a `const` array.
+- **The veil has to be the first thing in `main.js`.** Finding an article needs Firestore
+  (~800ms measured), so a deep link would otherwise show HOME and then jump. `main.js` is
+  loaded just before `</body>`, so its top-level code is the earliest point that can show
+  anything; `rtHoldIfDeepLink` therefore judges the hash with one regex and touches nothing
+  from the router block below it.
+
+The loading bar is **not** a real progress reading — Firestore reports no byte count. It
+eases to 90% and `rtBootDone` finishes it on arrival. It never moves backwards, so it does
+not lie. `rtBootDone` is also called from `showLoadError` and from the 8-second safety net,
+or a failure leaves the veil covering the error message.
+
+**The veil covers only the panel**, not the whole window: it lives inside `<main class="main">`
+(already `position:relative`) with `position:absolute; inset:0`, which is exactly the box the
+`.view`s stand in, so nothing can show through beside it. The trim marks are on `body::before`,
+outside the panel, and the sidebar stays live. The reason is consistency, not taste — the
+sidebar's widget slots are blank until data arrives on *every* visit (`wg-hold`), so veiling
+the whole window would make the deep-link case the only one that looks different.
+
+Two consequences, both load-bearing:
+
+- `z-index: 12000` beats `.wg-pop`'s 70. `.main` is positioned but has `z-index: auto`, so it
+  is **not** a stacking context and the veil competes with the popups directly.
+- `revealAfterLoad` must **defer `#widgetPops`** while the veil is up (`rtPopsPending`, drained
+  at the end of `rtBootDone`). Floating widgets straddle the panel edge, so revealing them
+  first — `revealAfterLoad` runs ~500ms before the veil lifts — showed them sliced in half down
+  the veil's left edge. Sidebar widgets do not overlap the veil and so are revealed at once.
+  Measured order on a deep link: `60ms` veil up → `585ms` sidebar widgets in → `1119ms` veil
+  gone and popups in.
+
+Known, pre-existing: the PORTAL row is hidden by `renderPortalSub` until links load, so the
+sidebar menu grows by one row at ~800ms. This happens on every visit, not just deep links;
+it is simply easier to notice now that the sidebar is visible during the load.
+
+A deep link must not bypass a folder password: `rtWithFolder` opens the list first, then
+`openFolderUnlock`, so cancelling leaves the visitor on the list. It also checks
+`SiteStore.isAdmin` directly, because auth can resolve *after* the data arrives and the owner
+would otherwise be asked for their own password in that gap.
+
+Placing a button left of the `⋮` in a detail bar gets the "takes its slot when logged out"
+behaviour for free: `.arc-kebab-btn` is `display:none` unless `body.logged-in`, and the bar
+is a plain flex row.
+
+## Patch scripts (Python)
+
+- **Build the whole string, then open the file.** `io.open(p, 'w')` truncates on open, so an
+  encoding error during `.write()` leaves a zero-byte file. `style.css` was destroyed this
+  way once (recovered with `git checkout`). Always
+  `data = s.replace('\r\n','\n').replace('\n','\r\n').encode('utf-8')` first, then
+  `io.open(p,'wb').write(data)`. The replace pair also keeps the repo's CRLF endings.
+- **Write these scripts with the Write tool, not a bash heredoc.** Heredocs in this
+  environment swallow backslashes, which silently corrupts every regex and escape in the
+  script (and a long one just fails to parse).
+- Astral characters need `\U0001f517`, not a `\ud83d\udd17` surrogate pair — Python 3
+  treats the pair as two lone surrogates and refuses to encode them.
+
+## Testing the router headlessly
+
+- `Page.navigate` to a URL that differs only in the fragment is a *same-document* navigation,
+  so the previous test's state survives and poisons the next assertion. Go via `about:blank`
+  between cases when you want a real boot.
+- Headless Chrome blocks the clipboard, so `copyText` returns false and the button flashes
+  the failure mark. Grant it first: `Browser.grantPermissions` with `clipboardReadWrite` plus
+  `clipboardSanitizedWrite`, then `Page.bringToFront`. Reading back with
+  `navigator.clipboard.readText()` is what actually proves the copy.
+- `history.length` saturates at 50 in Chrome. Do not assert "one entry was added" with it —
+  check that `history.back()` lands where it should instead.
+- Sampling a transient overlay from the driver side misses it. Install a 16ms poller through
+  `Page.addScriptToEvaluateOnNewDocument` and have the page record what it saw.
+
 ## Workflow notes
 
 - **Do not commit without testing first, and confirm with the user before committing.** Since there's no automated test suite, "testing" means actually loading the page (local server or the live site) and exercising the change in a browser — check the console for errors and confirm the save indicator behaves correctly for anything touching storage.

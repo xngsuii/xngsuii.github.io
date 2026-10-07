@@ -5252,3 +5252,70 @@
      놓인 모양이라, 흰 바탕을 달고 오면 없던 상자가 따라오는 것처럼 보입니다.
      글자는 지면 위에 그대로 얹혀 옵니다. */
   .drag-ghost.dream-card{box-shadow:none;background:transparent;}
+
+  /* ============================================================
+     링크로 들어오는 문
+     ============================================================ */
+  /* ---- 로딩 막 ----
+     링크로 들어왔을 때만 뜨니다(.on 은 rtHoldIfDeepLink 가 붙입니다).
+     글을 찾으려면 파이어스토어가 와야 하는데 그게 대략 800ms 이고,
+     그 사이 HOME 이 보였다가 글로 넘어가면 고장난 것처럼 보입니다.
+
+     막대는 **진짜 진행률이 아닙니다.** 파이어스토어는 얼마나 받았는지를
+     알려주지 않아서, 90% 에서 멈춰 기다리다가 도착하면 rtBootDone 이
+     나머지를 채우고 걷습니다. 뒤로 줄어들지는 않으니 거짓말은 아닙니다. */
+  /* .main 의 테두리 안쪽(패딩 상자)에 딱 맞습니다 — 화면(.view)이 서는 자리와
+     같은 상자라, 막 옆으로 글이 삐져나올 틈이 없습니다.
+     z-index 가 큰 까닭: 팝업으로 빼둔 위젯(.wg-pop)이 70 이고 그쪽이 먼저
+     보이게 되므로(revealAfterLoad 가 막보다 조금 앞섭니다), 더 위에 있어야
+     막 위로 위젯이 튀어 오르지 않습니다. .main 은 z-index 가 auto 라 쌓임
+     맥락을 만들지 않아서, 이 값이 팝업과 바로 견주어집니다. */
+  .rt-boot{position:absolute;inset:0;z-index:12000;display:none;
+    align-items:center;justify-content:center;background:var(--bg);}
+  .rt-boot.on{display:flex;}
+  /* 화면 전제를 덮을 때는 이보다 포지 영에요스었지만, 막이 패널 안으로
+     들어오면서 무둘게 콘다(주인 지적). 지면 폭이 800px 끔이니 마켤는
+     그 사분의 일 정도로 두고, 글자는 사이트의 작은 라바이 쌕는 크기에 맞춘다. */
+  .rt-boot-in{width:min(196px,58vw);display:flex;flex-direction:column;align-items:center;gap:9px;}
+  .rt-boot-label{font-family:var(--mono);font-size:10px;font-weight:800;
+    letter-spacing:.16em;color:var(--text);}
+  .rt-boot-track{width:100%;height:14px;padding:2px;
+    border:1px solid var(--border);background:var(--bg);border-radius:var(--radius-sm);}
+  .rt-boot-bar{height:100%;width:4%;background:var(--accent);}
+  .rt-boot.on .rt-boot-bar{animation:rt-boot-fill 2.6s cubic-bezier(.12,.86,.22,1) forwards;}
+  @keyframes rt-boot-fill{from{width:4%;} to{width:90%;}}
+  .rt-boot.rt-off{opacity:0;transition:opacity .22s ease;}
+  @media (prefers-reduced-motion:reduce){
+    .rt-boot.on .rt-boot-bar{animation:none;width:62%;}
+    .rt-boot.rt-off{transition:none;}
+  }
+
+  /* ---- 링크 복사 단추 ----
+     ⋮ 와 나란히 서고, ⋮ 는 body.logged-in 에서만 보이므로
+     보기 모드에서는 이 단추가 그 자리를 그대로 차지합니다.
+     평소에는 회색으로 물러서 있다가 손이 닿으면 살아나는 ⋮ 와 같은 방식입니다 —
+     그림글자가 제 색을 들고 오면 한 지면에서 혼자 튜어나옵니다. */
+  .rt-link-btn{flex:none;width:22px;height:26px;margin-right:5px;padding:0;border:0;
+    background:transparent;font-size:12.5px;line-height:1;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+    filter:grayscale(1);opacity:.5;transition:opacity .16s ease,filter .16s ease;}
+  .rt-link-btn:hover{opacity:1;filter:grayscale(0);}
+  /* 복사된 순간만 — 글쇠 하나가 체크로 바뀝니다(알림 창을 띄우지 않는 까닭은
+     rtFlashLink 쪽 주석에). 그림글자가 아니라 글자이므로 회색 걸기를 풉니다. */
+  .rt-link-btn.rt-link-done{opacity:1;filter:none;color:var(--accent);
+    font-size:13px;font-weight:800;}
+  /* 고치는 중에는 없습니다 — 아직 저장되지 않은 글의 링크는 쓸 데가 없습니다 */
+  .arcd-editing .rt-link-btn{display:none;}
+
+  /* ---- 없는 글 ---- */
+  .rt-404{min-height:58vh;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:7px;text-align:center;padding:40px 20px;}
+  .rt-404-mark{font-family:var(--mono);font-size:44px;font-weight:800;
+    letter-spacing:.06em;line-height:1;color:var(--accent);}
+  .rt-404-text{margin:8px 0 0;font-size:13.5px;font-weight:700;color:var(--text);}
+  .rt-404-sub{margin:0;font-size:11.5px;color:var(--text-muted);}
+  .rt-404-home{margin-top:16px;padding:8px 18px;background:transparent;
+    border:1px solid var(--border);border-radius:var(--radius-sm);
+    font-family:var(--mono);font-size:11.5px;color:var(--text);cursor:pointer;
+    transition:background .16s ease,color .16s ease;}
+  .rt-404-home:hover{background:var(--text);color:var(--bg);}
