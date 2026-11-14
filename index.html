@@ -69,7 +69,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
-<link rel="stylesheet" href="css/style.css?v=252" />
+<link rel="stylesheet" href="css/style.css?v=253" />
 </head>
 <body>
 <div class="app-window">
@@ -796,6 +796,8 @@
             <button class="mg-tab active" type="button" data-mgpane="list">LIST</button>
             <span class="mg-tab-dot" aria-hidden="true">·</span>
             <button class="mg-tab" type="button" data-mgpane="add">ADD</button>
+            <span class="mg-tab-dot" aria-hidden="true">·</span>
+            <button class="mg-tab" type="button" data-mgpane="design">DESIGN</button>
           </div>
         </div>
       </div>
@@ -838,6 +840,59 @@
               <button class="btn-primary" type="button" id="wgNewSave">추가</button>
             </div>
           </div>
+        </div>
+        <!-- 디자인 — 팝업으로 띄운 위젯 **전부**의 겉모습. 왼쪽 미리보기는 진짜 팝업과
+             같은 규칙(.wg-pop · .wg-mini)을 그대로 입은 견본이라, 고르는 즉시 같이
+             바뀝니다. 값은 main.js 의 applyWgDesign 이 :root 변수로 적습니다. -->
+        <div class="mg-pane" data-mgpane="design">
+          <div class="wgd">
+            <div class="wgd-prev">
+              <span class="wg-prev-tag">미리보기</span>
+              <div class="wg-pop wg-design-demo">
+                <div class="wg-pop-bar">
+                  <span class="wg-pop-btn"><svg class="wg-mk" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5h10M3 8h10M3 11h10"/></svg></span>
+                  <span class="wg-pop-name">Widget</span>
+                  <span class="wg-pop-btn"><svg class="wg-mk" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9"/></svg></span>
+                  <span class="wg-pop-btn"><svg class="wg-mk" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></span>
+                </div>
+                <div class="wg-pop-body"><p class="wgd-demo-text">팝업 위젯은 이렇게 보여요. 상단바를 끌어 옮기고, ─ 로 작게 접어요.</p></div>
+              </div>
+              <span class="wg-prev-tag">작게 접었을 때</span>
+              <span class="wg-mini wg-design-mini" id="wgdMini"></span>
+            </div>
+            <div class="wgd-opts">
+              <div class="wg-row sb-row">
+                <span class="wg-row-name">외곽선</span>
+                <span class="wg-row-ctl"><button class="wg-chip" type="button" id="wgdBorder"></button></span>
+              </div>
+              <div class="wg-row sb-row">
+                <span class="wg-row-name">그림자</span>
+                <span class="wg-row-ctl wgd-shadow">
+                  <input type="range" class="mb-vol" id="wgdShadowAmt" min="0" max="100" step="1" aria-label="그림자 농도" />
+                  <span class="snd-vol-n" id="wgdShadowN"></span>
+                  <button class="wg-chip" type="button" id="wgdShadow"></button>
+                </span>
+              </div>
+              <div class="wg-row sb-row">
+                <span class="wg-row-name">상단바 색</span>
+                <span class="wg-row-ctl wgd-cols">
+                  <label class="dd-col"><span>바탕</span><input type="color" id="wgdBarBg" /></label>
+                  <label class="dd-col"><span>글자</span><input type="color" id="wgdBarFg" /></label>
+                  <button class="wg-chip" type="button" id="wgdColReset">기본으로</button>
+                </span>
+              </div>
+              <div class="wg-row sb-row wgd-picks-row">
+                <span class="wg-row-name">상단바 모양</span>
+                <span class="wg-row-ctl"><span class="opt-picks" id="wgdBarPicks"></span></span>
+              </div>
+              <div class="wg-row sb-row wgd-picks-row">
+                <span class="wg-row-name">작게 한 단추</span>
+                <span class="wg-row-ctl"><span class="opt-picks" id="wgdDockPicks"></span></span>
+              </div>
+            </div>
+          </div>
+          <p class="mg-note">팝업으로 띄운 위젯 전부에 같이 적용돼요. '오른쪽 아래에 모으기' 를 켜면
+            작게 접은 단추가 위젯 목록 차례대로 아래에서부터 쌓이고, 끌어 옮길 수는 없어요.</p>
         </div>
       </div>
     </section>
@@ -1444,6 +1499,19 @@
   </div>
 </div>
 
+<!-- 단어사전 — 위젯 목록의 ⚙ 에서 열립니다. 장마다 사진을 보일지 고릅니다. -->
+<div class="modal-overlay" id="modalDictOpt">
+  <div class="modal gf-modal">
+    <button class="modal-close" type="button" data-close="modalDictOpt">✕</button>
+    <h3>단어사전</h3>
+    <div class="dict-opt-list" id="dictOptList"></div>
+    <p class="mg-note">감춰도 사진은 지우지 않아요. 다시 '보임'으로 돌리면 그대로 나와요.</p>
+    <div class="form-actions">
+      <button type="button" class="btn-primary" data-close="modalDictOpt">닫기</button>
+    </div>
+  </div>
+</div>
+
 <!-- 뮤직 모양 — 위젯 목록의 ⚙ 에서 열립니다 -->
 <div class="modal-overlay" id="modalMusicOpt">
   <div class="modal">
@@ -1813,7 +1881,7 @@
        (그 목록을 만드는 것도 JS인데 새 CSS 가 감싸이지 않은 select 를 폭 0 으로
        접습니다), 스티커 서랍이 엉뚱한 자리에 놓였습니다.
        **CSS 와 JS 를 함께 고쳤으면 번호도 함께 올리세요.** -->
-<script src="js/main.js?v=252"></script>
-<script type="module" src="js/firebase-store.js?v=121"></script>
+<script src="js/main.js?v=253"></script>
+<script type="module" src="js/firebase-store.js?v=122"></script>
 </body>
 </html>

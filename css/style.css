@@ -388,6 +388,10 @@
   .dd-row{display:flex;align-items:center;gap:10px;padding:10px 2px;
     border-bottom:1px solid var(--rule-soft);}
   .dd-row:last-child{border-bottom:0;}
+  /* 순서 바꾸기 손잡이(::) — 위젯 목록과 같은 .wg-grip. 끄는 줄은 살짝 띄워 보입니다 */
+  .dd-row .dd-grip{cursor:grab;align-self:center;}
+  .dd-row.dd-reordering{background:var(--surface);position:relative;z-index:1;}
+  .dd-row.dd-reordering .dd-grip{cursor:grabbing;color:var(--accent);opacity:1;}
   .dd-thumb{flex:none;width:44px;height:30px;border-radius:var(--radius-sm);
     background:var(--surface-2) center/cover no-repeat;}
   .dd-fields{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:5px;}
@@ -551,6 +555,17 @@
     background:var(--surface-2) center/cover no-repeat;overflow:hidden;}
   .dict-photo.dict-photo-empty{background-image:none;}
   .dict-widget:not(.dict-can-edit) .dict-photo.dict-photo-empty{display:none;}
+  /* ⚙ 에서 이 장의 사진을 감춘 경우 — 편집 화면에서도 감춥니다 */
+  .dict-widget .dict-photo.dict-photo-hidden{display:none;}
+  /* 단어사전 ⚙ 창의 줄 */
+  .dict-opt-list{display:flex;flex-direction:column;max-height:50vh;overflow-y:auto;}
+  .dict-opt-row{cursor:default;flex-wrap:nowrap;}
+  .dict-opt-no{flex:none;font-family:var(--mono);font-size:10px;color:var(--text-muted);
+    font-variant-numeric:tabular-nums;}
+  .dict-opt-thumb{width:40px;height:26px;}
+  .dict-opt-word{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .dict-opt-empty{color:var(--text-muted);}
+  .dict-opt-row .wg-chip:disabled{opacity:.45;cursor:default;}
   /* ＋사진 / 사진(바꾸기) 은 조정 칸이 가진 단추입니다(.adj-empty / .adj-change).
      바꾸기를 **지우기 왼쪽**에 나란히 두려고 둘을 한 줄에 담았습니다. */
   .dict-photo .adj-empty{position:absolute;inset:0;display:none;align-items:center;
@@ -832,6 +847,9 @@
      같은 서체(KoPub 돋움)인데도 .modal h3 의 letter-spacing 때문에 달라 보였습니다 */
   #modalMusic h3{letter-spacing:0;}
   #modalCardLink h3{letter-spacing:0;}
+  /* 위젯 ⚙ 창들도 제목이 한글입니다(디데이 · 뮤직 플레이어 · 단어사전).
+     #modalMusic 은 지금 #modalMusicOpt 로 이름이 바뀌어 위 줄이 닿지 않았습니다. */
+  #modalDday h3,#modalMusicOpt h3,#modalDictOpt h3{letter-spacing:0;}
   /* '게시글 작성 / 게시글 수정' 도 같은 이유입니다 — 한글 제목에 .04em 이 붙어
      사이트의 다른 한글보다 자간이 넓어 보였습니다. */
   #stickerModalHeading{letter-spacing:0;}
@@ -988,23 +1006,46 @@
   .widget-pops{position:static;}
   /* overflow:hidden — 가장자리까지 꽉 채우는 위젯(디데이 배너)이 상자의 둥근
      모서리를 삐져나가지 않게 깎아 줍니다. 팝업 안에서 넘쳐야 하는 것은 없습니다. */
+  /* 외곽선·그림자·상단바 색은 WIDGET › DESIGN 에서 고르는 값입니다(main.js 의
+     applyWgDesign 이 :root 에 변수로 적습니다). 변수가 없을 때의 기본값이 곧
+     예전 모양입니다 — 고른 적이 없으면 아무것도 달라지지 않습니다. */
   .wg-pop{position:fixed;z-index:70;width:236px;box-sizing:border-box;overflow:hidden;
-    background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);
-    box-shadow:0 6px 20px rgba(0,0,0,.14);}
+    background:var(--bg);border:1px solid var(--wp-border, var(--border));border-radius:var(--radius);
+    box-shadow:var(--wp-shadow, 0 6px 20px rgba(0,0,0,.14));}
   /* 제목줄이 곧 손잡이입니다. 끌기는 **스티커와 같은 포인터 방식** —
      브라우저 기본 드래그는 끌리는 그림이 반투명해지고 손댈 수 없습니다. */
   .wg-pop-bar{display:flex;align-items:center;gap:6px;padding:6px 6px 6px 8px;
+    background:var(--wp-bar-bg, transparent);
     border-bottom:1px solid var(--rule-soft);cursor:grab;touch-action:none;user-select:none;}
+  /* 상단바 모양 — 선 없음 */
+  :root[data-wp-bar="plain"] .wg-pop-bar{border-bottom-color:transparent;}
+  /* 상단바 모양 — 올릴 때만. 상자 위에 겹쳐 두고 감췄다가 마우스를 올리면(또는 끄는
+     동안) 나타납니다. 겹쳐 두는 까닭: 자리를 접었다 펴면 상자 키가 바뀌어 아래
+     위젯이 출렁입니다. 바탕을 고르지 않았으면 흰 바탕을 깔아 내용 위에서도 읽히게 합니다. */
+  :root[data-wp-bar="hover"] .wg-pop-bar{position:absolute;top:0;left:0;right:0;z-index:2;
+    background:var(--wp-bar-solid, var(--bg));opacity:0;transition:opacity .18s ease;}
+  :root[data-wp-bar="hover"] .wg-pop:hover .wg-pop-bar,
+  :root[data-wp-bar="hover"] .wg-pop.wg-dragging .wg-pop-bar{opacity:1;}
+  /* 마우스가 없는 기기(태블릿)에서는 올릴 수가 없어 손잡이가 영영 안 보입니다 —
+     거기서는 늘 보이게 둡니다. */
+  @media (hover:none){
+    :root[data-wp-bar="hover"] .wg-pop-bar{position:static;opacity:1;}
+  }
   .wg-pop.wg-dragging .wg-pop-bar{cursor:grabbing;}
   /* ☰ 는 이제 '사이드바로 되돌리기' 단추입니다(보기만 하던 표식이 아닙니다) */
   .wg-pop-home{margin-right:2px;}
   .wg-pop-grip{flex:none;display:flex;color:var(--text-muted);opacity:.6;}
   .wg-pop-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
     font-family:var(--mono);font-size:10px;font-weight:500;text-transform:uppercase;
-    letter-spacing:.14em;color:var(--text-muted);}
+    letter-spacing:.14em;color:var(--wp-bar-fg, var(--text-muted));}
   .wg-pop-btn{flex:none;width:20px;height:20px;padding:0;display:flex;align-items:center;
-    justify-content:center;background:transparent;border:none;border-radius:0;color:var(--text-muted);}
+    justify-content:center;background:transparent;border:none;border-radius:0;
+    color:var(--wp-bar-fg, var(--text-muted));}
   .wg-pop-btn:hover{color:var(--text);}
+  /* 글자색을 골랐으면 그 색 위에서 '진하게' 대신 살짝 흐렸다 돌아오는 것으로 반응합니다 —
+     밝은 글자색에 검정 hover 는 바탕과 섞여 사라집니다. */
+  :root[data-wp-fg="1"] .wg-pop-btn{opacity:.75;}
+  :root[data-wp-fg="1"] .wg-pop-btn:hover{color:var(--wp-bar-fg);opacity:1;}
   .wg-pop-off:hover{color:#c0392b;}
   /* 표식 셋(≡ — ✕)은 전부 직접 그린 그림입니다 — Pretendard 에 없는 기호라
      글자로 두면 기기·배율마다 위아래로 흔들립니다(✦ 에서 겪은 그대로). */
@@ -1050,10 +1091,12 @@
      (끌지 않았으면 누른 것으로 봅니다 — 스티커와 같은 규칙). */
   .wg-mini{position:fixed;z-index:70;width:38px;height:38px;padding:0;
     display:flex;align-items:center;justify-content:center;
-    background:var(--bg);border:1px solid var(--border);border-radius:50%;
-    box-shadow:0 4px 12px rgba(0,0,0,.14);color:var(--text-muted);
+    background:var(--bg);border:1px solid var(--wp-border, var(--border));border-radius:50%;
+    box-shadow:var(--wp-mini-shadow, 0 4px 12px rgba(0,0,0,.14));color:var(--text-muted);
     cursor:grab;touch-action:none;}
   .wg-mini:hover{color:var(--accent);border-color:var(--accent);}
+  /* 오른쪽 아래에 모아 두었으면 끌리지 않습니다 — 누르는 단추일 뿐입니다 */
+  :root[data-wp-dock="1"] .wg-mini{cursor:pointer;}
   .wg-mini.wg-dragging{cursor:grabbing;}
   .wg-mini-ico{width:17px;height:17px;}
   .wg-ico{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.4;
@@ -1279,6 +1322,23 @@
 
   .mg-note{margin:14px 0 0;font-family:var(--mono);font-size:10px;letter-spacing:.02em;
     color:var(--text-muted);}
+
+  /* ---------- 위젯: DESIGN ----------
+     왼쪽은 견본, 오른쪽은 조절 줄. 견본은 진짜 팝업과 같은 규칙(.wg-pop/.wg-mini)을
+     입고 자리만 흐름 안에 둡니다(진짜는 position:fixed). */
+  .wgd{display:flex;gap:28px;align-items:flex-start;}
+  .wgd-prev{flex:none;display:flex;flex-direction:column;gap:8px;padding:6px 6px 10px;}
+  .wg-pop.wg-design-demo{position:relative;z-index:auto;}
+  .wg-design-demo .wg-pop-bar{cursor:default;}
+  .wgd-demo-text{margin:0;padding:0 0 14px;font-family:var(--mono);font-size:11.5px;
+    line-height:1.6;color:var(--text);}
+  .wg-mini.wg-design-mini{position:static;cursor:default;}
+  .wgd-opts{flex:1;min-width:0;}
+  .wgd-opts .sb-row{flex-wrap:nowrap;}
+  .wgd-opts .wg-row-name{flex:none;width:96px;}
+  .wgd-opts .wg-row-ctl{flex:1;display:flex;flex-wrap:wrap;align-items:center;gap:8px;justify-content:flex-end;}
+  .wgd-shadow .mb-vol{flex:1;width:auto;max-width:180px;margin:0;}
+  .wgd-cols{gap:12px;}
   /* 추가 장 */
   /* 폭을 다 씁니다. 560px 로 묶어 두었더니 오른쪽에 쓸모없는 빈 자리가 넓게
      남았습니다(주인 지적) — 글줄이 아니라 **코드 칸**이라 좁힐 까닭이 없습니다. */
@@ -4648,6 +4708,14 @@
     .wg-row{gap:6px;padding:10px 2px;flex-wrap:wrap;}
     .wg-row-id{flex:1 1 100%;order:-1;}
     .wg-chip{height:30px;padding:0 9px;}
+    /* DESIGN — 폰에서는 견본을 위에, 조절 줄을 아래에 둡니다.
+       (팝업 자체는 폰에서 뜨지 않지만, 고르는 것은 폰에서도 할 수 있게 둡니다) */
+    .wgd{flex-direction:column;gap:6px;}
+    .wgd-prev{align-self:center;}
+    .wgd-opts{width:100%;}
+    .wgd-opts .sb-row{flex-wrap:wrap;}
+    .wgd-opts .wg-row-name{width:auto;flex:1 1 100%;}
+    .wgd-opts .wg-row-ctl{justify-content:flex-start;}
     /* 좁으니 두 모습을 위아래로 */
     .wg-prev{flex-direction:column;padding-left:0;}
     /* 설정 칸들도 좁은 화면에서는 위아래로 */

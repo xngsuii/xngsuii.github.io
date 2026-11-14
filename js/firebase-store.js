@@ -87,7 +87,10 @@ const SCALAR_KEYS = ['profile', 'siteName', 'homeIntro', 'homeBanner', 'archiveS
                      'recentCfg',
                      /* 비밀 폴더 전역 비밀번호 — SHA-256 해시 글자 하나입니다.
                         폴더마다 따로 두던 pwHash 를 대신합니다(주인 결정). */
-                     'secretPw'];
+                     'secretPw',
+                     /* 팝업 위젯의 겉모습 — 외곽선·그림자·상단바·작게 한 단추 자리.
+                        글자 몇 개뿐입니다. */
+                     'wgDesign'];
 const LIST_KEYS   = ['cards', 'pairPosts', 'archive', 'ocPosts'];
 
 /* Firestore 문서 1개 최대 1MiB. 여유를 두고 자릅니다. */

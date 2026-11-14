@@ -402,7 +402,9 @@ let state = {
   /* 단어사전 한 쪽 */
   dictWord:null,
   /* 최신글 위젯 설정 — {source, count} */
-  recentCfg:{ source:'all', count:5 }
+  recentCfg:{ source:'all', count:5 },
+  /* 팝업 위젯의 겉모습 — WIDGET › DESIGN (normalizeWgDesign) */
+  wgDesign:null
 };
 
 /* ---- PROMPT 폴더 ----
@@ -809,6 +811,7 @@ async function loadState(){
   state.ddayCfg = normalizeDdayCfg(await storageGet('ddayCfg', null));
   state.dictWord = normalizeDictWords(await storageGet('dictWord', null));
   state.recentCfg = normalizeRecentCfg(await storageGet('recentCfg', null));
+  state.wgDesign = normalizeWgDesign(await storageGet('wgDesign', null));
   state.ocCats = normalizeOcCats(await storageGet('ocCats', null), await storageGet('ocFolders', null));
   state.ocPosts = (await storageGet('ocPosts', [])).map(migrateOcPost);
   /* 카테고리가 이제 필수라, 없어졌거나 유효하지 않은 카테고리를 가리키는 글은
@@ -857,6 +860,8 @@ function renderAll(){
   renderStickers();
   /* 저장된 그림자 설정을 화면과 체크칸에 맞춥니다 (renderStickers 는 화면만 봅니다) */
   applyStickerShadow();
+  safely('팝업 모양', applyWgDesign);   // 작게 한 단추를 모으는 자리가 이 값을 봅니다 — 위젯보다 먼저
+  safely('디자인 칸', renderDesignPane);
   renderWidgets();
   applyCursors();
   applyCursorFx();
@@ -11456,7 +11461,10 @@ const WG_BUILTIN = [
     el:()=> document.getElementById('recentWidget'),
     opt:()=> openRecentOpt() },
   { id:'dict',    name:'단어사전', icon:'star',
-    el:()=> document.getElementById('dictWidget') }
+    el:()=> document.getElementById('dictWidget'),
+    /* 설정은 '장마다 사진 보이기' 하나뿐입니다. 단어·뜻은 내용이라 계속 위젯
+       안에서 그 자리에 적습니다(위 설명) — 사진을 보일지는 모양이라 여기 둡니다. */
+    opt:()=> openDictOpt() }
 ];
 function wgOptOf(id){ const b = wgBuiltin(id); return (b && b.opt) || null; }
 function wgNoPhone(id){ const b = wgBuiltin(id); return !!(b && b.noPhone); }
@@ -11741,10 +11749,161 @@ function wgPlacePopup(w, el, pops){
   wgMoveTo(box, w);
 }
 
+/* ============================================================
+   팝업 겉모습 (WIDGET › DESIGN)
+   ------------------------------------------------------------
+   **팝업 전부에 같이 걸립니다** — 위젯마다 다르게 두면 화면에 뜬 상자들이 서로
+   딴 사이트처럼 보입니다. 값은 CSS 변수로 :root 에 적고 CSS 가 그 변수를 씁니다
+   (.wg-pop / .wg-mini / DESIGN 장의 미리보기가 같은 규칙을 봅니다).
+     border    외곽선                      true / false
+     shadow    그림자                      true / false
+     shadowAmt 그림자 농도 0~100            35 = 예전 값(투명도 .14)
+     barBg     상단바 바탕색  '' = 없음(상자와 같은 흰색)
+     barFg     상단바 글자색  '' = 기본 회색
+     bar       상단바 모양   line 선 있음 / plain 선 없음 / hover 올릴 때만
+     dock      작게 한 단추   false 제자리(끌어 옮김) / true 오른쪽 아래에 모으기
+   **여기 적지 않은 항목은 불러올 때마다 지워집니다** — normalize* 공통 지뢰. */
+const WG_BAR_STYLES = [
+  { key:'line',  name:'선 있음' },
+  { key:'plain', name:'선 없음' },
+  { key:'hover', name:'올릴 때만' }
+];
+const WG_DOCK_MODES = [
+  { key:'free', name:'제자리' },
+  { key:'dock', name:'오른쪽 아래에 모으기' }
+];
+function normalizeWgDesign(v){
+  const col = (x)=> /^#[0-9a-fA-F]{6}$/.test(String(x || '')) ? String(x).toLowerCase() : '';
+  const amt = parseInt(v && v.shadowAmt, 10);
+  return {
+    border:    !(v && v.border === false),
+    shadow:    !(v && v.shadow === false),
+    shadowAmt: Number.isFinite(amt) ? clamp(amt, 0, 100) : 35,
+    barBg:     col(v && v.barBg),
+    barFg:     col(v && v.barFg),
+    bar:       WG_BAR_STYLES.some(s=> s.key === (v && v.bar)) ? v.bar : 'line',
+    dock:      !!(v && v.dock)
+  };
+}
+function wgDesign(){
+  if(!state.wgDesign) state.wgDesign = normalizeWgDesign(null);
+  return state.wgDesign;
+}
+function saveWgDesign(){ return storageSet('wgDesign', state.wgDesign); }
+/* 농도 35 가 예전 그림자(.14)와 같도록 250 으로 나눕니다. 100 이면 .4 */
+function applyWgDesign(){
+  const d = wgDesign();
+  const root = document.documentElement;
+  const a = (d.shadowAmt / 250).toFixed(3);
+  /* 외곽선을 끌 때 선을 없애지 않고 투명하게 둡니다 — 1px 이 빠지면 상자 안쪽
+     폭이 2px 늘어 디데이 배너처럼 꽉 채우는 위젯의 비율이 달라집니다. */
+  root.style.setProperty('--wp-border', d.border ? 'var(--border)' : 'transparent');
+  root.style.setProperty('--wp-shadow', d.shadow ? '0 6px 20px rgba(0,0,0,' + a + ')' : 'none');
+  root.style.setProperty('--wp-mini-shadow', d.shadow ? '0 4px 12px rgba(0,0,0,' + a + ')' : 'none');
+  root.style.setProperty('--wp-bar-bg', d.barBg || 'transparent');
+  /* '올릴 때만' 은 글 위에 겹쳐 뜨므로 바탕이 비어 있으면 흰 바탕을 깝니다 */
+  root.style.setProperty('--wp-bar-solid', d.barBg || 'var(--bg)');
+  root.style.setProperty('--wp-bar-fg', d.barFg || 'var(--text-muted)');
+  root.dataset.wpBar = d.bar;
+  root.dataset.wpFg = d.barFg ? '1' : '';
+  root.dataset.wpDock = d.dock ? '1' : '';
+}
+/* ---- DESIGN 장 ----
+   바꾸는 즉시 진짜 팝업과 견본이 함께 바뀝니다(둘 다 :root 변수를 봅니다).
+   '작게 한 단추' 만은 자리가 JS 몫이라 위젯을 다시 그려 줍니다. */
+const WGD_FG_DEFAULT = '#767676';   // --text-muted 와 같은 값 — 색 고르개가 빈 값을 못 받아서 보여 주기용
+const WGD_BG_DEFAULT = '#ffffff';   // --bg
+function renderDesignPane(){
+  const d = wgDesign();
+  const chip = (id, on, onText, offText)=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.textContent = on ? onText : offText;
+    el.classList.toggle('wg-chip-on', on);
+  };
+  chip('wgdBorder', d.border, '보임', '없음');
+  chip('wgdShadow', d.shadow, '켬', '끔');
+  const amt = document.getElementById('wgdShadowAmt');
+  if(amt){ amt.value = d.shadowAmt; amt.disabled = !d.shadow; }
+  const n = document.getElementById('wgdShadowN');
+  if(n) n.textContent = d.shadow ? d.shadowAmt : '–';
+  const bg = document.getElementById('wgdBarBg');
+  if(bg) bg.value = d.barBg || WGD_BG_DEFAULT;
+  const fg = document.getElementById('wgdBarFg');
+  if(fg) fg.value = d.barFg || WGD_FG_DEFAULT;
+  const reset = document.getElementById('wgdColReset');
+  if(reset) reset.disabled = !d.barBg && !d.barFg;
+  const picks = (boxId, list, cur, set)=>{
+    const box = document.getElementById(boxId);
+    if(!box) return;
+    box.innerHTML = '';
+    list.forEach(o=>{
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'opt-pick' + (cur === o.key ? ' active' : '');
+      b.textContent = o.name;
+      b.addEventListener('click', ()=>{ set(o.key); });
+      box.appendChild(b);
+    });
+  };
+  picks('wgdBarPicks', WG_BAR_STYLES, d.bar, (k)=>{ wgDesign().bar = k; wgdCommit(); });
+  picks('wgdDockPicks', WG_DOCK_MODES, d.dock ? 'dock' : 'free',
+    (k)=>{ wgDesign().dock = (k === 'dock'); wgdCommit(true); });
+  const mini = document.getElementById('wgdMini');
+  if(mini && !mini.firstChild) mini.innerHTML = wgIconSvg('note', 'wg-ico wg-mini-ico');
+}
+/* relayout: 작게 한 단추의 자리가 바뀌는 값이면 위젯을 다시 놓습니다 */
+function wgdCommit(relayout){
+  applyWgDesign();
+  renderDesignPane();
+  if(relayout) renderWidgets();
+  if(isLoggedIn) saveWgDesign();
+}
+function initDesignPane(){
+  const on = (id, ev, fn)=>{ const el = document.getElementById(id); if(el) el.addEventListener(ev, fn); };
+  on('wgdBorder', 'click', ()=>{ wgDesign().border = !wgDesign().border; wgdCommit(); });
+  on('wgdShadow', 'click', ()=>{ wgDesign().shadow = !wgDesign().shadow; wgdCommit(); });
+  /* 끄는 동안에는 화면만 바꾸고, 손을 떼면 저장합니다 */
+  on('wgdShadowAmt', 'input', (e)=>{
+    wgDesign().shadowAmt = clamp(parseInt(e.target.value, 10) || 0, 0, 100);
+    applyWgDesign();
+    const n = document.getElementById('wgdShadowN'); if(n) n.textContent = wgDesign().shadowAmt;
+  });
+  on('wgdShadowAmt', 'change', ()=> wgdCommit());
+  /* 색 — 고르는 동안(input)은 보여 주기만, 닫을 때(change) 저장합니다 */
+  on('wgdBarBg', 'input', (e)=>{ wgDesign().barBg = e.target.value; applyWgDesign(); });
+  on('wgdBarBg', 'change', ()=> wgdCommit());
+  on('wgdBarFg', 'input', (e)=>{ wgDesign().barFg = e.target.value; applyWgDesign(); });
+  on('wgdBarFg', 'change', ()=> wgdCommit());
+  on('wgdColReset', 'click', ()=>{ wgDesign().barBg = ''; wgDesign().barFg = ''; wgdCommit(); });
+}
+initDesignPane();
+
+/* 오른쪽 아래에 모을 때의 자리 — 위젯 목록 차례대로 아래에서 위로 쌓습니다.
+   최소화한 차례가 아니라 목록 차례인 까닭: 누를 때마다 자리가 바뀌면 손이
+   기억할 수가 없습니다. */
+const WG_DOCK_GAP = 8, WG_DOCK_EDGE = 16;
+function wgDockPos(w){
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const docked = (state.widgets || []).filter(o=> o.where === 'popup' && o.on && o.min);
+  const i = Math.max(0, docked.indexOf(w));
+  return { x: vw - WG_DOCK_EDGE - WG_MINI_PX,
+           y: vh - WG_DOCK_EDGE - WG_MINI_PX - i * (WG_MINI_PX + WG_DOCK_GAP) };
+}
+function wgDocked(box){ return !!(box && box.classList.contains('wg-mini') && wgDesign().dock); }
+
 /* 화면 안에 가둔 채로 자리를 잡습니다. 자리를 정한 적이 없으면 오른쪽 위에서
-   차례로 비껴 놓습니다 — 셋을 띄워도 완전히 겹치지 않게. */
+   차례로 비껴 놓습니다 — 셋을 띄워도 완전히 겹치지 않게.
+   오른쪽 아래에 모으기를 켜 두었으면 작은 단추는 저장된 자리 대신 모으는 자리에
+   섭니다(저장된 x/y 는 그대로 두어, 다시 펼치면 팝업이 원래 자리에 열립니다). */
 function wgMoveTo(box, w){
   const vw = window.innerWidth, vh = window.innerHeight;
+  if(wgDocked(box)){
+    const p = wgDockPos(w);
+    box.style.left = Math.round(p.x) + 'px';
+    box.style.top  = Math.round(p.y) + 'px';
+    return;
+  }
   const bw = box.offsetWidth  || (w.min ? WG_MINI_PX : WG_POP_W);
   const bh = box.offsetHeight || (w.min ? WG_MINI_PX : 160);
   let x = w.x, y = w.y;
@@ -11768,12 +11927,17 @@ function wgBindDrag(box, id, handle){
     const w = wgFind(id); if(!w) return;
     const r = box.getBoundingClientRect();
     const dx = e.clientX - r.left, dy = e.clientY - r.top;
+    /* 오른쪽 아래에 모아 둔 단추는 끌리지 않습니다 — 누르면 펼쳐질 뿐입니다.
+       끌어서 옮기게 두면 '모으기' 가 깨지고, 놓는 순간 저장된 팝업 자리까지
+       모으는 자리로 덮어씁니다. */
+    const docked = wgDocked(box);
     let moved = false;
     wgPopDragging = true;
     box.classList.add('wg-dragging');
     const move = (ev)=>{
       if(ev.pointerId !== e.pointerId) return;   // 창에서 받으므로 다른 손가락은 거릅니다
       if(Math.abs(ev.clientX - e.clientX) + Math.abs(ev.clientY - e.clientY) > 3) moved = true;
+      if(docked) return;
       w.x = ev.clientX - dx;
       w.y = ev.clientY - dy;
       wgMoveTo(box, w);
@@ -11784,6 +11948,10 @@ function wgBindDrag(box, id, handle){
       window.removeEventListener('pointercancel', up, true);
       box.classList.remove('wg-dragging');
       wgPopDragging = false;
+      if(docked){
+        if(!moved) wgSetMin(id, false);
+        return;
+      }
       /* 가둔 뒤의 값을 저장합니다 — 화면 밖으로 끌어다 놓고 새로고침하면
          영영 안 보이는 일을 막습니다. */
       const r2 = box.getBoundingClientRect();
@@ -13284,7 +13452,10 @@ function renderDdayManage(){
   (state.ddays || []).forEach(it=>{
     const row = document.createElement('div');
     row.className = 'dd-row';
+    row.dataset.ddid = it.id;
     row.innerHTML =
+      /* 순서 바꾸기 손잡이 — 위젯 목록의 :: 와 같은 모양·같은 방식(포인터로 끌기) */
+      '<button class="wg-grip dd-grip" type="button" title="끌어서 순서 바꾸기"><span aria-hidden="true">::</span></button>' +
       '<span class="dd-thumb"></span>' +
       '<span class="dd-fields">' +
         '<input type="text" class="dd-name" placeholder="이름" maxlength="30" />' +
@@ -13319,6 +13490,7 @@ function renderDdayManage(){
       renderDdayManage(); renderDday();
       if(isLoggedIn) saveDdays();
     });
+    ddBindReorder(row.querySelector('.dd-grip'), row, box);
     box.appendChild(row);
   });
   if(!(state.ddays || []).length){
@@ -13327,6 +13499,54 @@ function renderDdayManage(){
     n.textContent = '아직 없어요. ＋ 추가로 만들어 주세요.';
     box.appendChild(n);
   }
+}
+/* 디데이 순서 바꾸기 — 위젯 목록(wgBindReorder)과 같은 포인터 방식입니다.
+   끄는 동안에는 줄 하나만 옮기고(다시 그리지 않음), 놓을 때 화면의 차례를 그대로
+   목록의 차례로 삼습니다. 배너가 넘기는 차례도 이 순서를 따릅니다.
+   보고 있던 디데이는 자리가 바뀌어도 그대로 보이게 ddayIdx 를 따라 옮깁니다. */
+function ddBindReorder(handle, row, box){
+  if(!handle) return;
+  handle.addEventListener('pointerdown', (e)=>{
+    if(e.button !== 0) return;
+    e.preventDefault();
+    const startY = e.clientY;
+    let moved = false;
+    row.classList.add('dd-reordering');
+    const move = (ev)=>{
+      if(ev.pointerId !== e.pointerId) return;
+      if(!moved && Math.abs(ev.clientY - startY) < 4) return;
+      moved = true;
+      const sibs = Array.from(box.querySelectorAll('.dd-row')).filter(n=> n !== row);
+      let before = null;
+      for(const n of sibs){
+        const r = n.getBoundingClientRect();
+        if(ev.clientY < r.top + r.height / 2){ before = n; break; }
+      }
+      const play = flipByKey(box, '.dd-row', 'ddid');
+      if(before) box.insertBefore(row, before); else box.appendChild(row);
+      play();
+    };
+    const up = ()=>{
+      window.removeEventListener('pointermove', move, true);
+      window.removeEventListener('pointerup', up, true);
+      window.removeEventListener('pointercancel', up, true);
+      row.classList.remove('dd-reordering');
+      if(!moved) return;
+      const order = Array.from(box.querySelectorAll('.dd-row')).map(n=> n.dataset.ddid);
+      const list = state.ddays || [];
+      const next = order.map(id=> list.find(x=> x.id === id)).filter(Boolean);
+      if(next.length !== list.length){ renderDdayManage(); return; }
+      const cur = list[ddayIdx];
+      state.ddays = next;
+      const at = cur ? next.indexOf(cur) : -1;
+      if(at >= 0) ddayIdx = at;
+      renderDday();
+      if(isLoggedIn) saveDdays();
+    };
+    window.addEventListener('pointermove', move, true);
+    window.addEventListener('pointerup', up, true);
+    window.addEventListener('pointercancel', up, true);
+  });
 }
 async function ddayPickPhoto(it){
   /* pickImageFile 은 고른 그림의 주소를 돌려줍니다(부르는 쪽에 넘기지 않습니다) */
@@ -13660,7 +13880,11 @@ function normalizeDictWord(v){
     pos:   Array.isArray(v && v.pos) ? v.pos.filter(x=> DICT_POS.includes(x)) : [],
     means: means.length ? means : [''],
     ex:    String((v && v.ex)    || '').slice(0, 300),
-    photo: normalizeImg(v && v.photo)
+    photo: normalizeImg(v && v.photo),
+    /* 이 장의 사진을 감출지 — 위젯 목록의 ⚙ 에서 장마다 고릅니다(주인 요청).
+       감춰도 사진은 지우지 않습니다. **여기서 옮겨 주지 않으면 불러올 때마다
+       지워집니다** — normalize* 공통 지뢰. */
+    hidePhoto: !!(v && v.hidePhoto)
   };
 }
 /* **여러 장입니다.** 예전에는 한 장만 담겨 났습니다 — 그때 써 둔 것은 객체 하나라,
@@ -13814,6 +14038,9 @@ function renderDict(){
   /* 사진 — 배너·카드와 같은 조정 칸입니다(두 번 누르면 자리를 맞춥니다) */
   const ph = document.getElementById('dictPhoto');
   ph.classList.toggle('dict-photo-empty', !d.photo || !d.photo.src);
+  /* ⚙ 에서 이 장의 사진을 감춰 두었으면 편집 화면에서도 감춥니다 — 감춘 장을
+     고칠 때 사진 칸이 다시 나타나면 '감춘 것' 이 무엇인지 헷갈립니다. */
+  ph.classList.toggle('dict-photo-hidden', !!d.hidePhoto);
   const adj = ensureDictAdj();
   if(adj) adj.paint();
 
@@ -13887,6 +14114,51 @@ function renderDict(){
      막히고, 위젯 목록 안에서는 '새 장 만들기'라 마지막 장에서도 남아 있습니다. */
   wrap.classList.toggle('dict-no-prev', dictIdx <= 0);
   wrap.classList.toggle('dict-no-next', !dictEditable() && dictIdx >= pages.length - 1);
+}
+/* ---- 단어사전 ⚙ — 장마다 사진 보이기/감추기 ----
+   줄마다 [번호] [작은 사진] [단어] [보임/숨김]. 바꾸면 바로 위젯에 반영됩니다.
+   빈 장(막 만든 장)도 줄로 나옵니다 — 지우는 것은 여기서 하지 않습니다(내용을
+   다 지우면 넘길 때 사라지는 기존 규칙을 그대로 둡니다). */
+function renderDictOpt(){
+  const box = document.getElementById('dictOptList');
+  if(!box) return;
+  box.innerHTML = '';
+  dictPages().forEach((d, i)=>{
+    const row = document.createElement('div');
+    row.className = 'wg-row sb-row dict-opt-row';
+    row.innerHTML =
+      '<span class="dict-opt-no"></span>' +
+      '<span class="dd-thumb dict-opt-thumb"></span>' +
+      '<span class="wg-row-name dict-opt-word"></span>' +
+      '<span class="wg-row-ctl"><button class="wg-chip" type="button"></button></span>';
+    row.querySelector('.dict-opt-no').textContent = String(i + 1).padStart(2, '0');
+    const word = (d.word || '').trim();
+    const w = row.querySelector('.dict-opt-word');
+    w.textContent = word || '(빈 장)';
+    w.classList.toggle('dict-opt-empty', !word);
+    const th = row.querySelector('.dict-opt-thumb');
+    const src = d.photo && d.photo.src;
+    if(src){
+      const u = imgUrl(src);
+      if(u) th.style.backgroundImage = 'url("' + u + '")';
+      whenImgArrives(src, th, ()=>{ th.style.backgroundImage = 'url("' + imgUrl(src) + '")'; });
+    }
+    const chip = row.querySelector('.wg-chip');
+    const on = !d.hidePhoto;
+    chip.textContent = !src ? '사진 없음' : (on ? '사진 보임' : '사진 숨김');
+    chip.classList.toggle('wg-chip-on', !!src && on);
+    chip.disabled = !src;
+    chip.addEventListener('click', ()=>{
+      d.hidePhoto = !d.hidePhoto;
+      renderDictOpt(); renderDict();
+      if(isLoggedIn) saveDictWord();
+    });
+    box.appendChild(row);
+  });
+}
+function openDictOpt(){
+  renderDictOpt();
+  openModal('modalDictOpt');
 }
 let dictAdj = null;
 function ensureDictAdj(){
