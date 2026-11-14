@@ -69,7 +69,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
-<link rel="stylesheet" href="css/style.css?v=250" />
+<link rel="stylesheet" href="css/style.css?v=251" />
 </head>
 <body>
 <div class="app-window">
@@ -686,6 +686,8 @@
             <button class="mg-tab" type="button" data-mgpane="sound">SOUND</button>
             <span class="mg-tab-dot" aria-hidden="true">·</span>
             <button class="mg-tab" type="button" data-mgpane="sidebar">SIDEBAR</button>
+            <span class="mg-tab-dot" aria-hidden="true">·</span>
+            <button class="mg-tab" type="button" data-mgpane="lock">LOCK</button>
           </div>
         </div>
       </div>
@@ -760,6 +762,28 @@
             </span>
           </div>
           <p class="mg-note">이름을 비우면 원래 이름으로 돌아가요.</p>
+        </div>
+
+        <!-- ---- 비밀 폴더 비밀번호 ----
+             폴더마다 걸던 비밀번호를 사이트에 하나로 모았습니다(주인 결정).
+             저장되는 것은 해시뿐이라 여기서 지금 비밀번호를 보여 줄 수는 없습니다 —
+             '정해져 있음 / 아직 없음' 만 알려 주고, 바꾸려면 새로 적습니다. -->
+        <div class="mg-pane" data-mgpane="lock">
+          <div class="wg-row sb-row">
+            <span class="wg-row-name">비밀 폴더 비밀번호</span>
+            <span class="wg-row-ctl"><span class="lock-state" id="lockState"></span></span>
+          </div>
+          <div class="lock-form">
+            <input type="password" class="wg-name-input" id="lockPw" placeholder="새 비밀번호" autocomplete="new-password" />
+            <input type="password" class="wg-name-input" id="lockPw2" placeholder="한 번 더" autocomplete="new-password" />
+            <button class="btn-primary" type="button" id="lockSave">저장</button>
+          </div>
+          <div class="lock-msg" id="lockMsg"></div>
+          <p class="mg-note">
+            모든 비밀 폴더가 이 비밀번호 하나로 열려요. 한 번 맞히면 그 방문 동안은
+            다른 비밀 폴더도 다시 묻지 않아요. 비밀번호는 그대로 저장하지 않아서
+            여기서 다시 볼 수는 없어요 — 잊어버리면 새로 정하면 돼요.
+          </p>
         </div>
       </div>
     </section>
@@ -1628,11 +1652,10 @@
         <span class="gf-switch-track"><span class="gf-switch-knob"></span></span>
         <span class="gf-switch-label">🔒 비밀 폴더</span>
       </label>
-      <div class="gf-hint">폴더 이름 앞에 자물쇠가 붙고, 비밀번호를 입력해야 열립니다.</div>
-      <div class="form-row gf-pw-row" id="gfPwRow" style="display:none;">
-        <input type="password" id="gfPw" placeholder="비밀번호" autocomplete="new-password" />
-        <div class="gf-hint gf-pw-keep" id="gfPwKeep" style="display:none;">비워두면 기존 비밀번호를 유지합니다.</div>
-      </div>
+      <div class="gf-hint">폴더 이름 앞에 자물쇠가 붙고, SETTING › LOCK 에서 정한 비밀번호로 열립니다.</div>
+      <!-- 폴더마다 비밀번호를 걸던 칸은 없앴습니다 — 비밀번호는 사이트에 하나입니다.
+           아직 정하지 않았으면 이 줄이 알려 줍니다(그동안 비밀 폴더는 아무도 못 엽니다). -->
+      <div class="gf-hint gf-pw-missing" id="gfPwMissing" style="display:none;">아직 비밀번호가 없어요. SETTING › LOCK 에서 먼저 정해 주세요 — 그 전에는 아무도 이 폴더를 열 수 없어요.</div>
     </div>
 
     <div class="gf-option">
@@ -1660,10 +1683,8 @@
   <div class="modal login-modal">
     <button class="modal-close" data-close>✕</button>
     <h3>비밀 폴더</h3>
-    <!-- 바깥 폴더 — 글이 든 PAIR·OC 가 비밀 폴더에 있고, 그 안의 LOG 폴더까지
-         잠겨 있을 때만 나옵니다. 둘 다 맞추어야 열립니다.
-         위가 바깥(PAIR·OC), 아래가 안쪽(LOG) — 들어가는 순서 그대로입니다. -->
-    <div class="form-row fu-hide" id="fuOuterRow"><label id="fuOuterName">폴더</label><input type="password" id="fuOuterPw" placeholder="비밀번호" autocomplete="off" /></div>
+    <!-- 칸은 하나입니다 — 비밀번호가 사이트에 하나라, 자물쇠가 둘 겹친 경우
+         (비밀 폴더 안의 글 속 비밀 LOG 폴더)도 한 번에 다 열립니다. -->
     <div class="form-row"><label id="fuFolderName">폴더</label><input type="password" id="fuPw" placeholder="비밀번호" autocomplete="off" /></div>
     <div class="login-error" id="fuError">비밀번호가 일치하지 않습니다.</div>
     <div class="form-actions"><button class="btn-ghost" data-close>취소</button><button class="btn-primary" id="fuSubmitBtn">열기</button></div>
@@ -1799,7 +1820,7 @@
        (그 목록을 만드는 것도 JS인데 새 CSS 가 감싸이지 않은 select 를 폭 0 으로
        접습니다), 스티커 서랍이 엉뚱한 자리에 놓였습니다.
        **CSS 와 JS 를 함께 고쳤으면 번호도 함께 올리세요.** -->
-<script src="js/main.js?v=250"></script>
-<script type="module" src="js/firebase-store.js?v=120"></script>
+<script src="js/main.js?v=251"></script>
+<script type="module" src="js/firebase-store.js?v=121"></script>
 </body>
 </html>

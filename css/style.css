@@ -1160,6 +1160,15 @@
   .sb-row{cursor:default;}
   .sb-row .wg-row-name{flex:1;}
   .sb-name{max-width:180px;}
+  /* ---------- 설정: 비밀 폴더 비밀번호 (LOCK) ---------- */
+  .lock-state{font-family:var(--mono);font-size:11px;color:var(--text-muted);}
+  .lock-state.on{color:var(--accent);font-variation-settings:'wght' 700;font-weight:700;}
+  .lock-form{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:12px 2px 0;}
+  .lock-form .wg-name-input{width:170px;height:30px;border-color:var(--rule-soft);}
+  .lock-form .wg-name-input:focus{border-color:var(--accent);outline:none;}
+  .lock-form .btn-primary{height:30px;min-height:0;padding:0 14px;display:inline-flex;align-items:center;}
+  .lock-msg{min-height:16px;padding:6px 2px 0;font-family:var(--mono);font-size:11px;color:var(--text-muted);}
+  .lock-msg.err{color:var(--accent);}
   /* 게이지 숨기기 — [data-editonly] 규칙보다 뒤에, 더 무겁게 적습니다 */
   body.no-storage-meter .storage-meter[data-editonly]{display:none;}
 
@@ -3587,7 +3596,8 @@
   .gf-switch input:focus-visible + .gf-switch-track{outline:2px solid var(--accent);outline-offset:2px;}
   .gf-switch-label{font-size:12px;font-weight:700;color:var(--text);}
   .gf-hint{font-size:10.5px;color:var(--text-muted);margin-top:6px;line-height:1.5;}
-  .gf-pw-row{margin-top:8px;margin-bottom:0;}
+  /* 비밀번호를 아직 안 정했을 때의 안내 — 놓치면 폴더가 열리지 않으므로 강조색 */
+  .gf-pw-missing{color:var(--accent);margin-top:6px;}
   .gf-actions{align-items:center;}
   .gf-actions-spacer{flex:1;}
   /* 지우는 단추. 신호색(--accent)을 그대로 쓰지 않고 한 단 어두운 붉은색을
@@ -4655,7 +4665,10 @@
     /* 같은 산수, 폰 값으로: 왼쪽 7.4+1.6=9 / 오른쪽 3+2+gap 4=9 */
     .smi-lead{letter-spacing:.2em;margin-left:7.4px;margin-right:3px;}
     .smi{letter-spacing:.08em;}
-    .mg-tab{height:40px;}
+    /* LOCK 이 다섯째 탭으로 들어오면서 폰(375px)에서 줄이 26px 넘쳤습니다 —
+       자간(.16em → .08em)과 탭 사이(7 → 5px)를 줄여 한 줄에 들어가게 합니다. */
+    .mg-tab{height:40px;letter-spacing:.08em;}
+    .mg-tabs{gap:5px;}
     .ns-add-row{padding:8px 8px 8px 10px;}
     .ns-add-ok,.ns-add-cancel{width:36px;height:36px;font-size:14px;}
     .ns-add-input{padding:9px 10px;font-size:13px;}

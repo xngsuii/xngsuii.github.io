@@ -84,7 +84,10 @@ const SCALAR_KEYS = ['profile', 'siteName', 'homeIntro', 'homeBanner', 'archiveS
                      /* 단어사전 위젯 한 쪽 — 단어·발음·품사·뜻·예문·사진. */
                      'dictWord',
                      /* 최신글 위젯 설정 — {source, count}. 아주 작습니다. */
-                     'recentCfg'];
+                     'recentCfg',
+                     /* 비밀 폴더 전역 비밀번호 — SHA-256 해시 글자 하나입니다.
+                        폴더마다 따로 두던 pwHash 를 대신합니다(주인 결정). */
+                     'secretPw'];
 const LIST_KEYS   = ['cards', 'pairPosts', 'archive', 'ocPosts'];
 
 /* Firestore 문서 1개 최대 1MiB. 여유를 두고 자릅니다. */

@@ -395,6 +395,8 @@ let state = {
   navNames:{},
   /* STORAGE 게이지를 사이드바에 둘지 */
   showStorage:true,
+  /* 비밀 폴더 전역 비밀번호의 해시. 비어 있으면 '아직 안 정함' */
+  secretPw:'',
   /* 디데이 배너 — [{id,name,date,note,photo}] */
   ddays:[],
   /* 단어사전 한 쪽 */
@@ -802,6 +804,7 @@ async function loadState(){
   state.clickSound = normalizeClickSound(await storageGet('clickSound', null));
   state.navNames = normalizeNavNames(await storageGet('navNames', null));
   state.showStorage = (await storageGet('showStorage', true)) !== false;
+  { const sp = await storageGet('secretPw', ''); state.secretPw = (typeof sp === 'string') ? sp : ''; }
   state.ddays = normalizeDdays(await storageGet('ddays', null));
   state.ddayCfg = normalizeDdayCfg(await storageGet('ddayCfg', null));
   state.dictWord = normalizeDictWords(await storageGet('dictWord', null));
@@ -6385,8 +6388,18 @@ function getFolder(p, folderId){ return p.galleryFolders.find(f=>f.id===folderId
 /* ---- 비밀 폴더 ----
    주의: Firestore 읽기는 공개이므로 이 비밀번호는 "실제 보안"이 아니다.
    이미지 자체도 공개적으로 읽을 수 있어, 화면에서 가리는 용도(소프트 잠금)일 뿐이다.
-   그래도 평문 저장은 피하려고 SHA-256 해시만 저장한다. */
-const unlockedFolders = new Set();   // 이 세션에서 열어둔 폴더 (새로고침하면 초기화)
+   그래도 평문 저장은 피하려고 SHA-256 해시만 저장한다.
+
+   ---- 비밀번호는 사이트에 하나입니다 (전역 비밀번호) ----
+   예전에는 폴더마다 비밀번호(folder.pwHash)를 따로 걸었습니다. 지금은 SETTING
+   > LOCK 에서 정한 하나(state.secretPw)로 모든 비밀 폴더가 열리고, **한 번 맞히면
+   그 방문 동안 모든 비밀 폴더가 함께 열립니다**(주인 결정). 폴더에 남아 있는
+   예전 pwHash 는 더 읽지 않습니다 — 지우지는 않았습니다(데이터를 건드릴 까닭이
+   없습니다).
+   **전역 비밀번호가 아직 없어도 비밀 폴더는 잠겨 있습니다.** 그때는 아무 비밀번호로도
+   열리지 않습니다. 반대로 하면(없으면 열어 둠) 이 바뀐 판이 올라가는 순간 주인이
+   비밀번호를 정하기 전까지 비밀 폴더가 모두에게 열려 버립니다. */
+let secretUnlocked = false;   // 이 방문에서 비밀번호를 맞혔는지 (새로고침하면 초기화)
 
 async function hashPw(str){
   const buf = new TextEncoder().encode('gf:'+str);
@@ -6394,10 +6407,10 @@ async function hashPw(str){
   return Array.from(new Uint8Array(h)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 function folderLocked(f){
+  if(!f || !f.secret) return false;
   // 관리자(편집 모드)는 폴더를 관리해야 하므로 잠금을 통과한다
-  if(!f || !f.secret || !f.pwHash) return false;
   if(isLoggedIn) return false;
-  return !unlockedFolders.has(f.id);
+  return !secretUnlocked;
 }
 
 /* ---- 폴더 추가/수정 모달 ----
@@ -6503,7 +6516,6 @@ function openFolderModal(ctx, folder){
   nameEl.value = folder ? folder.name : '';
   document.getElementById('gfSecret').checked = !!(folder && folder.secret);
   document.getElementById('gfBlur').checked   = !!(folder && folder.blur);
-  document.getElementById('gfPw').value = '';
   document.getElementById('gfError').style.display='none';
   const blurHint = document.getElementById('gfBlurHint');
   if(blurHint) blurHint.innerText = ctx.blurHint;
@@ -6515,9 +6527,7 @@ function openFolderModal(ctx, folder){
   const secretOpt = document.getElementById('gfSecret').closest('.gf-option');
   if(secretOpt) secretOpt.style.display = ctx.hideSecret ? 'none' : '';
   if(ctx.hideSecret) document.getElementById('gfSecret').checked = false;
-  // 기존 비밀번호가 있으면 "비워두면 유지" 안내를 보여준다
-  document.getElementById('gfPwKeep').style.display = (folder && folder.pwHash) ? 'block' : 'none';
-  document.getElementById('gfPwRow').style.display  = document.getElementById('gfSecret').checked ? 'block' : 'none';
+  syncGfPwMissing();
   // 삭제 버튼은 기존 폴더를 수정할 때만, 그리고 지울 수 있는 폴더일 때만
   const delBtn=document.getElementById('gfDeleteBtn');
   const warn=document.getElementById('gfDeleteWarn');
@@ -6532,13 +6542,19 @@ function openFolderModal(ctx, folder){
   setTimeout(()=> document.getElementById('gfName').focus(), 30);
 }
 
+/* 비밀 폴더를 켰는데 전역 비밀번호가 아직 없으면 그렇다고 알립니다 */
+function syncGfPwMissing(){
+  const el = document.getElementById('gfPwMissing');
+  const secret = document.getElementById('gfSecret');
+  if(el && secret) el.style.display = (secret.checked && !state.secretPw) ? 'block' : 'none';
+}
 function initFolderModal(){
-  const secret=document.getElementById('gfSecret'), pwRow=document.getElementById('gfPwRow');
+  const secret=document.getElementById('gfSecret');
   const nameInput=document.getElementById('gfName'), err=document.getElementById('gfError');
   const saveBtn=document.getElementById('gfSaveBtn');
   if(!secret || !saveBtn) return;
 
-  secret.addEventListener('change', ()=>{ pwRow.style.display = secret.checked ? 'block' : 'none'; });
+  secret.addEventListener('change', syncGfPwMissing);
 
   const showErr=(msg)=>{ err.innerText=msg; err.style.display='block'; };
 
@@ -6551,30 +6567,21 @@ function initFolderModal(){
     const name = nameInput.value.trim();
     if(!name){ showErr((ctx.label||'폴더')+' 이름을 입력해주세요.'); nameInput.focus(); return; }
     const wantSecret = secret.checked;
-    const typedPw = document.getElementById('gfPw').value;
-    const hadHash = folder && folder.pwHash;
-    if(wantSecret && !typedPw && !hadHash){ showErr('비밀 폴더는 비밀번호가 필요합니다.'); return; }
+    /* 비밀번호는 폴더가 아니라 사이트에 하나입니다(SETTING › LOCK).
+       폴더의 pwHash 는 더 쓰지 않으므로 손대지 않습니다 — 새 폴더는 빈 값으로 둡니다. */
 
     saving = true;
     saveBtn.disabled = true;
-    let pwHash = folder ? (folder.pwHash||'') : '';
-    if(!wantSecret) pwHash = '';
-    else if(typedPw) pwHash = await hashPw(typedPw);
 
     const wantBlur = document.getElementById('gfBlur').checked;
     if(folder){
       folder.name = name;
       folder.secret = wantSecret;
-      folder.pwHash = pwHash;
       folder.blur = wantBlur;
-      // 비밀번호가 바뀌었으면 이 세션의 열람 기록도 지운다
-      if(typedPw) unlockedFolders.delete(folder.id);
     }else{
-      const created = ctx.newFolder({ name, secret:wantSecret, pwHash, blur:wantBlur });
+      const created = ctx.newFolder({ name, secret:wantSecret, pwHash:'', blur:wantBlur });
       ctx.getList().push(created);
       ctx.onCreate(created);
-      // 만든 사람은 편집 모드라서 어차피 바로 보인다.
-      // 여기서 unlockedFolders 에 넣으면 로그아웃 후에도 열린 상태로 남으므로 넣지 않는다.
     }
     await ctx.save();
     closeModal('modalGalleryFolder');
@@ -6585,7 +6592,6 @@ function initFolderModal(){
 
   saveBtn.addEventListener('click', save);
   nameInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') save(); });
-  document.getElementById('gfPw').addEventListener('keydown', (e)=>{ if(e.key==='Enter') save(); });
 
   /* 폴더 삭제 — 안에 든 이미지가 함께 사라지므로 한 번 더 확인받는다.
      브라우저 기본 confirm 창 대신 모달 안에서 두 번 눌러 확인하는 방식. */
@@ -6602,7 +6608,6 @@ function initFolderModal(){
       warn.style.display='block';
       return;
     }
-    unlockedFolders.delete(folder.id);
     await ctx.onDelete(folder);
     await ctx.save();
     closeModal('modalGalleryFolder');
@@ -6626,48 +6631,33 @@ function fuRows(v){
 }
 function openFolderUnlock(folder, onOk){
   const list = fuRows(folder);
-  /* 풀 것이 없으면 묻지 않고 그대로 엽니다 — 관리자이거나 이미 푼 폴더입니다 */
+  /* 풀 것이 없으면 묻지 않고 그대로 엽니다 — 관리자이거나 이미 푼 방문입니다 */
   if(!list.length){ if(onOk) onOk(); return; }
-  const outerRow = document.getElementById('fuOuterRow');
-  const two = list.length > 1;
-  outerRow.classList.toggle('fu-hide', !two);
-  /* 칸이 하나면 지금까지처럼 폴더 이름만 적습니다 — 괜히 길어질 까닭이 없습니다 */
-  const name = (x)=> two ? (x.label || x.folder.name) : x.folder.name;
-  const rows = [];
-  if(two){
-    document.getElementById('fuOuterName').innerText = name(list[0]);
-    document.getElementById('fuOuterPw').value = '';
-    rows.push(Object.assign({}, list[0], { input:document.getElementById('fuOuterPw') }));
-  }
-  const inner = two ? list[1] : list[0];
-  document.getElementById('fuFolderName').innerText = name(inner);
+  /* 비밀번호가 하나라 칸도 하나입니다. 자물쇠가 둘 겹쳐 있으면(링크로 바로 들어온
+     비밀 폴더 속 비밀 LOG 폴더) 안쪽 폴더 이름을 적습니다 — 보려던 것이 그쪽입니다. */
+  const inner = list[list.length - 1];
+  document.getElementById('fuFolderName').innerText = list.length > 1
+    ? (inner.label || inner.folder.name) : inner.folder.name;
   document.getElementById('fuPw').value = '';
-  rows.push(Object.assign({}, inner, { input:document.getElementById('fuPw') }));
-  fuTarget = { rows, onOk };
+  fuTarget = { onOk };
   document.getElementById('fuError').style.display = 'none';
   openModal('modalFolderUnlock');
-  setTimeout(()=> rows[0].input.focus(), 30);
+  setTimeout(()=> document.getElementById('fuPw').focus(), 30);
 }
 function initFolderUnlock(){
   const pw=document.getElementById('fuPw'), btn=document.getElementById('fuSubmitBtn'), err=document.getElementById('fuError');
   if(!pw || !btn) return;
   const submit = async ()=>{
     if(!fuTarget) return;
-    const rows = fuTarget.rows;
-    /* **둘 다 맞아야 엽니다.** 하나라도 틀리면 어느 쪽이 틀렸는지 집어 줍니다 —
-       칸이 둘이면 '비밀번호가 다릅니다' 만으로는 어느 칸인지 알 수 없습니다. */
-    for(const r of rows){
-      const h = await hashPw(r.input.value);
-      if(h !== r.folder.pwHash){
-        err.innerText = rows.length > 1
-          ? '‘' + r.folder.name + '’ 의 비밀번호가 일치하지 않습니다.'
-          : '비밀번호가 일치하지 않습니다.';
-        err.style.display = 'block';
-        r.input.select();
-        return;
-      }
+    /* 전역 비밀번호가 아직 없으면 어떤 값으로도 열리지 않습니다(위 folderLocked 설명) */
+    const h = await hashPw(pw.value);
+    if(!state.secretPw || h !== state.secretPw){
+      err.innerText = '비밀번호가 일치하지 않습니다.';
+      err.style.display = 'block';
+      pw.select();
+      return;
     }
-    rows.forEach(r=> unlockedFolders.add(r.folder.id));
+    secretUnlocked = true;   // 이 방문 동안 모든 비밀 폴더가 열립니다
     const cb = fuTarget.onOk;
     closeModal('modalFolderUnlock');
     fuTarget = null;
@@ -6675,8 +6665,6 @@ function initFolderUnlock(){
   };
   btn.addEventListener('click', submit);
   pw.addEventListener('keydown', (e)=>{ if(e.key==='Enter') submit(); });
-  const opw = document.getElementById('fuOuterPw');
-  if(opw) opw.addEventListener('keydown', (e)=>{ if(e.key==='Enter') submit(); });
 }
 
 /* ---- 폴더 탭 순서 바꾸기 (갤러리 / PROMPT / OC 공용) ----
@@ -12960,17 +12948,54 @@ function initSidebarPane(){
   });
 }
 
-/* 설정 화면을 켤 때 네 장을 한꺼번에 맞춥니다 */
+/* ---- LOCK: 비밀 폴더 전역 비밀번호 ----
+   저장되는 것은 hashPw 의 결과(해시)뿐입니다. 폴더마다 걸던 예전 방식과 같은
+   해시 함수라, 예전 비밀번호를 그대로 다시 적으면 같은 값이 됩니다. */
+function renderLockPane(){
+  const st = document.getElementById('lockState');
+  if(st){
+    st.textContent = state.secretPw ? '정해져 있음' : '아직 없음';
+    st.classList.toggle('on', !!state.secretPw);
+  }
+}
+function initLockPane(){
+  const p1 = document.getElementById('lockPw'), p2 = document.getElementById('lockPw2');
+  const btn = document.getElementById('lockSave'), msg = document.getElementById('lockMsg');
+  if(!p1 || !p2 || !btn || !msg) return;
+  const say = (text, err)=>{ msg.textContent = text; msg.classList.toggle('err', !!err); };
+  const save = async ()=>{
+    if(!isLoggedIn) return;
+    const a = p1.value, b = p2.value;
+    if(!a){ say('새 비밀번호를 적어 주세요.', true); p1.focus(); return; }
+    if(a !== b){ say('두 칸이 서로 달라요.', true); p2.select(); return; }
+    btn.disabled = true;
+    state.secretPw = await hashPw(a);
+    await storageSet('secretPw', state.secretPw);
+    btn.disabled = false;
+    p1.value = ''; p2.value = '';
+    renderLockPane();
+    say('저장했어요. 이제 모든 비밀 폴더가 이 비밀번호로 열려요.');
+  };
+  btn.addEventListener('click', save);
+  [p1, p2].forEach(el=> el.addEventListener('keydown', (e)=>{
+    e.stopPropagation();
+    if(e.key === 'Enter'){ e.preventDefault(); save(); }
+  }));
+}
+
+/* 설정 화면을 켤 때 다섯 장을 한꺼번에 맞춥니다 */
 function renderSettingPanes(){
   safely('커서 칸', renderCursorPane);
   safely('이펙트 칸', renderFxPane);
   safely('소리 칸', renderSoundPane);
   safely('사이드바 칸', renderSidebarPane);
+  safely('잠금 칸', renderLockPane);
 }
 initCursorPane();
 initFxPane();
 initSoundPane();
 initSidebarPane();
+initLockPane();
 
 /* ============================================================
    내장 위젯 — 디데이 · 최신글 · 단어사전
@@ -14913,7 +14938,7 @@ async function boot(){
     isLoggedIn = admin;
     // 로그인/로그아웃 시 비밀 폴더 열람 기록을 비운다.
     // (편집 모드에서 열어둔 폴더가 보기 모드로 돌아온 뒤에도 열려 있으면 안 된다)
-    unlockedFolders.clear();
+    secretUnlocked = false;
     applyEditMode();
     const post = getCurrentPost();
     if(post && pairDetailOpen()) renderGallery(post);
