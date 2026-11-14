@@ -4103,17 +4103,8 @@ function bindRichTextToolbars(){
       });
       const colorInput = tb.querySelector('.rt-color');
       if(colorInput) colorInput.oninput = (e)=>{ targetEl.focus(); document.execCommand('foreColor', false, e.target.value); };
-      /* 글자 크기 — ARCHIVE·LOG·OC 자유 글 칸과 같은 함수(stepFontSize)를 씁니다.
-         골라 둔 구간에만 걸리므로 mousedown 을 막아 선택이 풀리지 않게 합니다.
-         저장을 따로 부르지 않는 것도 B·I·색과 같습니다 — 커서가 칸을 빠져나갈
-         때 onblur 가 innerHTML 을 통째로 담아 갑니다(bindBodyText). */
-      tb.querySelectorAll('button[data-rt="sizeUp"],button[data-rt="sizeDown"]').forEach(btn=>{
-        btn.onmousedown = (e)=> e.preventDefault();
-        btn.onclick = ()=>{
-          targetEl.focus();
-          stepFontSize(tb.dataset.target, btn.dataset.rt === 'sizeUp' ? 1 : -1);
-        };
-      });
+      /* 글자 크기는 숫자 칸(.rt-size)이라 여기서 묶지 않습니다 — initSizeBoxes.
+         저장은 B·I·색과 같이 커서가 칸을 빠져나갈 때 onblur 가 합니다(bindBodyText). */
     }
     const addRowBtn = tb.querySelector('.rt-add-row');
     if(addRowBtn && metaEl){
@@ -6128,15 +6119,7 @@ let currentLogViewId = null;
   if(foldBtn) foldBtn.addEventListener('click', ()=> insertFoldBlock('logContent'));
   const heBtn = document.getElementById('logHtmlBtn');
   if(heBtn) heBtn.addEventListener('click', ()=> insertHtmlEmbed('logContent'));
-  /* 글자 크기 — OC 자유 글 칸의 단추와 같은 함수를 씁니다.
-     mousedown 을 막는 것이 중요합니다: stepFontSize 는 '골라 놓은 글'에
-     적용되므로, 단추를 누르며 커서가 옮겨 가면 아무 일도 일어나지 않습니다. */
-  ['logSizeUpBtn','logSizeDownBtn'].forEach((id,i)=>{
-    const b = document.getElementById(id);
-    if(!b) return;
-    b.addEventListener('mousedown', e=> e.preventDefault());
-    b.addEventListener('click', ()=> stepFontSize('logContent', i===0 ? 1 : -1));
-  });
+  /* 글자 크기는 숫자 칸(.rt-size)입니다 — initSizeBoxes */
   initFoldEnter('logContent');
   initCopyBoxKeys('logContent');
   /* 사진 삽입 — ARCHIVE 편집기와 같은 방식(본문 안에 data URL 로 넣습니다).
@@ -9431,14 +9414,19 @@ function selectionFontSize(editor){
    그 껍데기를 실제 크기를 적은 span 으로 바꿔 답니다.
    기준 크기는 execCommand 를 부르기 *전에* 재둬야 합니다 —
    크롬이 이미 걸려 있던 span 을 <font> 로 통째로 바꿔버리기 때문입니다. */
-function stepFontSize(editorId, delta){
+/* 글자 크기는 이제 숫자 칸 하나로 고칩니다(.rt-size — 아래 initSizeBoxes).
+   pick 은 지금 크기를 받아 새 크기를 돌려주는 함수입니다 — 숫자를 적으면
+   ()=>그 숫자, ↑↓ 는 b=>b±1. 골라 둔 글이 없으면 아무것도 하지 않고 false. */
+function stepFontSize(editorId, delta){ return applyFontSize(editorId, b=> b + delta); }
+function applyFontSize(editorId, pick){
   const editor=document.getElementById(editorId);
-  if(!editor) return;
+  if(!editor) return false;
   const sel=window.getSelection();
-  if(!sel || !sel.rangeCount || sel.isCollapsed) return;
-  if(!editor.contains(sel.getRangeAt(0).commonAncestorContainer)) return;
+  if(!sel || !sel.rangeCount || sel.isCollapsed) return false;
+  if(!editor.contains(sel.getRangeAt(0).commonAncestorContainer)) return false;
   const base=selectionFontSize(editor) || 12.5;
-  const next=clamp(base+delta, 8, 40);
+  const next=clamp(Math.round(pick(base) * 10) / 10, SIZE_MIN, SIZE_MAX);
+  if(!isFinite(next)) return false;
   document.execCommand('styleWithCSS', false, false);
   document.execCommand('fontSize', false, '7');
   const made=[];
@@ -9463,6 +9451,84 @@ function stepFontSize(editorId, delta){
     sel.removeAllRanges();
     sel.addRange(r);
   }
+  return made.length > 0;
+}
+
+/* ---- 글자 크기 숫자 칸 (.rt-size) ----
+   ˄ ˅ 단추 둘을 숫자 칸 하나로 바꿨습니다 — 1px 씩 눌러 올리는 것은 직관적이지
+   않아서 불편했습니다(주인 요청). 서식 줄 일곱 벌(ARCHIVE·LOG·OC 자유 글·메모 둘·
+   PAIR 프로필 둘)이 모두 이 함수 하나로 묶입니다. 어느 글 칸인지는 data-size-for.
+
+   · 글을 고르면 그 글의 지금 크기가 칸에 뜹니다(selectionchange).
+   · 칸에 숫자를 적고 Enter → 고른 글에 그 크기. 칸 안에서 ↑↓ → 1px 씩.
+   · **고른 구간은 칸이 기억해 둡니다.** 숫자 칸에 커서가 가는 순간 글 칸의
+     선택이 풀리기 때문에, 선택이 글 칸 안에서 바뀔 때마다 복사해 두었다가
+     적용할 때 되돌려 놓습니다. 단추는 mousedown 을 막아 선택을 지켰지만,
+     입력칸은 커서를 받아야 하므로 그 방법을 쓸 수 없습니다.
+   · 메모 칸은 커서가 빠질 때 화면을 새로 그려서(코드 블록 꾸미기) 기억한 구간이
+     사라집니다 — 그래서 커서가 이 칸으로 올 때만은 다시 그리지 않습니다
+     (fillMemoBox 의 onblur). */
+const SIZE_MIN = 8, SIZE_MAX = 40;
+function initSizeBoxes(){
+  const boxes = [...document.querySelectorAll('.rt-size[data-size-for]')];
+  if(!boxes.length) return;
+  const fmt = (px)=> px ? String(Math.round(px * 10) / 10) : '';
+  document.addEventListener('selectionchange', ()=>{
+    const sel = window.getSelection();
+    if(!sel || !sel.rangeCount) return;
+    const r = sel.getRangeAt(0);
+    boxes.forEach(box=>{
+      const ed = document.getElementById(box.dataset.sizeFor);
+      if(!ed || !ed.contains(r.commonAncestorContainer)) return;
+      box._range = r.cloneRange();
+      if(document.activeElement !== box) box.value = fmt(selectionFontSize(ed));
+    });
+  });
+  boxes.forEach(box=>{
+    const id = box.dataset.sizeFor;
+    /* 기억해 둔 구간을 글 칸에 되돌립니다. 그 사이 글 칸이 다시 그려졌으면
+       (구간이 떨어져 나갔으면) 되돌릴 수 없으니 false. */
+    const restore = ()=>{
+      const ed = document.getElementById(id);
+      const r = box._range;
+      if(!ed || !r || r.collapsed || !ed.contains(r.commonAncestorContainer)) return false;
+      ed.focus({preventScroll:true});
+      const sel = window.getSelection();
+      sel.removeAllRanges(); sel.addRange(r);
+      return true;
+    };
+    const apply = (pick)=>{
+      if(!restore()) return false;
+      const ok = applyFontSize(id, pick);
+      const sel = window.getSelection();
+      if(sel && sel.rangeCount) box._range = sel.getRangeAt(0).cloneRange();
+      box.value = fmt(selectionFontSize(document.getElementById(id)));
+      return ok;
+    };
+    box.addEventListener('focus', ()=> box.select());
+    box.addEventListener('keydown', (e)=>{
+      e.stopPropagation();   // 화면 단축키(Escape 로 나가기 등)가 받지 않게
+      if(e.key === 'Enter'){
+        e.preventDefault();
+        const v = parseFloat(String(box.value).replace(',', '.'));
+        if(!isFinite(v)) return;
+        apply(()=> v);         // 커서는 글 칸으로 돌아가 바뀐 글이 골라진 채로 남습니다
+      }else if(e.key === 'ArrowUp' || e.key === 'ArrowDown'){
+        e.preventDefault();
+        const d = e.key === 'ArrowUp' ? 1 : -1;
+        if(apply(b=> b + d)){ box.focus({preventScroll:true}); box.select(); }
+      }else if(e.key === 'Escape'){
+        e.preventDefault();
+        restore();             // 바꾸지 않고 글 칸으로 돌아갑니다
+      }
+    });
+    /* 칸을 떠날 때 글 칸으로 돌아가는 것이 아니면, 메모 칸이 건너뛴 다시 그리기를
+       해 둡니다(코드 블록이 원문 ``` 그대로 남지 않게). */
+    box.addEventListener('blur', (e)=>{
+      const ed = document.getElementById(id);
+      if(ed && ed._paint && e.relatedTarget !== ed) ed._paint();
+    });
+  });
 }
 /* 자유 글 서식 툴바 — OC 자유 텍스트 칸과 메모 칸이 함께 씁니다.
    툴바가 세 벌(OC 자유 글, OC 메모, PAIR 메모)이라 버튼을 id 로 찾을 수 없어,
@@ -9499,8 +9565,7 @@ function bindFreeToolbar(toolbar, editorId, save){
     const btn = toolbar.querySelector('[data-rt="'+key+'"]');
     if(btn) btn.addEventListener('click', ()=>{ enter(); fn(); save(); });
   };
-  on('sizeUp',   ()=> stepFontSize(editorId, 1));
-  on('sizeDown', ()=> stepFontSize(editorId, -1));
+  /* 글자 크기는 숫자 칸(.rt-size)이라 여기서 묶지 않습니다 — initSizeBoxes */
   on('fold',     ()=> insertFoldBlock(editorId));
   on('copybox',  ()=> insertCopyBox(editorId));
   on('divider',  ()=>{ editor.focus(); document.execCommand('insertHTML', false, '<hr><br>'); });
@@ -9544,7 +9609,16 @@ function fillMemoBox(editorId, obj, field, persist){
     obj[field] = html;
     persist();
   };
-  el.onblur = ()=>{ el._save(); paint(); };
+  el._paint = ()=>{ if(document.activeElement !== el) paint(); };
+  /* 글자 크기 숫자 칸으로 커서가 옮겨 갈 때는 다시 그리지 않습니다 — 다시 그리면
+     그 칸이 기억해 둔 구간이 사라져 크기를 적용할 수 없습니다(initSizeBoxes).
+     저장은 그대로 합니다. 숫자 칸을 떠날 때 다시 그려 줍니다(_paint). */
+  el.onblur = (e)=>{
+    el._save();
+    const to = e && e.relatedTarget;
+    if(to && to.classList && to.classList.contains('rt-size') && to.dataset.sizeFor === editorId) return;
+    paint();
+  };
 }
 function saveMemoBox(editorId){
   const el = document.getElementById(editorId);
@@ -10036,13 +10110,7 @@ if(arcDividerBtn){
   });
 }
 
-/* 글자 크기 — OC 자유 글 칸의 단추와 같은 함수(stepFontSize)를 씁니다 */
-['arcSizeUpBtn','arcSizeDownBtn'].forEach((id,i)=>{
-  const b = document.getElementById(id);
-  if(!b) return;
-  b.addEventListener('mousedown', e=> e.preventDefault());
-  b.addEventListener('click', ()=> stepFontSize('arcContentEditor', i===0 ? 1 : -1));
-});
+/* 글자 크기는 숫자 칸(.rt-size)입니다 — initSizeBoxes */
 const arcFoldBtn = document.getElementById('arcFoldBtn');
 if(arcFoldBtn){
   arcFoldBtn.addEventListener('mousedown', e=> e.preventDefault());
@@ -14933,6 +15001,7 @@ async function boot(){
   initDragEngine();
   initResponsiveWatch();
   initContentBlocks();
+  initSizeBoxes();
 
   window.SiteStore.onAuthChange((admin)=>{
     isLoggedIn = admin;

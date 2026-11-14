@@ -69,7 +69,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
-<link rel="stylesheet" href="css/style.css?v=251" />
+<link rel="stylesheet" href="css/style.css?v=252" />
 </head>
 <body>
 <div class="app-window">
@@ -907,8 +907,7 @@
                       <button type="button" data-cmd="bold"><b>B</b></button>
                       <button type="button" data-cmd="italic"><i>I</i></button>
                       <input type="color" class="rt-color" value="#1b1b1f" title="글자색" />
-                      <button type="button" data-rt="sizeUp" title="글자 크게"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 10.5 8 5.5l5 5"/></svg></button>
-                      <button type="button" data-rt="sizeDown" title="글자 작게"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5.5 8 10.5l5-5"/></svg></button>
+                      <input type="text" class="rt-size" data-size-for="pdCharIntro" inputmode="decimal" maxlength="4" placeholder="px" autocomplete="off" title="글자 크기(px) — 숫자를 적고 Enter, ↑↓ 로 1씩" aria-label="글자 크기" />
                     </div>
                     <div class="pd-desc-box">
                       <div class="meta-container" id="pdCharMeta"></div>
@@ -932,8 +931,7 @@
                       <button type="button" data-cmd="bold"><b>B</b></button>
                       <button type="button" data-cmd="italic"><i>I</i></button>
                       <input type="color" class="rt-color" value="#1b1b1f" title="글자색" />
-                      <button type="button" data-rt="sizeUp" title="글자 크게"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 10.5 8 5.5l5 5"/></svg></button>
-                      <button type="button" data-rt="sizeDown" title="글자 작게"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5.5 8 10.5l5-5"/></svg></button>
+                      <input type="text" class="rt-size" data-size-for="pdPersonaIntro" inputmode="decimal" maxlength="4" placeholder="px" autocomplete="off" title="글자 크기(px) — 숫자를 적고 Enter, ↑↓ 로 1씩" aria-label="글자 크기" />
                     </div>
                     <div class="pd-desc-box">
                       <div class="meta-container" id="pdPersonaMeta"></div>
@@ -1000,8 +998,7 @@
                     <button type="button" data-cmd="italic" title="이탤릭"><i>I</i></button>
                     <input type="color" class="rt-color" value="#1a1a1a" title="글자색" />
                     <span class="rt-sep"></span>
-                    <button type="button" data-rt="sizeUp" title="글자 크게"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 10.5 8 5.5l5 5"/></svg></button>
-                    <button type="button" data-rt="sizeDown" title="글자 작게"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5.5 8 10.5l5-5"/></svg></button>
+                    <input type="text" class="rt-size" data-size-for="pdMemo" inputmode="decimal" maxlength="4" placeholder="px" autocomplete="off" title="글자 크기(px) — 숫자를 적고 Enter, ↑↓ 로 1씩" aria-label="글자 크기" />
                     <button type="button" data-rt="fold" title="접기">▾</button>
                     <button type="button" data-cmd="blockquote" title="인용구">❝</button>
                     <button type="button" data-rt="divider" title="구분선">―</button>
@@ -1150,7 +1147,7 @@
               </div>
               <!-- 프로필 아래 — 따옴표로 감싼 대사 한 줄 (상자 없이 글자만) -->
               <div class="oc-quote"><span class="ocq-mark">"</span><span class="oc-quote-text" id="ocQuote" contenteditable="false"></span><span class="ocq-mark">"</span></div>
-              <!-- 자유 텍스트 서식 — ˄ ˅ 는 글자 크기를 1px 씩 올리고 내립니다 -->
+              <!-- 자유 텍스트 서식 — 숫자 칸(.rt-size)은 고른 글의 글자 크기(px)입니다 -->
               <div class="rt-toolbar rt-toolbar-ocfree" data-editonly>
                 <button type="button" data-cmd="bold" title="볼드"><b>B</b></button>
                 <button type="button" data-cmd="italic" title="이탤릭"><i>I</i></button>
@@ -1158,8 +1155,7 @@
                 <button type="button" data-cmd="strikeThrough" title="취소선"><s>S</s></button>
                 <input type="color" class="rt-color" value="#1a1a1a" title="글자색" />
                 <span class="rt-sep"></span>
-                <button type="button" data-rt="sizeUp" title="글자 크게"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 10.5 8 5.5l5 5"/></svg></button>
-                <button type="button" data-rt="sizeDown" title="글자 작게"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5.5 8 10.5l5-5"/></svg></button>
+                <input type="text" class="rt-size" data-size-for="ocFree" inputmode="decimal" maxlength="4" placeholder="px" autocomplete="off" title="글자 크기(px) — 숫자를 적고 Enter, ↑↓ 로 1씩" aria-label="글자 크기" />
                 <button type="button" data-rt="fold" title="접기">▾</button>
                 <button type="button" data-cmd="blockquote" title="인용구">❝</button>
                 <button type="button" data-rt="divider" title="구분선">―</button>
@@ -1206,8 +1202,7 @@
                     <button type="button" data-cmd="italic" title="이탤릭"><i>I</i></button>
                     <input type="color" class="rt-color" value="#1a1a1a" title="글자색" />
                     <span class="rt-sep"></span>
-                    <button type="button" data-rt="sizeUp" title="글자 크게"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 10.5 8 5.5l5 5"/></svg></button>
-                    <button type="button" data-rt="sizeDown" title="글자 작게"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5.5 8 10.5l5-5"/></svg></button>
+                    <input type="text" class="rt-size" data-size-for="ocMemo" inputmode="decimal" maxlength="4" placeholder="px" autocomplete="off" title="글자 크기(px) — 숫자를 적고 Enter, ↑↓ 로 1씩" aria-label="글자 크기" />
                     <button type="button" data-rt="fold" title="접기">▾</button>
                     <button type="button" data-cmd="blockquote" title="인용구">❝</button>
                     <button type="button" data-rt="divider" title="구분선">―</button>
@@ -1335,8 +1330,7 @@
           <button type="button" data-cmd="underline"><u>U</u></button>
           <button type="button" data-cmd="strikeThrough"><s>S</s></button>
           <input type="color" class="rt-color" id="arcColorInput" value="#1a1a1a" title="글자색" />
-          <button type="button" id="arcSizeUpBtn" title="글자 크게"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 10.5 8 5.5l5 5"/></svg></button>
-        <button type="button" id="arcSizeDownBtn" title="글자 작게"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5.5 8 10.5l5-5"/></svg></button>
+          <input type="text" class="rt-size" data-size-for="arcContentEditor" inputmode="decimal" maxlength="4" placeholder="px" autocomplete="off" title="글자 크기(px) — 숫자를 적고 Enter, ↑↓ 로 1씩" aria-label="글자 크기" />
           <span class="rt-sep"></span>
           <!-- 정렬 아이콘: 맞는 기호가 없어 얇은 선 네 줄로 직접 그립니다.
                긴 줄/짧은 줄이 번갈아 나오고, 짧은 줄이 붙는 쪽이 정렬 방향입니다. -->
@@ -1568,8 +1562,7 @@
       <div class="rt-toolbar rt-toolbar-log">
         <button type="button" data-cmd="bold" title="볼드"><b>B</b></button>
         <button type="button" data-cmd="italic" title="이탤릭"><i>I</i></button>
-        <button type="button" id="logSizeUpBtn" title="글자 크게"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 10.5 8 5.5l5 5"/></svg></button>
-        <button type="button" id="logSizeDownBtn" title="글자 작게"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5.5 8 10.5l5-5"/></svg></button>
+        <input type="text" class="rt-size" data-size-for="logContent" inputmode="decimal" maxlength="4" placeholder="px" autocomplete="off" title="글자 크기(px) — 숫자를 적고 Enter, ↑↓ 로 1씩" aria-label="글자 크기" />
         <button type="button" id="logSubColorBtn" title="보조색 적용">A</button>
         <button type="button" id="logHighlightBtn" title="형광펜">✎</button>
         <button type="button" id="logDividerBtn" title="구분선">―</button>
@@ -1820,7 +1813,7 @@
        (그 목록을 만드는 것도 JS인데 새 CSS 가 감싸이지 않은 select 를 폭 0 으로
        접습니다), 스티커 서랍이 엉뚱한 자리에 놓였습니다.
        **CSS 와 JS 를 함께 고쳤으면 번호도 함께 올리세요.** -->
-<script src="js/main.js?v=251"></script>
+<script src="js/main.js?v=252"></script>
 <script type="module" src="js/firebase-store.js?v=121"></script>
 </body>
 </html>

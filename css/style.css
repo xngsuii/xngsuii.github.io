@@ -3432,6 +3432,16 @@
      모두 가운데로 맞춰지고 나니 이것만 튀어 보여서 더 내려줍니다. */
   .rt-toolbar button[data-cmd="blockquote"]{padding-top:5.4px;}
   .rt-toolbar button:hover{background:var(--surface-2);}
+  /* 글자 크기 숫자 칸 — ˄ ˅ 단추 둘을 대신합니다(main.js initSizeBoxes).
+     단추와 같은 테두리·높이(24px)라 줄에 그대로 섞입니다. 폭은 '12.5' 가 들어가는
+     34px. 고른 글이 없으면 'px' 만 흐리게 보입니다. */
+  .rt-toolbar .rt-size{flex:none;width:34px;height:24px;padding:0 2px;margin:0;
+    border:1px solid var(--border);border-radius:0;background:var(--bg);
+    font-family:var(--mono);font-size:11px;line-height:1;text-align:center;color:var(--text);
+    font-variant-numeric:tabular-nums;}
+  .rt-toolbar .rt-size::placeholder{color:var(--text-muted);opacity:.7;}
+  .rt-toolbar .rt-size:hover{background:var(--surface-2);}
+  .rt-toolbar .rt-size:focus{outline:none;border-color:var(--accent);background:var(--bg);}
   /* 정렬 버튼 아이콘 — 맞는 기호가 없어 얇은 선으로 직접 그립니다.
      pointer-events 를 꺼야 클릭이 늘 버튼에 잡힙니다. */
   .rt-ico{width:15px;height:15px;flex:none;fill:none;stroke:currentColor;
@@ -4518,11 +4528,14 @@
        ☰(56) 는 어두운 배경(55) 보다 위, 서랍(60) 보다 아래에 둡니다.
        그래야 평소엔 눌리고, 서랍이 열리면 서랍에 가려집니다. */
     /* ❣ 칸(59px) 안에 들어가도록 왼쪽 4px — 기호만 덮고 글씨는 덮지 않습니다.
-       위 9px 은 40px 버튼을 59px 칸 가운데에 놓는 값입니다. */
+       위 13px 은 40px 버튼을 66px 머리줄 가운데(43)에 놓는 값입니다 —
+       예전 9px 은 59px 칸 시절 값이라, 머리줄이 66px 이 된 뒤로 ☰ 만 4px 떠
+       있었습니다(주인 지적: 제목·단추와 높이가 안 맞음). 머리줄 높이를 바꾸면
+       이 값도 (높이 − 40) / 2 로 다시 맞추세요. */
     /* ☰ 는 .app-shell 기준으로 자리를 잡는데, 절대 위치는 안쪽 여백 위에
        놓이므로 위에서 준 10px 만큼 직접 내려 줘야 머리줄과 같은 높이에 섭니다. */
     .mobile-menu-btn{display:flex;align-items:center;justify-content:center;
-      position:absolute;top:calc(19px + env(safe-area-inset-top));left:4px;width:40px;height:40px;z-index:56;
+      position:absolute;top:calc(23px + env(safe-area-inset-top));left:4px;width:40px;height:40px;z-index:56;
       border:none;background:none;color:var(--text);padding:0;}
     /* 네모 칸 없이 줄 세 개만 — 주인 요청. 누르는 자리는 그대로 40px 입니다.
        글자 ☰ 가 아니라 SVG 인 까닭: Pretendard 에 ☰ 가 없어서 기기마다 다른
@@ -4574,10 +4587,14 @@
     #view-oc > .topbar .btn-ghost, #view-oc > .topbar .btn-primary,
     #view-archive > .topbar .btn-ghost, #view-archive > .topbar .btn-primary{
       display:inline-flex;align-items:center;justify-content:center;
-      height:32px;min-height:0;padding:0 9px;font-size:10.5px;line-height:1;}
+      height:32px;min-height:0;padding:2px 9px 0;font-size:10.5px;line-height:1;}
+    /* 글자 높이 맞추기 — 머리줄은 66px 이라 가운데가 43 인데, 단추 글자의 잉크
+       가운데가 42 로 1px 떠 있었습니다(제목은 42.8). 위 여백 2px 로 단추 안의
+       글자를 1px 내립니다(상자 높이는 32 그대로). 폴더 단추는 같은 까닭으로 아래
+       여백 3 → 1px 입니다. */
     #view-pair > .topbar .folder-dd-btn,
     #view-oc > .topbar .folder-dd-btn,
-    #view-archive > .topbar .folder-dd-btn{height:32px;min-height:0;padding:0 7px 3px;font-size:10px;}
+    #view-archive > .topbar .folder-dd-btn{height:32px;min-height:0;padding:0 7px 1px;font-size:10px;}
     /* 잠긴 폴더의 🔒 — 데스크톱 규칙(.folder-dd-btn .gf-lock{top:-.5px})은 11.5px 폴더
        이름에 맞춘 값이라, 폰의 10px 이름 옆에서는 자물쇠가 1.2px 떠 보였습니다(글자를
        캔버스에 10배로 그려 칠해진 픽셀로 잰 값 — 가운데끼리 비교). 폰에서만 1.2px
@@ -5158,6 +5175,8 @@
        물려받게 둡니다. 아래 :has(.rt-ico) 는 그래도 필요합니다(그림은 이미 정확하므로 0). */
     .rt-toolbar button{width:32px;height:32px;font-size:12.5px;}
     .rt-toolbar button:has(.rt-ico){padding-top:0;}
+    /* 글자 크기 칸도 다른 폰 제어처럼 32px 높이. 폭은 숫자 넷이 들어가는 40px */
+    .rt-toolbar .rt-size{width:40px;height:32px;font-size:12.5px;}
     .rt-toolbar-memo{flex-wrap:nowrap;gap:4px;}
     .rt-toolbar-memo button,
     .rt-toolbar-memo .rt-color{flex:0 1 32px;width:32px;height:32px;min-width:0;}
