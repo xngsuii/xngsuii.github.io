@@ -2643,7 +2643,32 @@
      만들어서, 돋보기와 입력칸 사이가 24px 벌어지고 줄 전체가 왼쪽으로
      치우쳤습니다. margin 이면 접힌 칸의 margin 을 0 으로 만들 수 있습니다. */
   .log-search > * + *{margin-left:8px;}
-  body.logged-in .log-search{display:none;}
+  /* 예전에는 편집 모드에서 검색줄을 감췄습니다(body.logged-in .log-search{display:none})
+     — 편집 단추들과 자리를 나눠 쓰느라 그랬는데, 글이 많아지자 고칠 글을 찾을 길이
+     없어 불편했습니다(주인 요청). 지금은 두 모드에 다 나옵니다.
+     · 데스크톱: ARCHIVE 는 상단바에서 [검색][삭제·선택·글쓰기][폴더] 순서,
+       LOG 는 도구줄에서 [폴더 탭][검색][삭제·선택·추가][넓게] 순서 — 검색이 편집
+       단추의 **왼쪽**이라, 펼쳐지며 늘어나는 폭이 왼쪽으로만 자라서 단추가 움직이지 않습니다.
+     · 폰: 둘 다 목록 아래(쪽 번호 밑)로 옮깁니다 — placeArcSearch / placeLogSearch. */
+  .topbar-actions > .archive-search{order:-1;}
+  /* 편집 모드에서는 입력칸을 좁게 둡니다(평소 150 → 130, 펼치면 280 → 170).
+     상단바에 삭제·선택·글쓰기가 함께 서므로, 1024px 창에서 선택 모드까지 켜면
+     280 은 물론 200 으로도 펼친 검색줄이 제목 끝에 딱 붙었습니다(0px — 잰 값). */
+  body.logged-in .archive-search input[type=text]{width:130px;}
+  body.logged-in .archive-search:focus-within input[type=text],
+  body.logged-in .archive-search:has(input[type=text]:not(:placeholder-shown)) input[type=text]{width:170px;}
+  /* LOG 도구줄도 같은 사정입니다 — 편집 모드에는 폴더 탭·검색·삭제·선택·추가가
+     한 줄이라, 360px 로 펼치면 1024px 창에서 폴더 탭 줄이 3px 로 짜부라졌습니다.
+     편집 모드의 입력칸은 160 / 펼치면 210 으로 두고, 폴더 탭은 120px 아래로는
+     줄지 않게 받칩니다(그 안에서는 좌우로 밀어 봅니다). */
+  body.logged-in .log-pane-toolbar .log-search input[type=text]{width:160px;}
+  body.logged-in .log-pane-toolbar .log-search:focus-within input[type=text],
+  body.logged-in .log-pane-toolbar .log-search:has(input[type=text]:not(:placeholder-shown)) input[type=text]{width:210px;}
+  .log-pane-toolbar .log-folder-bar{min-width:120px;}
+  /* 그래도 좁으면(1024px 창 + 선택 모드라 삭제 단추까지 서면 34px 모자랐습니다)
+     검색줄이 양보합니다 — 줄 전체가 넘치는 것보다 입력칸이 조금 짧은 편이 낫습니다. */
+  .log-pane-toolbar .log-search{flex:0 1 auto;min-width:0;}
+  .log-pane-toolbar .log-search input[type=text]{flex:0 1 auto;}
   /* 상자를 두르지 않습니다. 바닥에 밑줄 한 줄만 긋습니다. */
   .log-search select,.log-search input{border:0;border-bottom:1px solid var(--rule-soft);border-radius:0;background:transparent;color:var(--text);font-family:var(--mono);font-size:12px;padding:0 2px;outline:none;}
   .log-search select:focus,.log-search input:focus{border-bottom-color:var(--text);}
@@ -3165,12 +3190,30 @@
      (top:100% 가 상자 아래쪽 바깥을 가리킵니다).
      테두리는 검정이 아니라 연한 회색입니다 — 상자 밖에 홀로 서 있어서
      검정이면 상자보다 단추가 먼저 읽힙니다. */
+  /* ---- COPY / DONE ----
+     단추 안의 글자('복사하기')는 저장된 글에 들어 있어서 그대로 두고 font-size:0 으로
+     숨깁니다. 보이는 글자는 ::before, 아이콘은 ::after 가 그립니다 — 그래서 예전에
+     쓴 글도 고칠 필요 없이 모두 새 모양이 됩니다.
+     아이콘은 mask 입니다: background 가 currentColor 라 글자색을 그대로 따라가서
+     hover(흰색)·DONE(흰색)에서 따로 색을 정할 필요가 없습니다.
+     복사가 되면 .done 이 붙어 강조색으로 꽉 차고 체크로 바뀝니다 — 예전에는
+     글자만 '복사됨'으로 바뀌어 됐는지 안 됐는지 잘 안 보였습니다(주인 지적). */
   .cb-copy{position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:9px;
-    font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.06em;
+    display:inline-flex;align-items:center;gap:5px;
+    font-family:var(--mono);font-size:0;font-weight:500;letter-spacing:.06em;
     line-height:1;padding:6px 12px;border:1px solid var(--rule-soft);border-radius:0;
     background:var(--bg);color:var(--text-muted);cursor:pointer;white-space:nowrap;
     transition:background .16s ease,color .16s ease,border-color .16s ease;}
+  .cb-copy::before{content:'COPY';font-size:10px;}
+  .cb-copy::after{content:'';flex:none;width:11px;height:11px;background:currentColor;
+    -webkit-mask:var(--cb-ico) center/contain no-repeat;mask:var(--cb-ico) center/contain no-repeat;
+    --cb-ico:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.5' stroke-linejoin='round'%3E%3Crect x='5.5' y='5.5' width='8' height='8' rx='1'/%3E%3Cpath d='M10.5 5.5V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2'/%3E%3C/svg%3E");}
   .cb-copy:hover{background:var(--text);border-color:var(--text);color:#fff;}
+  .cb-copy.done,.cb-copy.done:hover{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .cb-copy.done::before{content:'DONE';}
+  .cb-copy.done::after{--cb-ico:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 8.5l3.2 3.2L13 4.8'/%3E%3C/svg%3E");}
+  .cb-copy.fail::before{content:'FAIL';}
+  .cb-copy.fail::after{--cb-ico:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round'%3E%3Cpath d='M4 4l8 8M12 4l-8 8'/%3E%3C/svg%3E");}
 
   /* 백틱 코드블록은 접기 안에서도 .fold-body 밖(접기의 직계 자식)에 놓일 수
      있습니다 — 펜스가 있던 줄 그릇을 통째로 갈아끼우는 자리라서요(applyCodeFences
@@ -3237,6 +3280,7 @@
   /* 첨부는 읽을 때(목록만)와 고칠 때(삭제 단추 딸린 목록)가 다른 칸입니다 */
   #arcEditAttachSection{display:none;}
   .arcd-editing #arcEditAttachSection{display:block;}
+  .arcd-editing #arcEditAttachSection.empty{display:none;}
   .arcd-editing #arcViewAttachSection{display:none !important;}
 
   /* 제목·부제목 입력칸 — 상자도 밑줄도 없이 글자만. 읽을 때의 h3/.arcd-meta 와
@@ -4469,7 +4513,12 @@
        놓이므로 위에서 준 10px 만큼 직접 내려 줘야 머리줄과 같은 높이에 섭니다. */
     .mobile-menu-btn{display:flex;align-items:center;justify-content:center;
       position:absolute;top:calc(19px + env(safe-area-inset-top));left:4px;width:40px;height:40px;z-index:56;
-      border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:17px;line-height:1;}
+      border:none;background:none;color:var(--text);padding:0;}
+    /* 네모 칸 없이 줄 세 개만 — 주인 요청. 누르는 자리는 그대로 40px 입니다.
+       글자 ☰ 가 아니라 SVG 인 까닭: Pretendard 에 ☰ 가 없어서 기기마다 다른
+       기호 글꼴로 그려지고, 크기·굵기가 기기마다 달랐습니다(✦ MENU 와 같은 이유). */
+    .mobile-menu-btn .mm-ico{width:20px;height:20px;fill:none;stroke:currentColor;
+      stroke-width:1.5;stroke-linecap:round;}
     /* 상세 화면에서는 ☰ 를 감춥니다. ← 가 같은 모서리에 있어서 두 단추가
        겹쳐 있었습니다(PAIR/OC 는 ☰ 가 ← 위에 올라앉고, ARCHIVE 는 상단바가
        ☰ 자리를 비우느라 ← 만 안쪽으로 밀려 있었습니다).
@@ -5065,6 +5114,13 @@
     .log-pane-toolbar{flex-wrap:wrap;row-gap:8px;}
     .log-pane-toolbar .log-folder-bar{flex:1 1 100%;order:-1;}
     .log-pane-toolbar .log-search{flex:1 1 auto;}
+    /* LOG 검색줄은 폰에서 목록 아래로 옮겨집니다(placeLogSearch) — ARCHIVE 의
+       #view-archive > .archive-search 와 같은 모양입니다. 분류 목록은 화면 아래라 위로 펼칩니다.
+       목록 줄 수는 fitLogRows 가 줄어든 높이로 다시 잽니다. */
+    .log-list + .log-search{flex:none;justify-content:flex-start;width:100%;padding:8px 0 4px;}
+    .log-list + .log-search input[type=text],
+    .log-list + .log-search:focus-within input[type=text]{flex:1 1 auto;width:auto;min-width:0;}
+    .log-list + .log-search .sf-pick-menu{top:auto;bottom:calc(100% + 5px);}
     .log-pane-toolbar .log-tool-btns{flex:none;margin-left:auto;}
     .log-entry{padding:13px 12px;}
     .tl-del{width:28px;height:28px;}
@@ -5155,7 +5211,9 @@
        글자는 11px 그대로 둡니다 — 갈무리11 은 11px 에 맞춰 그린 글꼴이라
        배수(22px)가 아닌 값으로 키우면 흐려집니다.
        손가락으로 누를 것은 복사 단추뿐이라 그것만 키웁니다. */
-    .cb-copy{padding:11px 18px;font-size:11px;}
+    /* 글자 크기는 ::before 에 줍니다 — 단추 자신은 원래 글자를 숨기려고 0 입니다 */
+    .cb-copy{padding:11px 18px;}
+    .cb-copy::before{font-size:11px;}
     .copy-box{margin-bottom:40px;padding:12px 13px;}
     /* 손가락 크기로 조금씩 키우고, 코드 칸은 화면이 좁은 만큼 글자를 올립니다 */
     .html-embed .he-tab{padding:9px 12px;font-size:11px;}

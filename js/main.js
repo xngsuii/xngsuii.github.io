@@ -5093,10 +5093,15 @@ function initContentBlocks(){
     if(cbBtn){
       e.preventDefault(); e.stopPropagation();
       const box = cbBtn.closest('.copy-box');
-      const label = cbBtn.innerText;
       const ok = await copyText(box ? copyBoxText(box) : '');
-      cbBtn.innerText = ok ? '복사됨' : '실패';
-      setTimeout(()=>{ cbBtn.innerText = label; }, 1200);
+      /* 글자를 바꾸지 않고 class 만 바꿉니다 — 단추 글자는 저장된 글 안에
+         '복사하기'로 들어 있고, 화면에 보이는 COPY / DONE 과 아이콘은 CSS 가
+         그립니다(.cb-copy::before / ::after). innerText 를 건드리면 편집 중인
+         글에 그 글자가 그대로 저장될 수 있습니다. */
+      clearTimeout(cbBtn._doneTimer);
+      cbBtn.classList.remove('done', 'fail');
+      cbBtn.classList.add(ok ? 'done' : 'fail');
+      cbBtn._doneTimer = setTimeout(()=> cbBtn.classList.remove('done', 'fail'), 1400);
       return;
     }
 
@@ -5601,7 +5606,7 @@ function dateKeyOf(entry){
    게시일과 제목/내용은 각각 독립적으로 걸립니다(둘 다 있으면 AND).
    게시일을 비워두면 전체 기간이 대상입니다. */
 function filterLogItems(items){
-  if(isLoggedIn) return items;
+  /* 편집 모드에서도 거릅니다 — 검색줄이 두 모드에 다 나옵니다(주인 요청). */
   const q = logSearchTerm.trim().toLowerCase();
   const day = logSearchDate;
   if(!q && !day) return items;
@@ -10556,7 +10561,11 @@ document.getElementById('arcInsertFileBtn').addEventListener('click', ()=>{
 });
 function renderArcAttachList(){
   const wrap=document.getElementById('arcAttachList');
-  if(arcAttachments.length===0){ wrap.innerHTML='<div class="empty-note" style="padding:8px 0;">첨부된 파일이 없어요.</div>'; return; }
+  /* 첨부가 하나도 없으면 칸째 감춥니다 — '첨부된 파일이 없어요' 한 줄을 위해
+     칸을 늘 세워 두면 편집기 아래가 비어 보였습니다(주인 요청). 📎 로 하나를
+     넣으면 다시 그려지며 칸이 나타납니다. */
+  document.getElementById('arcEditAttachSection')?.classList.toggle('empty', arcAttachments.length===0);
+  if(arcAttachments.length===0){ wrap.innerHTML=''; return; }
   wrap.innerHTML='';
   arcAttachments.forEach((f, idx)=>{
     const el=document.createElement('div'); el.className='arc-attach-item';
@@ -10757,12 +10766,12 @@ function extractFirstImage(html){
 /* 사이드바 세부 카테고리 키 → 상단 표기 */
 const ARCHIVE_CAT_LABEL = { ooc:'OOC', nai:'PROMPT', etc:'ETC' };
 
-/* --- ARCHIVE 검색 (보기 모드 전용, LOG 와 같은 방식) --- */
+/* --- ARCHIVE 검색 (보기·편집 두 모드, LOG 와 같은 방식) --- */
 let arcSearchTerm = '';
 let arcSearchField = 'title';
 let arcSearchDate = '';
 function filterArchiveItems(items){
-  if(isLoggedIn) return items;
+  /* 편집 모드에서도 거릅니다 — 검색줄이 두 모드에 다 나옵니다(주인 요청). */
   const q = arcSearchTerm.trim().toLowerCase();
   const day = arcSearchDate;
   if(!q && !day) return items;
@@ -14253,9 +14262,35 @@ function placeArcSearch(){
 }
 placeArcSearch();
 
+/* ---- LOG 검색줄의 자리 (PAIR·OC 두 벌) ----
+   데스크톱: 도구줄 안, 선택·추가 단추의 **왼쪽**. 펼쳐지며 늘어나는 폭이 왼쪽
+   (폴더 탭 쪽)으로만 자라서 단추가 움직이지 않습니다.
+   폰: 목록 아래(쪽 번호 밑) — .log-list 의 바로 뒤 형제로 옮깁니다. 도구줄에는
+   폴더 탭·선택·추가가 이미 꽉 차 있어서 편집 모드에 검색까지 넣을 자리가 없고,
+   ARCHIVE 와 같은 자리로 맞춥니다. .log-list 안은 다시 그릴 때마다 지워지므로
+   그 안에는 넣지 않습니다. 요소를 옮기기만 하므로 이벤트는 그대로 따라갑니다
+   (initLogRoot 는 host.root 안에서 class 로 찾습니다). */
+function placeLogSearch(){
+  [PAIR_LOG_HOST, OC_LOG_HOST].forEach(host=>{
+    const root = host && host.root;
+    if(!root) return;
+    const bar  = root.querySelector('.log-search');
+    const list = root.querySelector('.log-list');
+    const btns = root.querySelector('.log-pane-toolbar .log-tool-btns');
+    if(!bar || !list || !btns) return;
+    if(isMobileWidth()){
+      if(bar.previousElementSibling !== list) list.after(bar);
+    }else if(bar.nextElementSibling !== btns){
+      btns.before(bar);
+    }
+  });
+}
+placeLogSearch();
+
 function initResponsiveWatch(){
   const onChange = ()=>{
     placeArcSearch();
+    placeLogSearch();
     /* 위젯은 폰과 PC 에서 보이는 것이 다릅니다 — 팝업은 폰에서 숨기고,
        사이드바 위젯은 '폰 숨김' 을 켜둔 것만 빠집니다. */
     renderWidgets();

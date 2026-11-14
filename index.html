@@ -69,14 +69,14 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
-<link rel="stylesheet" href="css/style.css?v=249" />
+<link rel="stylesheet" href="css/style.css?v=250" />
 </head>
 <body>
 <div class="app-window">
 <div class="app-shell">
 
   <!-- 모바일(768px 이하) 전용 — PC 에서는 CSS 로 숨깁니다 -->
-  <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="메뉴 열기" aria-expanded="false">☰</button>
+  <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="메뉴 열기" aria-expanded="false"><svg class="mm-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg></button>
   <div class="drawer-backdrop" id="drawerBackdrop"></div>
 
   <!-- ================= SIDEBAR ================= -->
@@ -620,7 +620,9 @@
             <button class="btn-ghost" id="arcSelectBtn" style="display:none;">선택</button>
             <button class="btn-primary" id="addArchiveBtn">＋ 글쓰기</button>
           </div>
-          <!-- 검색 — 폴더 고르개 **왼쪽**. 보기 모드에만 보입니다.
+          <!-- 검색 — 보기·편집 두 모드에 다 보입니다. CSS order 로 상단바 맨 왼쪽
+               (편집 단추들보다 왼쪽)에 섭니다. 아래 설명은 그 전의 것입니다.
+               폴더 고르개 **왼쪽**.
                폴더 고르개를 오른쪽 끝에 두는 까닭 — 그 단추는 폭이 거의
                변하지 않는데 검색은 펼칠 때 130px 이 늘어납니다. 검색을
                왼쪽에 두면 늘어나는 만큼 왼쪽으로만 자라서 폴더 단추는
@@ -1035,8 +1037,9 @@
               <button class="add-mini-btn log-select-btn" data-editonly>선택</button>
               <button class="add-mini-btn log-add-btn" id="addLogBtn" data-editonly>＋ 게시글 추가</button>
             </div>
-            <!-- 검색줄 — 보기 모드에만 나오므로, 편집 모드에만 나오는 위 단추들과
-                 같은 자리를 나눠 씁니다(ARCHIVE 상단바와 같은 수법입니다). -->
+            <!-- 검색줄 — 보기·편집 두 모드에 다 나옵니다. 놓이는 자리는
+                 main.js 의 placeLogSearch 가 정합니다(데스크톱: 선택 단추 왼쪽,
+                 폰: 목록 아래 쪽 번호 밑). -->
             <div class="log-search" id="logSearchBar">
               <!-- ARCHIVE 검색줄과 같은 돋보기입니다(style.css 의 .sf-icon) -->
               <span class="sf-icon" aria-hidden="true">
@@ -1237,8 +1240,7 @@
               <button class="add-mini-btn log-select-btn" data-editonly>선택</button>
               <button class="add-mini-btn log-add-btn" data-editonly>＋ 게시글 추가</button>
             </div>
-            <!-- 검색줄 — 보기 모드에만 나오므로, 편집 모드에만 나오는 위 단추들과
-                 같은 자리를 나눠 씁니다(PAIR 쪽과 같습니다). -->
+            <!-- 검색줄 — 보기·편집 두 모드에 다 나옵니다(PAIR 쪽과 같습니다). -->
             <div class="log-search">
               <!-- ARCHIVE 검색줄과 같은 돋보기입니다(style.css 의 .sf-icon) -->
               <span class="sf-icon" aria-hidden="true">
@@ -1797,7 +1799,7 @@
        (그 목록을 만드는 것도 JS인데 새 CSS 가 감싸이지 않은 select 를 폭 0 으로
        접습니다), 스티커 서랍이 엉뚱한 자리에 놓였습니다.
        **CSS 와 JS 를 함께 고쳤으면 번호도 함께 올리세요.** -->
-<script src="js/main.js?v=249"></script>
+<script src="js/main.js?v=250"></script>
 <script type="module" src="js/firebase-store.js?v=120"></script>
 </body>
 </html>
