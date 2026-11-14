@@ -2798,7 +2798,10 @@
     align-self:auto;flex:none;min-height:0;}
   /* 페르소나는 예전에 사진을 오른쪽으로 보내려고 순서를 뒤집어 뒀습니다 —
      세로로 세운 지금은 두 쪽 다 사진이 위여야 하므로 되돌립니다. */
-  .pd-info-col .pd-profile.persona-layout{grid-template-columns:none;}
+  /* margin:0 도 여기서 다시 적습니다 — 아래 .pd-profile.persona-layout{margin-bottom:8px}
+     가 같은 무게(0,2,0)로 뒤에 있어 위의 margin:0 을 이겼고, 그래서 페르소나 쪽만
+     8px 짧아져 좌우 설명칸 높이가 어긋났습니다(1600px 에서 544 대 536). */
+  .pd-info-col .pd-profile.persona-layout{grid-template-columns:none;margin:0;}
   .pd-info-col .pd-profile.persona-layout .pd-profile-img{order:-1;}
   .pd-info-col .pd-profile-info{display:flex;flex-direction:column;flex:1;min-height:0;}
   /* 남는 높이는 소개 칸이 가져가고, 더 길면 이 안에서만 스크롤됩니다 */
@@ -4961,7 +4964,12 @@
     /* 프로필 장 — PAIR 은 두 장을 나란히, OC 는 한 장.
        칸 이름(grid-area:char / persona)은 PC 격자의 것이라 여기서 풀어 줍니다 —
        그대로 두면 이 격자에 없는 이름을 가리켜 둘이 같은 자리에 겹칩니다. */
-    .pd-info-main{display:grid;grid-template-columns:1fr 1fr;gap:0 10px;align-content:stretch;}
+    /* minmax(0,1fr) 이어야 합니다. 그냥 1fr 은 minmax(auto,1fr) 이라 칸이 내용보다
+       좁아질 수 없어서, 편집 모드의 라벨 줄(:: + 라벨 + 값 + ✕)이 길면 한쪽 칸만
+       늘어나 두 장이 화면 밖으로 밀려났습니다(375px 에서 167 → 188px, 40px 넘침).
+       칸 폭은 늘 반반이고, 긴 값은 아래 규칙으로 칸 안에서 줄바꿈합니다. */
+    .pd-info-main{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 10px;align-content:stretch;}
+    .pd-info-col .meta-value{min-width:0;overflow-wrap:anywhere;}
     .pd-info-col-char,.pd-info-col-persona{grid-area:auto;}
     /* 여기 있던 세 줄(프로필을 '내용만큼'으로 되돌리던 것)은 지웠습니다.
        프로필 아래에 넘김 칸이 이어져 있던 시절의 값인데, 지금은 프로필이

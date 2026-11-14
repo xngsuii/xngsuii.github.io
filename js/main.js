@@ -3339,7 +3339,7 @@ function renderPairPosts(){
     el.dataset.id = p.id;
     const checked = selectedPairIds.has(p.id);
     el.innerHTML = `${selectMode?`<div class="post-check ${checked?'checked':''}">${checked?'✓':''}</div>`:''}
-      <div class="post-thumb" style="background-image:url('${(p.headerImage&&p.headerImage.src)||''}')"></div>
+      <div class="post-thumb"></div>
       ${lockedFolder
         ? `<div class="post-info oc-lock-info"><div class="post-title">&nbsp;</div>
              <div class="post-catch">&nbsp;</div><span class="oc-lock-mark">LOCKED</span></div>`
@@ -3368,6 +3368,10 @@ function renderPairPosts(){
     }
     // 목록 썸네일도 표시용 축소본으로 (박스는 250px 안팎, 원본은 800px대).
     // 붙인 뒤에 호출해야 실제 폭을 잴 수 있다.
+    /* 사진은 여기서만 칠합니다(OC 목록과 같습니다). 예전에는 위 마크업에 저장된
+       값을 그대로 url() 로 넣었는데, 그 값은 사진 자체가 아니라 'blob://…' 이라는
+       참조라서 브라우저가 읽지 못하고 콘솔에 오류를 남겼습니다. applyThumbBg 는
+       참조를 풀고, 사진이 아직 안 왔으면 도착할 때 칠합니다. */
     const thumbSrc = p.headerImage && p.headerImage.src;
     const thumbEl = el.querySelector('.post-thumb');
     if(thumbSrc) applyThumbBg(thumbEl, thumbSrc);
@@ -3574,11 +3578,35 @@ function openDetailView(name){
 function closeDetailView(){
   delete document.body.dataset.detail;
 }
+/* ---- 목록으로 돌아올 때 위쪽 자리 되맞추기 (안전장치) ----
+   홈 화면에 추가한 앱(아이폰)에서 글을 보고 나오면 가끔 목록의 제목 줄
+   (SWEET · ALL)이 사라진다는 보고가 있었습니다. 재현은 못 했습니다.
+   가장 그럴듯한 원인은 상세 화면에서 입력칸에 커서가 가거나 키보드가 뜰 때
+   iOS 가 **바깥 문서나 창 상자 자체를 위로 굴려 두고** 되돌리지 않는 것입니다 —
+   그러면 목록이 다시 그려져도 제목 줄이 화면 위로 밀려 있습니다.
+   그래서 목록으로 돌아오는 세 길(PAIR·OC·ARCHIVE)에서 굴러간 자리를 0 으로
+   되돌립니다. 지금 바로 한 번, iOS 가 키보드를 내리며 자리를 다시 잡는 뒤에
+   한 번 더 합니다(rAF 는 백그라운드에서 안 돌므로 타이머). 이미 0 이면 아무 일도
+   하지 않으니 데스크톱에서는 비용이 없습니다. 정말 고쳐졌는지는 확인하지
+   못했습니다 — 다시 터지면 그 화면을 캡처해 받아 보기로 했습니다. */
+function resetListScroll(){
+  const fix = ()=>{
+    const se = document.scrollingElement || document.documentElement;
+    if(se && se.scrollTop) se.scrollTop = 0;
+    if(window.scrollY) window.scrollTo(0, 0);
+    document.querySelectorAll('.app-shell, .app-window, .main').forEach(el=>{
+      if(el.scrollTop) el.scrollTop = 0;
+    });
+  };
+  fix();
+  setTimeout(fix, 350);
+}
 function backToPairList(){
   closeDetailView();
   pairPage = pairListPage;
   renderPairPosts();
   activateView('pair');
+  resetListScroll();
   rtSync();
 }
 function backToOcList(){
@@ -3586,6 +3614,7 @@ function backToOcList(){
   ocPage = ocListPage;
   renderOcPosts();
   activateView('oc');
+  resetListScroll();
   rtSync();
 }
 /* ARCHIVE 는 폴더까지 함께 돌아옵니다 — 폴더는 화면을 옮겨도 그대로 기억되므로
@@ -3600,6 +3629,7 @@ function backToArchiveList(){
   arcPage = arcListPage;
   renderArchive();
   activateView('archive');
+  resetListScroll();
   rtSync();
 }
 /* 실제로 화면을 닫는 일만 합니다 — 물어보는 것은 requestLeaveDetail 이 끝냈고,
@@ -5692,6 +5722,10 @@ function renderLogList(p){
      탭 줄이 뜨는 보기 모드에서는 그 높이만큼(한 줄) 페이지 크기를 줄입니다 —
      보기 모드는 아래에 검색 줄까지 있어 15줄이 딱 맞게 들어차 있었습니다. */
   const showFolderBar = isLoggedIn || (p.logFolders||[]).length>1;
+  /* 선택 단추 표시는 맨 먼저 맞춥니다 — 아래에는 '게시글이 없어요'·'잠긴 폴더'로
+     일찍 빠져나가는 길이 셋 있는데, 이 줄이 그 뒤에만 있어서 빈 폴더에서 선택을
+     끄면 모드는 꺼졌는데 '선택 취소'·삭제 단추가 그대로 남았습니다. */
+  updateLogSelectBtns();
   /* 폰은 줄 목록이라 화면 높이에 맞춰 잰 값을 씁니다(fitLogRows).
      아직 못 잰 동안에는 10줄로 한 번 그리고, 그 그림을 재서 곧바로 다시 그립니다. */
   const perPage = isMobileWidth() ? (logRowsPerPage || LOG_PER_PAGE) : LOG_PER_PAGE;
@@ -10650,6 +10684,14 @@ function arcLockedFolderOf(item){
   const f = arcFoldersOf(cat).find(x=> x.id === arcFolderIdOf(item));
   return (f && folderLocked(f)) ? f : null;
 }
+/* 이 글의 폴더가 '흐리게'인가. '전체'는 진짜 폴더가 아니라 blur 가 없으므로,
+   '전체'에서는 글마다 자기 폴더를 찾아 물어봐야 합니다 — 그러지 않아서
+   흐림 폴더의 글이 '전체'에서는 선명하게 보였습니다. */
+function arcBlurFolderOf(item){
+  const cat = item.category || 'ooc';
+  const f = arcFoldersOf(cat).find(x=> x.id === arcFolderIdOf(item));
+  return !!(f && f.blur);
+}
 function curArcFolderId(cat){
   const id = currentArcFolderIds[cat || currentArchiveCategory];
   /* **null 도 '고른 적 없음'입니다** — 이 표는 { ooc:null, nai:null, etc:null } 로
@@ -11117,13 +11159,14 @@ function renderArchive(){
          흐림 해제(👁)는 달지 않습니다. 그건 '흐리게' 폴더를 잠깐 들여다보는
          장치이지 비밀 폴더를 여는 열쇠가 아닙니다. */
       const lockedF = allFolder ? arcLockedFolderOf(item) : null;
-      const blurred = !lockedF && folderBlur && !arcUnblurred.has(item.id);
+      const itemBlur = allFolder ? arcBlurFolderOf(item) : folderBlur;
+      const blurred = !lockedF && itemBlur && !arcUnblurred.has(item.id);
       const checked = arcSelectedIds.has(item.id);
       /* 이미지는 안쪽 레이어에 깝니다 — 흐림 효과가 제목/버튼까지 번지지 않게 */
       cells += `<div class="arc-nai-thumb${blurred?' blurred':''}${lockedF?' blurred arc-nai-locked':''}" data-abs="${start+i}">
         <div class="an-img"${thumb?` style="background-image:url('${imgUrl(thumb)}')"`:''}></div>
         ${(item.pinned && !arcSelectMode && !lockedF)?'<span class="arc-nai-pin">📌︎</span>':''}
-        ${(folderBlur && !lockedF)?'<button type="button" class="an-eye" title="흐림 해제">👁︎</button>':''}
+        ${(itemBlur && !lockedF)?'<button type="button" class="an-eye" title="흐림 해제">👁︎</button>':''}
         ${(arcSelectMode && !lockedF)?`<div class="gallery-check${checked?' checked':''}">${checked?'✓':''}</div>`:''}
         ${lockedF?'<span class="oc-lock-mark">LOCKED</span>':''}
         <div class="arc-nai-overlay ${thumb?'':'arc-nai-overlay-static'}"><div class="arc-nai-cap">
