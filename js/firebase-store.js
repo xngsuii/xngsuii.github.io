@@ -96,6 +96,59 @@ const LIST_KEYS   = ['cards', 'pairPosts', 'archive', 'ocPosts'];
 /* Firestore 문서 1개 최대 1MiB. 여유를 두고 자릅니다. */
 const CHUNK_CHARS = 700000;
 
+/* ---- 너무 큰 글은 조각으로 나눠 저장합니다 ----
+   목록(pairPosts 등)은 항목 하나가 문서 하나입니다. PAIR 글은 그 안에 LOG 글을
+   전부 품고 있어서, LOG 가 백 개를 넘은 글(10 · Женя, 2026-11 기준 약 1,031KB)이
+   문서 한도 1MiB 에 닿았고 — 그 뒤로는 LOG 하나를 더 쓸 때마다 서버가 거절해
+   '저장 실패, 다시 시도 중' 이 끝나지 않았습니다(주인 지적).
+   사진은 이미 blobs 로 빠져나가 있으므로 남은 것은 글자뿐입니다.
+
+   방법: 저장할 JSON 이 ITEM_SPLIT_BYTES 를 넘으면 그 글자열을 ITEM_PART_CHARS 씩
+   잘라 <목록>/<글id>/parts/<0..n-1> 에 { s:조각 } 으로 넣고, 글 문서 자체에는
+   { __split:n, __order:i } 만 둡니다. 불러올 때 조각을 이어 붙여 JSON.parse 합니다.
+   화면 쪽(main.js)은 이 일을 전혀 모릅니다 — storageGet/storageSet 그대로입니다.
+
+   · 글자 수가 아니라 **바이트**로 잽니다 — 한글은 UTF-8 로 한 글자 3바이트입니다.
+   · 조각 하나는 200,000 글자 = 많아야 600KB 입니다(전부 한글이어도).
+   · 자를 때 이모지 같은 '두 칸짜리 글자'(서로게이트 짝)를 반으로 가르지 않습니다 —
+     가르면 깨진 글자가 저장됩니다.
+   · 글 문서와 그 조각들은 **반드시 같은 묶음(batch)으로** 씁니다. 묶음이 갈리면
+     글 문서는 '3조각' 이라는데 조각은 옛것인 상태가 생길 수 있고, 그러면 글 전체를
+     읽을 수 없게 됩니다. */
+const ITEM_SPLIT_BYTES = 700 * 1024;
+const ITEM_PART_CHARS = 200000;
+const utf8Len = (s) => new TextEncoder().encode(s).length;
+function splitJson(json) {
+  const out = [];
+  let i = 0;
+  while (i < json.length) {
+    let end = Math.min(json.length, i + ITEM_PART_CHARS);
+    /* 서로게이트 짝의 앞쪽(0xD800–0xDBFF)에서 끊기면 한 칸 앞에서 끊습니다 */
+    if (end < json.length) {
+      const c = json.charCodeAt(end - 1);
+      if (c >= 0xD800 && c <= 0xDBFF) end -= 1;
+    }
+    out.push(json.slice(i, end));
+    i = end;
+  }
+  return out;
+}
+const partRef = (key, docId, j) => doc(collection(doc(listRef(key), docId), 'parts'), String(j));
+/* 나뉜 글을 다시 이어 붙입니다. 조각이 모자라거나 이어 붙인 것이 JSON 이 아니면
+   **불러오기를 멈춥니다** — 반쪽짜리 글을 화면에 올렸다가 저장되면 나머지가
+   영영 사라지기 때문입니다(저장은 loaded 가 서야만 나갑니다). */
+async function readSplitItem(key, docId, n) {
+  const snap = await getDocs(collection(doc(listRef(key), docId), 'parts'));
+  const parts = new Map(snap.docs.map(d => [Number(d.id), d.data().s]));
+  let json = '';
+  for (let j = 0; j < n; j++) {
+    const s = parts.get(j);
+    if (typeof s !== 'string') throw new Error(`나뉜 글 조각이 빠져 있습니다: ${key}/${docId} ${j}/${n}`);
+    json += s;
+  }
+  return { json, item: JSON.parse(json) };
+}
+
 /* ------------------------------------------------------------
    상태
    ------------------------------------------------------------ */
@@ -107,6 +160,9 @@ let savedJson = {};         // "key/docId" -> 마지막으로 저장한 JSON (�
    쓰지 않았고, 새로고침하면 예전 순서로 돌아왔습니다. 순서를 따로 기억해
    내용과 함께 견줍니다. */
 let savedOrder = {};
+/* "key/docId" -> 그 항목이 몇 조각으로 나뉘어 저장돼 있는지(0 = 안 나뉨).
+   조각 수가 줄거나 나뉘지 않게 되면 남는 조각 문서를 지워야 하므로 기억합니다. */
+let savedSplit = {};
 let blobCache = new Map();  // blobId -> data URL (도착한 것부터 채워집니다)
 let knownBlobIds = new Set();
 let loaded = false;
@@ -681,12 +737,35 @@ async function loadAll() {
     savedJson[`${k}/_`] = JSON.stringify(raw[k]);
   }
 
+  /* 나뉘어 저장된 글({__split:n})은 조각을 받아 이어 붙입니다. 글 하나당 조각 수만큼
+     읽기가 더 들고, 나뉜 글이 없으면 아무것도 더 읽지 않습니다. */
+  const splitJsonOf = {};       // "key/docId" -> 이어 붙인 원래 JSON
+  await Promise.all(LIST_KEYS.map(async (key, n) => {
+    const snaps = listSnaps[n].docs.filter(d => (d.data().__split | 0) > 0);
+    await Promise.all(snaps.map(async d => {
+      const k = d.data().__split | 0;
+      const { json } = await readSplitItem(key, d.id, k);
+      splitJsonOf[`${key}/${d.id}`] = json;
+    }));
+  }));
+
   LIST_KEYS.forEach((key, n) => {
     const items = listSnaps[n].docs
-      .map(d => ({ ...d.data(), __docId: d.id }))
+      .map(d => {
+        const data = d.data();
+        const sk = `${key}/${d.id}`;
+        savedSplit[sk] = (data.__split | 0) > 0 ? (data.__split | 0) : 0;
+        if (splitJsonOf[sk] != null) {
+          return { ...JSON.parse(splitJsonOf[sk]), __order: data.__order, __docId: d.id };
+        }
+        return { ...data, __docId: d.id };
+      })
       .sort((a, b) => (a.__order ?? 0) - (b.__order ?? 0));
     items.forEach((it, i) => {
-      savedJson[`${key}/${it.__docId}`] = JSON.stringify(stripMeta(it));
+      const sk = `${key}/${it.__docId}`;
+      /* 나뉜 글은 저장할 때 견준 그 JSON 그대로를 기억합니다(다시 만들면 키 차례가
+         달라져 '바뀌었다' 로 잘못 볼 수 있습니다) */
+      savedJson[sk] = splitJsonOf[sk] != null ? splitJsonOf[sk] : JSON.stringify(stripMeta(it));
       /* 서버에 적힌 순서가 아니라 정렬한 뒤의 자리(i)를 기억합니다 — 저장할 때
          넣는 값도 배열에서의 자리라 같은 기준이어야 합니다. 예전에 저장돼
          __order 가 아예 없는 문서는 위 정렬에서 전부 0 으로 몰려 자리만
@@ -712,7 +791,7 @@ async function loadAll() {
 
 function stripMeta(o) {
   const c = { ...o };
-  delete c.__docId; delete c.__order;
+  delete c.__docId; delete c.__order; delete c.__split;
   return c;
 }
 
@@ -773,8 +852,10 @@ async function flush() {
 
   const pending = new Map();               // 새로 저장해야 할 이미지/첨부
   const metaPatch = {};
-  const listWrites = [];                   // {key, docId, data}
-  const listDeletes = [];                  // {key, docId}
+  /* 항목 하나에 딸린 쓰기들(글 문서 + 조각 문서 + 남는 조각 지우기)은 한 묶음으로
+     모읍니다 — 아래에서 batch 로 나눌 때 **한 묶음은 절대 둘로 가르지 않습니다**. */
+  const groups = [];                       // [{ ops:[{type, ref, data}], bytes }]
+  const nextSplit = {};
   /* 저장이 성공한 뒤에만 "저장됨" 기록을 갱신합니다.
      먼저 갱신해버리면, 쓰기가 실패했을 때 다음번에
      "바뀐 게 없다"고 판단해 변경분을 영영 잃게 됩니다. */
@@ -808,18 +889,46 @@ async function flush() {
       const json = JSON.stringify(stored);
       const sk = `${key}/${docId}`;
       // 내용이 같아도 자리가 달라졌으면 써야 합니다 (순서만 바꾼 경우)
-      if (savedJson[sk] !== json || savedOrder[sk] !== i) {
-        listWrites.push({ key, docId, data: { ...stored, __order: i } });
+      const changed = savedJson[sk] !== json;
+      if (changed || savedOrder[sk] !== i) {
+        const had = savedSplit[sk] || 0;
+        const ops = [];
+        let bytes = 0;
+        const docRef = doc(listRef(key), docId);
+        if (!changed && had > 0) {
+          /* 나뉜 글의 자리만 바뀜 — 글 문서의 순서만 고칩니다(조각은 그대로) */
+          ops.push({ type: 'set', ref: docRef, data: { __split: had, __order: i } });
+          bytes = 64;
+          nextSplit[sk] = had;
+        } else {
+          const len = utf8Len(json);
+          if (len > ITEM_SPLIT_BYTES) {
+            const parts = splitJson(json);
+            ops.push({ type: 'set', ref: docRef, data: { __split: parts.length, __order: i } });
+            parts.forEach((s, j) => ops.push({ type: 'set', ref: partRef(key, docId, j), data: { s } }));
+            for (let j = parts.length; j < had; j++) ops.push({ type: 'del', ref: partRef(key, docId, j) });
+            nextSplit[sk] = parts.length;
+          } else {
+            ops.push({ type: 'set', ref: docRef, data: { ...stored, __order: i } });
+            /* 예전에 나뉘어 있던 글이 작아졌으면 남은 조각을 지웁니다 */
+            for (let j = 0; j < had; j++) ops.push({ type: 'del', ref: partRef(key, docId, j) });
+            nextSplit[sk] = 0;
+          }
+          bytes = len;
+        }
+        groups.push({ ops, bytes });
         nextSaved[sk] = json;
         nextOrder[sk] = i;
       }
     }
-    // 사라진 항목 삭제
+    // 사라진 항목 삭제 (나뉘어 있었으면 조각까지)
     for (const sk of Object.keys(savedJson)) {
       if (!sk.startsWith(key + '/')) continue;
       const docId = sk.slice(key.length + 1);
       if (docId === '_' || seen.has(docId)) continue;
-      listDeletes.push({ key, docId });
+      const ops = [{ type: 'del', ref: doc(listRef(key), docId) }];
+      for (let j = 0; j < (savedSplit[sk] || 0); j++) ops.push({ type: 'del', ref: partRef(key, docId, j) });
+      groups.push({ ops, bytes: 64 });
       dropSaved.push(sk);
     }
   }
@@ -840,24 +949,32 @@ async function flush() {
 
     if (Object.keys(metaPatch).length) await setDoc(metaRef(), metaPatch, { merge: true });
 
-    // 배치는 500개 제한이 있어 나눠서 처리
-    const ops = [
-      ...listWrites.map(w => ({ type: 'set', ...w })),
-      ...listDeletes.map(d => ({ type: 'del', ...d }))
-    ];
-    for (let i = 0; i < ops.length; i += 400) {
+    /* 배치는 500개 제한이 있고, 한 번에 보내는 양도 너무 크면 거절됩니다(요청당
+       약 10MB). 항목 묶음 단위로 400개 / 4MB 를 넘기 전에 끊어서 보냅니다.
+       한 묶음은 쪼개지 않습니다 — 위 설명 참고. */
+    const BATCH_OPS = 400, BATCH_BYTES = 4 * 1024 * 1024;
+    const batches = [];
+    let cur = [], curOps = 0, curBytes = 0;
+    for (const g of groups) {
+      if (cur.length && (curOps + g.ops.length > BATCH_OPS || curBytes + g.bytes > BATCH_BYTES)) {
+        batches.push(cur); cur = []; curOps = 0; curBytes = 0;
+      }
+      cur.push(g); curOps += g.ops.length; curBytes += g.bytes;
+    }
+    if (cur.length) batches.push(cur);
+    for (const b of batches) {
       const batch = writeBatch(db);
-      for (const op of ops.slice(i, i + 400)) {
-        const ref = doc(listRef(op.key), op.docId);
-        if (op.type === 'set') batch.set(ref, op.data);
-        else batch.delete(ref);
+      for (const g of b) for (const op of g.ops) {
+        if (op.type === 'set') batch.set(op.ref, op.data);
+        else batch.delete(op.ref);
       }
       await batch.commit();
     }
 
     Object.assign(savedJson, nextSaved);
     Object.assign(savedOrder, nextOrder);
-    dropSaved.forEach(sk => { delete savedJson[sk]; delete savedOrder[sk]; });
+    Object.assign(savedSplit, nextSplit);
+    dropSaved.forEach(sk => { delete savedJson[sk]; delete savedOrder[sk]; delete savedSplit[sk]; });
     if (blobSizes) Object.assign(blobSizes, sizeAdds);
     emitStorage();
   } catch (e) {
