@@ -69,7 +69,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
-<link rel="stylesheet" href="css/style.css?v=253" />
+<link rel="stylesheet" href="css/style.css?v=257" />
 </head>
 <body>
 <div class="app-window">
@@ -679,15 +679,18 @@
         <h2>Setting</h2>
         <div class="topbar-actions">
           <div class="mg-tabs" data-mgtabs="setting">
-            <button class="mg-tab active" type="button" data-mgpane="cursor">CURSOR</button>
-            <span class="mg-tab-dot" aria-hidden="true">·</span>
-            <button class="mg-tab" type="button" data-mgpane="effect">EFFECT</button>
-            <span class="mg-tab-dot" aria-hidden="true">·</span>
-            <button class="mg-tab" type="button" data-mgpane="sound">SOUND</button>
+            <!-- 차례는 주인이 정한 것입니다: DISPLAY · SIDEBAR · LOCK · CURSOR · EFFECT · SOUND -->
+            <button class="mg-tab active" type="button" data-mgpane="display">DISPLAY</button>
             <span class="mg-tab-dot" aria-hidden="true">·</span>
             <button class="mg-tab" type="button" data-mgpane="sidebar">SIDEBAR</button>
             <span class="mg-tab-dot" aria-hidden="true">·</span>
             <button class="mg-tab" type="button" data-mgpane="lock">LOCK</button>
+            <span class="mg-tab-dot" aria-hidden="true">·</span>
+            <button class="mg-tab" type="button" data-mgpane="cursor">CURSOR</button>
+            <span class="mg-tab-dot" aria-hidden="true">·</span>
+            <button class="mg-tab" type="button" data-mgpane="effect">EFFECT</button>
+            <span class="mg-tab-dot" aria-hidden="true">·</span>
+            <button class="mg-tab" type="button" data-mgpane="sound">SOUND</button>
           </div>
         </div>
       </div>
@@ -697,7 +700,7 @@
              네 자리는 CSS 가 실제로 가려낼 수 있는 상태들입니다. '누르고 있는
              동안' 은 CSS 에 그런 상태가 없어서 넣지 않았습니다(나중에 이펙트
              층으로 하면 됩니다). 줄은 main.js 의 renderCursorPane 이 그립니다. -->
-        <div class="mg-pane active" data-mgpane="cursor">
+        <div class="mg-pane" data-mgpane="cursor">
           <div class="cur-list" id="curList"></div>
           <p class="mg-note">
             PNG 와 CUR 을 씁니다. 올린 그림은 32px 로 줄여 저장해요 —
@@ -785,6 +788,52 @@
             여기서 다시 볼 수는 없어요 — 잊어버리면 새로 정하면 돼요.
           </p>
         </div>
+
+        <!-- ---- 사이트 겉모습 (DISPLAY) ----
+             목록 사진 흑백(마우스를 올리면 색)과 글 본문의 줄간격·자간·문단 간격.
+             버튼·값은 main.js 의 renderLookPane 이 채웁니다. 저장 키는 예전 이름
+             그대로 lookCfg 입니다(탭 이름만 바뀌었습니다). -->
+        <div class="mg-pane active" data-mgpane="display">
+          <div class="wg-row sb-row look-row">
+            <span class="wg-row-name">목록 사진 흑백</span>
+            <span class="wg-row-ctl look-chips" id="lookGray"></span>
+          </div>
+          <p class="mg-note">켜 두면 목록의 사진이 흑백으로 있다가, 마우스를 올린 것만 제 색으로 돌아와요.
+            마우스가 없는 폰에서는 늘 제 색이에요.</p>
+
+          <h4 class="mg-sub disp-sub">글 본문</h4>
+          <div class="disp-text">
+            <div class="disp-ctls">
+              <div class="wg-row sb-row disp-row">
+                <span class="wg-row-name">줄간격</span>
+                <span class="wg-row-ctl"><input type="range" class="mb-vol" id="dispLh" min="1.2" max="2.4" step="0.05" aria-label="줄간격" /><span class="snd-vol-n disp-n" id="dispLhN"></span></span>
+              </div>
+              <div class="wg-row sb-row disp-row">
+                <span class="wg-row-name">자간</span>
+                <span class="wg-row-ctl"><input type="range" class="mb-vol" id="dispLs" min="-1" max="2" step="0.1" aria-label="자간" /><span class="snd-vol-n disp-n" id="dispLsN"></span></span>
+              </div>
+              <div class="wg-row sb-row disp-row">
+                <span class="wg-row-name">문단 간격</span>
+                <span class="wg-row-ctl"><input type="range" class="mb-vol" id="dispGap" min="0" max="20" step="1" aria-label="문단 간격" /><span class="snd-vol-n disp-n" id="dispGapN"></span></span>
+              </div>
+              <div class="wg-row sb-row disp-row">
+                <span class="wg-row-name">양쪽 정렬</span>
+                <span class="wg-row-ctl"><button class="wg-chip" type="button" id="dispJustify"></button></span>
+              </div>
+              <div class="disp-reset-row"><button class="wg-chip" type="button" id="dispReset">기본으로</button></div>
+              <p class="mg-note">ARCHIVE·LOG 글, PAIR 소개, OC 자유 글, 메모에 적용돼요. 문단 간격은 Enter 로
+                나눈 줄 사이 간격이에요(Shift+Enter 줄에는 들어가지 않아요). 기본은 1.6 · 0px · 4px · 양쪽 정렬 끔이에요.
+                가운데·오른쪽으로 정렬해 둔 줄은 그 정렬 그대로예요.</p>
+            </div>
+            <!-- 미리보기 — 실제 글 본문과 같은 규칙(.profile-view-text .arc-view-content)을
+                 입고 있어서 값을 바꾸면 그대로 따라 바뀝니다. 긴 첫 줄은 저절로 접히고(줄간격),
+                 둘째 줄은 Enter 로 넘긴 줄(문단 간격)입니다. 글은 주인이 준 것입니다. -->
+            <div class="disp-prev-wrap">
+              <span class="wg-prev-tag">미리보기</span>
+              <div class="profile-view-text arc-view-content disp-prev">지금은... 깊은 밤. 지금은 무덤이 커다란 입을 벌려 혼령들을 내놓아 그것들이 교회를 향해 흘러가는 깊은 밤. 우리의 요정들도 태양에게서 멀어지며 헤카테의 삼두마차 곁에서 어둠을 쫓아 달린다. 마치, 꿈처럼.<div>지금은... 우리의 세상이다!</div></div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -795,9 +844,9 @@
           <div class="mg-tabs" data-mgtabs="widget">
             <button class="mg-tab active" type="button" data-mgpane="list">LIST</button>
             <span class="mg-tab-dot" aria-hidden="true">·</span>
-            <button class="mg-tab" type="button" data-mgpane="add">ADD</button>
-            <span class="mg-tab-dot" aria-hidden="true">·</span>
             <button class="mg-tab" type="button" data-mgpane="design">DESIGN</button>
+            <span class="mg-tab-dot" aria-hidden="true">·</span>
+            <button class="mg-tab" type="button" data-mgpane="add">ADD</button>
           </div>
         </div>
       </div>
@@ -863,7 +912,10 @@
             <div class="wgd-opts">
               <div class="wg-row sb-row">
                 <span class="wg-row-name">외곽선</span>
-                <span class="wg-row-ctl"><button class="wg-chip" type="button" id="wgdBorder"></button></span>
+                <span class="wg-row-ctl wgd-cols">
+                  <label class="dd-col"><span>색</span><input type="color" id="wgdBorderCol" /></label>
+                  <button class="wg-chip" type="button" id="wgdBorder"></button>
+                </span>
               </div>
               <div class="wg-row sb-row">
                 <span class="wg-row-name">그림자</span>
@@ -962,7 +1014,7 @@
                       <button type="button" data-cmd="bold"><b>B</b></button>
                       <button type="button" data-cmd="italic"><i>I</i></button>
                       <input type="color" class="rt-color" value="#1b1b1f" title="글자색" />
-                      <input type="text" class="rt-size" data-size-for="pdCharIntro" inputmode="decimal" maxlength="4" placeholder="px" autocomplete="off" title="글자 크기(px) — 숫자를 적고 Enter, ↑↓ 로 1씩" aria-label="글자 크기" />
+                      <span class="rt-size-box"><input type="text" class="rt-size" data-size-for="pdCharIntro" inputmode="decimal" maxlength="4" placeholder="–" autocomplete="off" title="글자 크기(px) — 숫자를 적고 Enter, ↑↓ 로 1씩" aria-label="글자 크기" /><span class="rt-size-unit" aria-hidden="true">px</span></span>
                     </div>
                     <div class="pd-desc-box">
                       <div class="meta-container" id="pdCharMeta"></div>
@@ -986,7 +1038,7 @@
                       <button type="button" data-cmd="bold"><b>B</b></button>
                       <button type="button" data-cmd="italic"><i>I</i></button>
                       <input type="color" class="rt-color" value="#1b1b1f" title="글자색" />
-                      <input type="text" class="rt-size" data-size-for="pdPersonaIntro" inputmode="decimal" maxlength="4" placeholder="px" autocomplete="off" title="글자 크기(px) — 숫자를 적고 Enter, ↑↓ 로 1씩" aria-label="글자 크기" />
+                      <span class="rt-size-box"><input type="text" class="rt-size" data-size-for="pdPersonaIntro" inputmode="decimal" maxlength="4" placeholder="–" autocomplete="off" title="글자 크기(px) — 숫자를 적고 Enter, ↑↓ 로 1씩" aria-label="글자 크기" /><span class="rt-size-unit" aria-hidden="true">px</span></span>
                     </div>
                     <div class="pd-desc-box">
                       <div class="meta-container" id="pdPersonaMeta"></div>
@@ -1053,7 +1105,7 @@
                     <button type="button" data-cmd="italic" title="이탤릭"><i>I</i></button>
                     <input type="color" class="rt-color" value="#1a1a1a" title="글자색" />
                     <span class="rt-sep"></span>
-                    <input type="text" class="rt-size" data-size-for="pdMemo" inputmode="decimal" maxlength="4" placeholder="px" autocomplete="off" title="글자 크기(px) — 숫자를 적고 Enter, ↑↓ 로 1씩" aria-label="글자 크기" />
+                    <span class="rt-size-box"><input type="text" class="rt-size" data-size-for="pdMemo" inputmode="decimal" maxlength="4" placeholder="–" autocomplete="off" title="글자 크기(px) — 숫자를 적고 Enter, ↑↓ 로 1씩" aria-label="글자 크기" /><span class="rt-size-unit" aria-hidden="true">px</span></span>
                     <button type="button" data-rt="fold" title="접기">▾</button>
                     <button type="button" data-cmd="blockquote" title="인용구">❝</button>
                     <button type="button" data-rt="divider" title="구분선">―</button>
@@ -1210,7 +1262,7 @@
                 <button type="button" data-cmd="strikeThrough" title="취소선"><s>S</s></button>
                 <input type="color" class="rt-color" value="#1a1a1a" title="글자색" />
                 <span class="rt-sep"></span>
-                <input type="text" class="rt-size" data-size-for="ocFree" inputmode="decimal" maxlength="4" placeholder="px" autocomplete="off" title="글자 크기(px) — 숫자를 적고 Enter, ↑↓ 로 1씩" aria-label="글자 크기" />
+                <span class="rt-size-box"><input type="text" class="rt-size" data-size-for="ocFree" inputmode="decimal" maxlength="4" placeholder="–" autocomplete="off" title="글자 크기(px) — 숫자를 적고 Enter, ↑↓ 로 1씩" aria-label="글자 크기" /><span class="rt-size-unit" aria-hidden="true">px</span></span>
                 <button type="button" data-rt="fold" title="접기">▾</button>
                 <button type="button" data-cmd="blockquote" title="인용구">❝</button>
                 <button type="button" data-rt="divider" title="구분선">―</button>
@@ -1257,7 +1309,7 @@
                     <button type="button" data-cmd="italic" title="이탤릭"><i>I</i></button>
                     <input type="color" class="rt-color" value="#1a1a1a" title="글자색" />
                     <span class="rt-sep"></span>
-                    <input type="text" class="rt-size" data-size-for="ocMemo" inputmode="decimal" maxlength="4" placeholder="px" autocomplete="off" title="글자 크기(px) — 숫자를 적고 Enter, ↑↓ 로 1씩" aria-label="글자 크기" />
+                    <span class="rt-size-box"><input type="text" class="rt-size" data-size-for="ocMemo" inputmode="decimal" maxlength="4" placeholder="–" autocomplete="off" title="글자 크기(px) — 숫자를 적고 Enter, ↑↓ 로 1씩" aria-label="글자 크기" /><span class="rt-size-unit" aria-hidden="true">px</span></span>
                     <button type="button" data-rt="fold" title="접기">▾</button>
                     <button type="button" data-cmd="blockquote" title="인용구">❝</button>
                     <button type="button" data-rt="divider" title="구분선">―</button>
@@ -1385,7 +1437,7 @@
           <button type="button" data-cmd="underline"><u>U</u></button>
           <button type="button" data-cmd="strikeThrough"><s>S</s></button>
           <input type="color" class="rt-color" id="arcColorInput" value="#1a1a1a" title="글자색" />
-          <input type="text" class="rt-size" data-size-for="arcContentEditor" inputmode="decimal" maxlength="4" placeholder="px" autocomplete="off" title="글자 크기(px) — 숫자를 적고 Enter, ↑↓ 로 1씩" aria-label="글자 크기" />
+          <span class="rt-size-box"><input type="text" class="rt-size" data-size-for="arcContentEditor" inputmode="decimal" maxlength="4" placeholder="–" autocomplete="off" title="글자 크기(px) — 숫자를 적고 Enter, ↑↓ 로 1씩" aria-label="글자 크기" /><span class="rt-size-unit" aria-hidden="true">px</span></span>
           <span class="rt-sep"></span>
           <!-- 정렬 아이콘: 맞는 기호가 없어 얇은 선 네 줄로 직접 그립니다.
                긴 줄/짧은 줄이 번갈아 나오고, 짧은 줄이 붙는 쪽이 정렬 방향입니다. -->
@@ -1395,6 +1447,7 @@
           <button type="button" id="arcFoldBtn" title="접기">▾</button>
           <button type="button" data-cmd="blockquote" title="인용구">❝</button>
           <button type="button" id="arcDividerBtn" title="구분선">―</button>
+        <button type="button" id="arcTocBtn" title="목차 — 맨 위에 # 제목으로 목차를 만듭니다"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h1.2M5.5 4h8M2.5 8h1.2M5.5 8h8M5.5 12h1.2M8.5 12h5"/></svg></button>
         <button type="button" id="arcCopyBoxBtn" title="복사 칸"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.2 5.4V2.2h3.2M10.6 2.2h3.2v3.2M13.8 10.6v3.2h-3.2M5.4 13.8H2.2v-3.2M5.2 6.6h5.6M5.2 9.4h3.6"/></svg></button>
         <button type="button" id="arcHtmlBtn" title="HTML 상자"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.7 4.3 2.3 8l3.4 3.7M10.3 4.3 13.7 8l-3.4 3.7M9.3 3.4 6.7 12.6"/></svg></button>
           <span class="rt-sep"></span>
@@ -1630,10 +1683,11 @@
       <div class="rt-toolbar rt-toolbar-log">
         <button type="button" data-cmd="bold" title="볼드"><b>B</b></button>
         <button type="button" data-cmd="italic" title="이탤릭"><i>I</i></button>
-        <input type="text" class="rt-size" data-size-for="logContent" inputmode="decimal" maxlength="4" placeholder="px" autocomplete="off" title="글자 크기(px) — 숫자를 적고 Enter, ↑↓ 로 1씩" aria-label="글자 크기" />
+        <span class="rt-size-box"><input type="text" class="rt-size" data-size-for="logContent" inputmode="decimal" maxlength="4" placeholder="–" autocomplete="off" title="글자 크기(px) — 숫자를 적고 Enter, ↑↓ 로 1씩" aria-label="글자 크기" /><span class="rt-size-unit" aria-hidden="true">px</span></span>
         <button type="button" id="logSubColorBtn" title="보조색 적용">A</button>
         <button type="button" id="logHighlightBtn" title="형광펜">✎</button>
         <button type="button" id="logDividerBtn" title="구분선">―</button>
+        <button type="button" id="logTocBtn" title="목차 — 맨 위에 # 제목으로 목차를 만듭니다"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h1.2M5.5 4h8M2.5 8h1.2M5.5 8h8M5.5 12h1.2M8.5 12h5"/></svg></button>
         <button type="button" id="logCopyBoxBtn" title="복사 칸"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.2 5.4V2.2h3.2M10.6 2.2h3.2v3.2M13.8 10.6v3.2h-3.2M5.4 13.8H2.2v-3.2M5.2 6.6h5.6M5.2 9.4h3.6"/></svg></button>
         <button type="button" id="logHtmlBtn" title="HTML 상자"><svg class="rt-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.7 4.3 2.3 8l3.4 3.7M10.3 4.3 13.7 8l-3.4 3.7M9.3 3.4 6.7 12.6"/></svg></button>
         <button type="button" id="logFoldBtn" title="접기">▾</button>
@@ -1881,7 +1935,7 @@
        (그 목록을 만드는 것도 JS인데 새 CSS 가 감싸이지 않은 select 를 폭 0 으로
        접습니다), 스티커 서랍이 엉뚱한 자리에 놓였습니다.
        **CSS 와 JS 를 함께 고쳤으면 번호도 함께 올리세요.** -->
-<script src="js/main.js?v=253"></script>
-<script type="module" src="js/firebase-store.js?v=123"></script>
+<script src="js/main.js?v=257"></script>
+<script type="module" src="js/firebase-store.js?v=124"></script>
 </body>
 </html>

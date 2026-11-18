@@ -90,7 +90,9 @@ const SCALAR_KEYS = ['profile', 'siteName', 'homeIntro', 'homeBanner', 'archiveS
                      'secretPw',
                      /* 팝업 위젯의 겉모습 — 외곽선·그림자·상단바·작게 한 단추 자리.
                         글자 몇 개뿐입니다. */
-                     'wgDesign'];
+                     'wgDesign',
+                     /* 사이트 겉모습 — SETTING › LOOK. 지금은 목록 사진 흑백 켜기 셋. */
+                     'lookCfg'];
 const LIST_KEYS   = ['cards', 'pairPosts', 'archive', 'ocPosts'];
 
 /* Firestore 문서 1개 최대 1MiB. 여유를 두고 자릅니다. */

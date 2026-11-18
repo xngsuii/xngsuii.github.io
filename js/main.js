@@ -404,7 +404,9 @@ let state = {
   /* 최신글 위젯 설정 — {source, count} */
   recentCfg:{ source:'all', count:5 },
   /* 팝업 위젯의 겉모습 — WIDGET › DESIGN (normalizeWgDesign) */
-  wgDesign:null
+  wgDesign:null,
+  /* 사이트 겉모습 — SETTING › LOOK (normalizeLookCfg) */
+  lookCfg:null
 };
 
 /* ---- PROMPT 폴더 ----
@@ -812,6 +814,7 @@ async function loadState(){
   state.dictWord = normalizeDictWords(await storageGet('dictWord', null));
   state.recentCfg = normalizeRecentCfg(await storageGet('recentCfg', null));
   state.wgDesign = normalizeWgDesign(await storageGet('wgDesign', null));
+  state.lookCfg = normalizeLookCfg(await storageGet('lookCfg', null));
   state.ocCats = normalizeOcCats(await storageGet('ocCats', null), await storageGet('ocFolders', null));
   state.ocPosts = (await storageGet('ocPosts', [])).map(migrateOcPost);
   /* 카테고리가 이제 필수라, 없어졌거나 유효하지 않은 카테고리를 가리키는 글은
@@ -867,6 +870,7 @@ function renderAll(){
   applyCursorFx();
   applyNavNames();
   applyShowStorage();
+  safely('겉모습', applyLookCfg);
   renderSettingPanes();
   renderBuiltinWidgets();
   applyEditMode();
@@ -4410,7 +4414,9 @@ function flattenForFences(root){
        (applyMarkdownBlocks)도 별표 서식(applyAutoFormat)도 그 안을 찾지
        못합니다 — 세 곳을 따로 막지 않고 여기 한 곳만 막는 까닭입니다.
        바깥에서 보면 글자 없는 블록 하나로 보입니다. */
-    const opaque = node.classList && node.classList.contains('copy-box');
+    /* 목차 상자도 같은 대접입니다 — 안의 글자는 제목에서 베껴 온 것이라
+       마크다운·별표 서식이 다시 손대면 안 됩니다. */
+    const opaque = node.classList && (node.classList.contains('copy-box') || node.classList.contains('toc-box'));
     const isBlock = BLOCK_TAGS.includes(node.tagName) || opaque;
     if(isBlock) addBoundary(node.parentNode, childIndex(node));
     if(!opaque) Array.from(node.childNodes).forEach(walk);
@@ -4438,7 +4444,8 @@ function isLineSeparator(node){
   if(node.tagName === 'BR' || node.tagName === 'IMG') return true;
   if(BLOCK_TAGS.includes(node.tagName)) return true;
   return node.classList && (node.classList.contains('code-block')
-    || node.classList.contains('copy-box') || node.classList.contains('html-embed'));
+    || node.classList.contains('copy-box') || node.classList.contains('html-embed')
+    || node.classList.contains('toc-box'));
 }
 /* 펜스 글자를 감싼 가장 가까운 블록 요소(el, 예: .fold-body) 안에서, 그 글자가
    속한 '줄'만 골라 경계를 찾습니다 — el 전체가 아닙니다. el 은 흔히 한 줄짜리
@@ -4700,7 +4707,7 @@ function mdBuildHeading(frag, line){
 /* 코드 블록 안의 글은 적은 그대로 보여야 하므로 건드리지 않습니다 */
 function mdInsideCode(point){
   const el = point.container.nodeType === 3 ? point.container.parentNode : point.container;
-  return !!(el && el.closest && el.closest('.code-block, .copy-box, .html-embed'));
+  return !!(el && el.closest && el.closest('.code-block, .copy-box, .html-embed, .toc-box'));
 }
 function applyMarkdownBlocks(root){
   const { text, marks } = flattenForFences(root);
@@ -4771,7 +4778,116 @@ function decorateContent(el){
   applyCodeFences(el);
   applyMarkdownBlocks(el);
   applyHtmlEmbeds(el, false);
+  buildTocs(el);        // 제목(.md-h)이 다 만들어진 뒤라야 목차를 셀 수 있습니다
 }
+
+/* ============================================================
+   목차 (.toc-box)
+   ------------------------------------------------------------
+   글 맨 위에 # 제목들로 목차를 세웁니다(ARCHIVE·LOG 의 목차 단추).
+   **저장되는 것은 빈 표시 하나뿐입니다** — <div class="toc-box" contenteditable="false">.
+   안의 목록은 글을 그릴 때마다 그 글의 제목으로 새로 만듭니다. 목록째 저장하면
+   제목을 고칠 때마다 목차가 낡아 버립니다(HTML 상자와 같은 방식 — 화면용으로
+   만든 것은 editorHtml 이 저장 전에 비웁니다).
+
+   번호: # 은 1. / ## 는 1.1. / ### 는 1.1.1. — 단, **건너뛴 단계는 세지 않습니다**
+   (# 다음에 바로 ### 가 오면 1.1. 입니다 — 주인이 정한 규칙). 그래서 제목 단계를
+   그대로 깊이로 쓰지 않고, 지금 열려 있는 단계들을 쌓아 두고 견줍니다:
+     · 더 깊은 단계가 오면 한 칸 들어갑니다(몇 단계를 건너뛰었든 한 칸).
+     · 같은 단계면 번호만 올립니다.
+     · 얕은 단계가 오면 그보다 깊은 것을 닫고, 닫은 자리와 같은 깊이에 서면
+       닫힌 것의 다음 번호를 이어 받습니다(# · ### · ## 이면 1. · 1.1. · 1.2.). */
+function tocNumbers(levels){
+  const open = [], counts = [];
+  return levels.map(L=>{
+    let popped = null;
+    while(open.length && open[open.length - 1] > L){ open.pop(); popped = counts.pop(); }
+    if(open.length && open[open.length - 1] === L){
+      counts[counts.length - 1]++;
+    }else{
+      open.push(L);
+      counts.push(popped != null ? popped + 1 : 1);
+    }
+    return { depth: open.length, num: counts.join('.') + '.' };
+  });
+}
+function buildTocs(root){
+  const boxes = root.querySelectorAll('.toc-box');
+  if(!boxes.length) return;
+  const heads = Array.from(root.querySelectorAll('.md-h')).filter(h=> !h.closest('.toc-box'));
+  const nums = tocNumbers(heads.map(h=> Number(h.tagName.slice(1)) || 1));
+  boxes.forEach(box=>{
+    box.innerHTML = '';
+    box.classList.toggle('toc-empty', !heads.length);
+    if(!heads.length) return;
+    const title = document.createElement('div');
+    title.className = 'toc-title';
+    title.textContent = '목차';
+    box.appendChild(title);
+    const list = document.createElement('div');
+    list.className = 'toc-list';
+    heads.forEach((h, i)=>{
+      const a = document.createElement('button');
+      a.type = 'button';
+      a.className = 'toc-item';
+      a.style.setProperty('--toc-depth', nums[i].depth - 1);
+      a.innerHTML = '<span class="toc-num"></span><span class="toc-text"></span>';
+      a.querySelector('.toc-num').textContent = nums[i].num;
+      a.querySelector('.toc-text').textContent = (h.textContent || '').trim();
+      a._tocTarget = h;
+      list.appendChild(a);
+    });
+    box.appendChild(list);
+  });
+}
+/* 글을 고치는 동안에는 무엇이 있는지만 보여 줍니다 — 목록은 게시해야 채워집니다
+   (편집기에는 # 가 아직 제목으로 바뀌지 않은 글자로 들어 있습니다). */
+function paintTocEditing(root){
+  root.querySelectorAll('.toc-box').forEach(box=>{
+    box.classList.remove('toc-empty');
+    box.innerHTML = '<div class="toc-title">목차</div>'
+      + '<div class="toc-hint"># · ## · ### 로 쓴 제목이 게시할 때 여기 번호와 함께 채워져요.</div>'
+      + '<button type="button" class="toc-del" title="목차 빼기">✕</button>';
+  });
+}
+/* 목차 단추 — 글 **맨 위에** 넣습니다(주인 요청: 상단에 목차). 이미 있으면 하나 더
+   만들지 않고 그 자리를 보여 줍니다. 커서가 어디 있든 같은 자리입니다. */
+function insertToc(editorId){
+  const ed = document.getElementById(editorId);
+  if(!ed) return;
+  let box = ed.querySelector('.toc-box');
+  if(!box){
+    box = document.createElement('div');
+    box.className = 'toc-box';
+    box.contentEditable = 'false';
+    ed.insertBefore(box, ed.firstChild);
+    paintTocEditing(ed);
+  }
+  box.scrollIntoView({ block:'nearest' });
+  box.classList.remove('toc-flash'); void box.offsetWidth; box.classList.add('toc-flash');
+  setTimeout(()=> box.classList.remove('toc-flash'), 700);
+}
+/* 목차 줄을 누르면 그 제목으로 갑니다. 제목이 접기 안에 있으면 접기부터 엽니다 —
+   닫힌 접기 안의 제목은 화면에 없어서 갈 곳이 없습니다.
+   ✕(편집 중에만 있음)는 목차를 통째로 뺍니다. */
+document.addEventListener('click', (e)=>{
+  if(!(e.target instanceof Element)) return;
+  const del = e.target.closest('.toc-del');
+  if(del){
+    e.preventDefault(); e.stopPropagation();
+    const box = del.closest('.toc-box');
+    if(box) box.remove();
+    return;
+  }
+  const item = e.target.closest('.toc-item');
+  if(!item || !item._tocTarget) return;
+  e.preventDefault();
+  const h = item._tocTarget;
+  let f = h.closest('.fold-block');
+  while(f){ if(!f.classList.contains('open')) setFoldOpen(f, true); f = f.parentElement && f.parentElement.closest('.fold-block'); }
+  /* 이동만 합니다 — 도착한 제목을 색으로 반짝이던 효과는 뺐습니다(주인 요청) */
+  h.scrollIntoView({ block:'start' });
+});
 
 /* ============================================================
    본문 HTML 상자 (.html-embed)
@@ -5563,6 +5679,11 @@ function editorHtml(editorId){
     b.classList.remove('he-showcode');
     b.innerHTML = '';
   });
+  /* 목차도 표시 하나만 남깁니다 — 목록은 그릴 때마다 새로 만듭니다(buildTocs) */
+  copy.querySelectorAll('.toc-box').forEach(b=>{
+    b.className = 'toc-box';
+    b.innerHTML = '';
+  });
   return copy.innerHTML;
 }
 
@@ -5575,6 +5696,9 @@ function renderLogContentInto(el, entry){
     applyAutoFormat(el,
       entry.subColor   || LOG_SUB_COLOR_DEFAULT,
       entry.parenColor || LOG_PAREN_COLOR_DEFAULT);
+    /* 목차를 한 번 더 셉니다 — LOG 는 별표 서식(*기울임*)을 decorateContent 뒤에
+       풀어서, 먼저 센 목차에는 제목의 * 가 그대로 남아 있었습니다. */
+    buildTocs(el);
   };
   paintBody();
   whenImgArrives(entry.content, el, paintBody);
@@ -6120,6 +6244,7 @@ let currentLogViewId = null;
   /* 접기 — ARCHIVE 편집기와 같은 블록을 넣습니다 */
   const cbBtn2 = document.getElementById('logCopyBoxBtn');
   if(cbBtn2) cbBtn2.addEventListener('click', ()=> insertCopyBox('logContent'));
+  document.getElementById('logTocBtn')?.addEventListener('click', ()=> insertToc('logContent'));
   const foldBtn = document.getElementById('logFoldBtn');
   if(foldBtn) foldBtn.addEventListener('click', ()=> insertFoldBlock('logContent'));
   const heBtn = document.getElementById('logHtmlBtn');
@@ -6228,6 +6353,7 @@ async function enterLogEdit(entry){
   if(editingLogId !== (entry ? entry.id : null)) return;   // 그 사이 다른 글을 열었으면 그만
   ed.innerHTML = entry ? imgUrl(logContentToHtml(entry.content)) : '';
   applyHtmlEmbeds(ed, true);
+  paintTocEditing(ed);
   logEditBaseline = logEditSnapshot();
 }
 
@@ -9511,6 +9637,15 @@ function initSizeBoxes(){
       return ok;
     };
     box.addEventListener('focus', ()=> box.select());
+    /* 테두리 상자 안의 'px' 나 빈 자리를 눌러도 숫자 칸으로 갑니다. mousedown 을
+       막고 직접 옮기는 까닭: 그냥 두면 상자를 누른 순간 글 칸에서 커서가 빠지고
+       (어디로 가는지 모르는 채로) 메모 칸이 다시 그려져 기억한 구간이 사라집니다. */
+    const wrap = box.closest('.rt-size-box');
+    if(wrap) wrap.addEventListener('mousedown', (e)=>{
+      if(e.target === box) return;
+      e.preventDefault();
+      box.focus();
+    });
     box.addEventListener('keydown', (e)=>{
       e.stopPropagation();   // 화면 단축키(Escape 로 나가기 등)가 받지 않게
       if(e.key === 'Enter'){
@@ -10043,6 +10178,7 @@ async function enterArcEdit(existingItem){
   if(editingArcId !== (existingItem ? existingItem.id : null)) return;   // 그 사이 다른 글을 열었으면 그만
   editorEl.innerHTML = existingItem ? imgUrl(existingItem.content) : '';
   applyHtmlEmbeds(editorEl, true);   /* 저장된 HTML 상자에 탭·코드 칸을 세웁니다 */
+  paintTocEditing(editorEl);         /* 목차 표시에 '게시하면 채워져요' 안내를 세웁니다 */
   arcAttachments = existingItem && existingItem.files ? existingItem.files.slice() : [];
   renderArcAttachList();
   arcEditBaseline = arcEditSnapshot();
@@ -10100,6 +10236,7 @@ document.getElementById('arcColorInput').addEventListener('input', (e)=>{
 initBlockquoteKeys('arcContentEditor');
 /* 구분선 삽입 (LOG 편집기와 같은 방식) */
 document.getElementById('arcCopyBoxBtn')?.addEventListener('click', ()=> insertCopyBox('arcContentEditor'));
+document.getElementById('arcTocBtn')?.addEventListener('click', ()=> insertToc('arcContentEditor'));
 const arcHtmlBtn = document.getElementById('arcHtmlBtn');
 if(arcHtmlBtn){
   arcHtmlBtn.addEventListener('mousedown', e=> e.preventDefault());
@@ -11777,6 +11914,8 @@ function normalizeWgDesign(v){
   const amt = parseInt(v && v.shadowAmt, 10);
   return {
     border:    !(v && v.border === false),
+    /* 외곽선 색 — '' 이면 사이트 기본 선 색(--border, #000000) */
+    borderCol: col(v && v.borderCol),
     shadow:    !(v && v.shadow === false),
     shadowAmt: Number.isFinite(amt) ? clamp(amt, 0, 100) : 35,
     barBg:     col(v && v.barBg),
@@ -11797,7 +11936,7 @@ function applyWgDesign(){
   const a = (d.shadowAmt / 250).toFixed(3);
   /* 외곽선을 끌 때 선을 없애지 않고 투명하게 둡니다 — 1px 이 빠지면 상자 안쪽
      폭이 2px 늘어 디데이 배너처럼 꽉 채우는 위젯의 비율이 달라집니다. */
-  root.style.setProperty('--wp-border', d.border ? 'var(--border)' : 'transparent');
+  root.style.setProperty('--wp-border', d.border ? (d.borderCol || 'var(--border)') : 'transparent');
   root.style.setProperty('--wp-shadow', d.shadow ? '0 6px 20px rgba(0,0,0,' + a + ')' : 'none');
   root.style.setProperty('--wp-mini-shadow', d.shadow ? '0 4px 12px rgba(0,0,0,' + a + ')' : 'none');
   root.style.setProperty('--wp-bar-bg', d.barBg || 'transparent');
@@ -11813,6 +11952,7 @@ function applyWgDesign(){
    '작게 한 단추' 만은 자리가 JS 몫이라 위젯을 다시 그려 줍니다. */
 const WGD_FG_DEFAULT = '#767676';   // --text-muted 와 같은 값 — 색 고르개가 빈 값을 못 받아서 보여 주기용
 const WGD_BG_DEFAULT = '#ffffff';   // --bg
+const WGD_BORDER_DEFAULT = '#000000';   // --border
 function renderDesignPane(){
   const d = wgDesign();
   const chip = (id, on, onText, offText)=>{
@@ -11822,6 +11962,8 @@ function renderDesignPane(){
     el.classList.toggle('wg-chip-on', on);
   };
   chip('wgdBorder', d.border, '보임', '없음');
+  const bc = document.getElementById('wgdBorderCol');
+  if(bc){ bc.value = d.borderCol || WGD_BORDER_DEFAULT; bc.disabled = !d.border; }
   chip('wgdShadow', d.shadow, '켬', '끔');
   const amt = document.getElementById('wgdShadowAmt');
   if(amt){ amt.value = d.shadowAmt; amt.disabled = !d.shadow; }
@@ -11876,6 +12018,9 @@ function initDesignPane(){
   on('wgdBarFg', 'input', (e)=>{ wgDesign().barFg = e.target.value; applyWgDesign(); });
   on('wgdBarFg', 'change', ()=> wgdCommit());
   on('wgdColReset', 'click', ()=>{ wgDesign().barBg = ''; wgDesign().barFg = ''; wgdCommit(); });
+  /* 외곽선 색 — 고르는 동안은 보여 주기만, 닫을 때 저장(위 상단바 색과 같은 방식) */
+  on('wgdBorderCol', 'input', (e)=>{ wgDesign().borderCol = e.target.value; applyWgDesign(); });
+  on('wgdBorderCol', 'change', ()=> wgdCommit());
 }
 initDesignPane();
 
@@ -13219,13 +13364,120 @@ function initLockPane(){
   }));
 }
 
-/* 설정 화면을 켤 때 다섯 장을 한꺼번에 맞춥니다 */
+/* ---- LOOK: 사이트 겉모습 ----
+   목록 사진을 흑백으로 두었다가 마우스를 올리면 제 색이 드러나게 합니다 — HOME 의
+   LOVE INTEREST 카드가 이미 그렇게 합니다. PAIR · OC · PROMPT 를 **따로** 켭니다
+   (주인 요청: PAIR·OC 만 켜고 PROMPT 는 끄는 식). 마우스가 없는 기기(폰)에서는
+   색을 되돌릴 방법이 없으므로 CSS 가 (hover:hover) 일 때만 겁니다.
+   **여기 적지 않은 항목은 불러올 때마다 지워집니다** — normalize* 공통 지뢰. */
+const LOOK_GRAY_KEYS = ['pair', 'oc', 'prompt'];
+/* 글 본문의 줄간격(배수)·자간(px)·문단 간격(px). 기본값은 지금까지의 값 그대로라
+   한 번도 건드리지 않으면 아무것도 달라지지 않습니다. 범위는 화면의 막대와 같습니다. */
+const TEXT_DEFAULT = { lh:1.6, ls:0, gap:4, justify:false };
+const TEXT_RANGE   = { lh:[1.2, 2.4], ls:[-1, 2], gap:[0, 20] };
+function normalizeLookCfg(v){
+  const g = (v && v.gray) || {};
+  const gray = {};
+  LOOK_GRAY_KEYS.forEach(k=>{ gray[k] = !!g[k]; });
+  const t = (v && v.text) || {};
+  const num = (x, key)=>{
+    const n = parseFloat(x);
+    return Number.isFinite(n) ? clamp(n, TEXT_RANGE[key][0], TEXT_RANGE[key][1]) : TEXT_DEFAULT[key];
+  };
+  /* **여기 적지 않은 항목은 불러올 때마다 지워집니다** — normalize* 공통 지뢰 */
+  return { gray, text:{ lh:num(t.lh, 'lh'), ls:num(t.ls, 'ls'), gap:num(t.gap, 'gap'),
+                        /* 양쪽 정렬 — 끈 것이 기본(지금까지처럼 왼쪽 맞춤) */
+                        justify: !!t.justify } };
+}
+function lookCfg(){
+  if(!state.lookCfg) state.lookCfg = normalizeLookCfg(null);
+  return state.lookCfg;
+}
+function applyLookCfg(){
+  const g = lookCfg().gray;
+  LOOK_GRAY_KEYS.forEach(k=> document.body.classList.toggle('gs-' + k, !!g[k]));
+  /* 본문 간격은 CSS 변수 셋으로 넘깁니다 — 규칙 쪽은 var(--body-lh, 1.6) 처럼
+     기본값을 품고 있어서 이 값이 아직 없어도 예전과 똑같이 보입니다. */
+  const t = lookCfg().text;
+  const root = document.documentElement;
+  root.style.setProperty('--body-lh', String(t.lh));
+  root.style.setProperty('--body-ls', t.ls + 'px');
+  root.style.setProperty('--body-gap', t.gap + 'px');
+  root.style.setProperty('--body-align', t.justify ? 'justify' : 'start');
+}
+const fmtLh = (n)=> (Math.round(n * 100) / 100).toFixed(2).replace(/0$/, '');
+function paintDispNums(){
+  const t = lookCfg().text;
+  const set = (id, s)=>{ const el = document.getElementById(id); if(el) el.textContent = s; };
+  set('dispLhN', fmtLh(t.lh));
+  set('dispLsN', (Math.round(t.ls * 10) / 10) + 'px');
+  set('dispGapN', t.gap + 'px');
+  const j = document.getElementById('dispJustify');
+  if(j){
+    j.textContent = t.justify ? '켬' : '끔';
+    j.classList.toggle('wg-chip-on', !!t.justify);
+  }
+}
+function renderDispText(){
+  const t = lookCfg().text;
+  const v = (id, x)=>{ const el = document.getElementById(id); if(el) el.value = x; };
+  v('dispLh', t.lh); v('dispLs', t.ls); v('dispGap', t.gap);
+  paintDispNums();
+}
+/* 막대를 미는 동안에는 화면만 바꾸고(input), 손을 떼면 저장합니다(change) —
+   위젯 DESIGN 의 그림자 농도와 같은 방식입니다. */
+function initDispText(){
+  [['dispLh', 'lh'], ['dispLs', 'ls'], ['dispGap', 'gap']].forEach(([id, key])=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.addEventListener('input', ()=>{
+      lookCfg().text[key] = clamp(parseFloat(el.value) || 0, TEXT_RANGE[key][0], TEXT_RANGE[key][1]);
+      applyLookCfg(); paintDispNums();
+    });
+    el.addEventListener('change', ()=>{ if(isLoggedIn) storageSet('lookCfg', state.lookCfg); });
+  });
+  document.getElementById('dispJustify')?.addEventListener('click', ()=>{
+    lookCfg().text.justify = !lookCfg().text.justify;
+    applyLookCfg(); paintDispNums();
+    if(isLoggedIn) storageSet('lookCfg', state.lookCfg);
+  });
+  document.getElementById('dispReset')?.addEventListener('click', ()=>{
+    lookCfg().text = Object.assign({}, TEXT_DEFAULT);
+    applyLookCfg(); renderDispText();
+    if(isLoggedIn) storageSet('lookCfg', state.lookCfg);
+  });
+}
+initDispText();
+function renderLookPane(){
+  const box = document.getElementById('lookGray');
+  if(!box) return;
+  box.innerHTML = '';
+  const label = { pair: navName('pair'), oc: navName('oc'), prompt: 'PROMPT' };
+  LOOK_GRAY_KEYS.forEach(k=>{
+    const on = !!lookCfg().gray[k];
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'wg-chip' + (on ? ' wg-chip-on' : '');
+    b.textContent = label[k] + (on ? ' 흑백' : ' 컬러');
+    b.title = on ? '마우스를 올리기 전에는 흑백' : '늘 제 색';
+    b.addEventListener('click', ()=>{
+      lookCfg().gray[k] = !lookCfg().gray[k];
+      applyLookCfg(); renderLookPane();
+      if(isLoggedIn) storageSet('lookCfg', state.lookCfg);
+    });
+    box.appendChild(b);
+  });
+  renderDispText();
+}
+
+/* 설정 화면을 켤 때 장들을 한꺼번에 맞춥니다 */
 function renderSettingPanes(){
   safely('커서 칸', renderCursorPane);
   safely('이펙트 칸', renderFxPane);
   safely('소리 칸', renderSoundPane);
   safely('사이드바 칸', renderSidebarPane);
   safely('잠금 칸', renderLockPane);
+  safely('겉모습 칸', renderLookPane);
 }
 initCursorPane();
 initFxPane();

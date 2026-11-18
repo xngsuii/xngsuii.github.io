@@ -1749,6 +1749,46 @@
     .dream-card .dc-adjustable{filter:grayscale(1);transition:filter .5s ease;}
     .dream-card:hover .dc-adjustable{filter:grayscale(0);}
   }
+  /* ---- 목록 사진 흑백 (SETTING › LOOK, 켤 때만) ----
+     PAIR·OC·PROMPT 를 따로 켭니다 — body 의 gs-pair / gs-oc / gs-prompt.
+     HOME 카드와 같은 .5s 로 색이 돌아옵니다. 사진이 깔린 층에만 걸어서(카드나 칸
+     전체가 아니라) 제목 글자·체크·👁 는 색이 그대로입니다.
+     · PAIR·OC 는 ::after 가 사진 층입니다(확대 효과가 그 층에만 걸려 있습니다).
+       transform 전이를 같이 다시 적어야 확대가 끊기지 않습니다.
+     · 잠긴 카드와 '흐리게' 폴더 칸은 빼 둡니다 — 이미 가려진 사진이라 색을 뺄 까닭이
+       없고, PROMPT 의 흐림은 같은 filter 를 쓰므로 겹치면 흐림이 풀려 버립니다. */
+  @media (hover:hover){
+    body.gs-pair #view-pair .post-card:not(.locked) .post-thumb::after,
+    body.gs-oc #view-oc .post-card:not(.locked) .post-thumb::after{filter:grayscale(1);
+      transition:transform .25s cubic-bezier(.2,0,.2,1), filter .5s ease;}
+    body.gs-pair #view-pair .post-card:not(.locked):hover .post-thumb::after,
+    body.gs-oc #view-oc .post-card:not(.locked):hover .post-thumb::after{filter:grayscale(0);}
+    body.gs-prompt #view-archive .arc-nai-thumb:not(.blurred) .an-img{filter:grayscale(1);
+      transition:filter .5s ease, transform .35s cubic-bezier(.2,0,.2,1);}
+    body.gs-prompt #view-archive .arc-nai-thumb:not(.blurred):hover .an-img{filter:grayscale(0);}
+  }
+  .look-row{flex-wrap:wrap;}
+  .look-row .wg-row-name{flex:1;}
+  .look-chips{display:flex;flex-wrap:wrap;gap:6px;}
+  /* ---- DISPLAY › 글 본문 ----
+     왼쪽 조절 막대, 오른쪽 미리보기(위젯 DESIGN 과 같은 짜임). 미리보기는 진짜 글
+     본문과 같은 규칙을 입고 있어 막대를 밀면 같이 움직입니다. */
+  .disp-sub{margin-top:26px;}
+  .disp-text{display:flex;gap:28px;align-items:flex-start;}
+  .disp-ctls{flex:0 1 340px;min-width:0;}
+  .disp-row{flex-wrap:nowrap;cursor:default;}
+  .disp-row .wg-row-name{flex:none;width:72px;}
+  .disp-row .wg-row-ctl{flex:1;display:flex;align-items:center;gap:10px;}
+  .disp-row .mb-vol{flex:1;width:auto;margin:0;}
+  .disp-n{min-width:42px;}
+  .disp-reset-row{padding:10px 2px 0;}
+  .disp-prev-wrap{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;}
+  /* 미리보기는 편집 칸이 아니므로 편집 모드의 테두리 대신 옅은 점선 틀만 둡니다 */
+  /* .mg-pane 을 앞에 붙여 한 단 무겁게 씁니다 — 미리보기는 글 본문 규칙을 빌려 입느라
+     .arc-view-content 이기도 한데, 편집 모드의 `body.logged-in .arc-view-content{padding:0}`
+     이 같은 무게로 뒤에 있어서 틀과 안쪽 여백을 지워 버렸습니다. */
+  .mg-pane .disp-prev,
+  body.logged-in .mg-pane .disp-prev{border:1px dashed var(--rule-soft);padding:14px 16px;max-width:420px;}
   .dream-card .dc-grad{display:none;}
   /* 사진끼리는 맞붙지만 글까지 붙으면 옆 카드의 이름과 한 덩어리로 읽힙니다.
      오른쪽 26px 이 그 사이를 벌리는 자리입니다 — 격자의 가로 여백을 0 으로
@@ -2107,8 +2147,9 @@
      덩어리의 위 여백이 이 칸의 여백으로 합쳐져 나가버립니다(margin collapsing).
      그러면 칸은 이미 min-height:100% 로 자리를 꽉 채운 채 8px 아래로 밀려서,
      내용이 한 줄뿐인데도 딱 그만큼 넘쳐 스크롤이 생겼습니다. */
-  .side-memo{display:flow-root;min-height:100%;font-size:11.5px;line-height:1.6;
-    color:var(--text);outline:none;}
+  /* 줄간격·자간은 글 본문과 같은 DISPLAY 값을 따릅니다(.profile-view-text 의 설명) */
+  .side-memo{display:flow-root;min-height:100%;font-size:11.5px;line-height:var(--body-lh, 1.6);
+    letter-spacing:var(--body-ls, 0px);text-align:var(--body-align, start);color:var(--text);outline:none;}
   body.logged-in .side-memo:empty:before{content:'메모를 적어보세요...';color:var(--text-muted);}
   .side-memo img{max-width:100%;display:block;margin:8px 0;}
   .side-dots{position:absolute;left:0;right:0;bottom:0;height:26px;z-index:5;
@@ -2993,7 +3034,7 @@
   .log-editor div:not([class]),
   .oc-free div:not([class]),
   .side-memo div:not([class]),
-  blockquote div:not([class]){margin-top:4px;}
+  blockquote div:not([class]){margin-top:var(--body-gap, 4px);}   /* DISPLAY 의 '문단 간격' */
   /* **여기 있던 :first-child 예외는 빠졌습니다 — 그게 줄이 붙는 원인이었습니다.**
      `:first-child` 는 '첫 번째 **요소**'라 글자 마디는 세지 않습니다. 그런데 본문의
      흔한 모양은 `첫줄<div>둘째줄</div><div>셋째줄</div>` — 첫 줄은 맨속 글자라
@@ -3020,6 +3061,32 @@
   h4.md-h{font-size:13.5px;}
   h5.md-h{font-size:12.5px;}
   h6.md-h{font-size:11.5px;color:var(--text-muted);}
+  /* ---- 목차 (.toc-box) ----
+     글 맨 위의 상자. 목록은 그릴 때마다 # 제목에서 새로 만듭니다(main.js buildTocs).
+     줄마다 번호(강조색) + 제목, 깊이만큼 들여 씁니다(--toc-depth). 줄은 단추라 눌러서
+     그 제목으로 갑니다. 제목이 하나도 없으면 상자째 숨깁니다(.toc-empty). */
+  .toc-box{margin:2px 0 18px;padding:12px 14px 10px;border:1px solid var(--rule-soft);
+    background:var(--bg);font-family:var(--mono);transition:border-color .3s ease;}
+  .toc-box.toc-empty{display:none;}
+  .toc-title{font-size:11px;font-weight:700;letter-spacing:0;color:var(--text-muted);margin-bottom:6px;}
+  .toc-list{display:flex;flex-direction:column;}
+  .toc-item{display:flex;align-items:baseline;gap:7px;width:100%;padding:3px 0 3px calc(var(--toc-depth, 0) * 16px);
+    border:0;background:transparent;text-align:left;cursor:pointer;
+    font-family:var(--mono);font-size:12.5px;line-height:1.5;color:var(--text);}
+  .toc-num{flex:none;color:var(--accent);font-variant-numeric:tabular-nums;
+    font-variation-settings:'wght' 600;font-weight:600;}
+  .toc-text{flex:1;min-width:0;}
+  .toc-item:hover .toc-text{color:var(--accent);text-decoration:underline;text-underline-offset:3px;}
+  /* 편집 중에는 안내 한 줄과 ✕ 만 — 목록은 게시해야 채워집니다 */
+  .toc-box{position:relative;}
+  .toc-hint{font-size:11px;color:var(--text-muted);line-height:1.5;}
+  .toc-del{position:absolute;top:6px;right:6px;width:20px;height:20px;padding:0;border:0;
+    background:transparent;color:var(--text-muted);font-size:11px;cursor:pointer;
+    font-family:system-ui,'Segoe UI Symbol',sans-serif;}
+  .toc-del:hover{color:#c0392b;}
+  /* 목차 단추를 눌렀을 때 그 상자 테두리만 잠깐 강조색으로 — 이미 있는 목차를
+     가리키는 표시입니다. 목차 줄로 제목에 도착할 때의 반짝임은 뺐습니다(주인 요청). */
+  .toc-box.toc-flash{border-color:var(--accent);}
   /* 표는 창보다 넓어지면 표 안에서만 옆으로 밀리게 합니다 */
   .md-table{display:block;overflow-x:auto;border-collapse:collapse;margin:10px 0;
     font-size:11.5px;max-width:100%;}
@@ -3127,7 +3194,7 @@
      줄 높이 20px 과 합쳐 24px 이고, 접기 밖의 줄도 같은 값으로 맞춥니다
      (아래 .arc-view-content 등의 규칙). 문단 안에서 저절로 넘어간 줄은
      줄 높이 그대로 20px 입니다. */
-  .fold-body ~ .fold-body{margin-top:4px;}
+  .fold-body ~ .fold-body{margin-top:var(--body-gap, 4px);}
 
   /* ============================================================
      복사 칸 (.copy-box)
@@ -3495,13 +3562,21 @@
   /* 글자 크기 숫자 칸 — ˄ ˅ 단추 둘을 대신합니다(main.js initSizeBoxes).
      단추와 같은 테두리·높이(24px)라 줄에 그대로 섞입니다. 폭은 '12.5' 가 들어가는
      34px. 고른 글이 없으면 'px' 만 흐리게 보입니다. */
-  .rt-toolbar .rt-size{flex:none;width:34px;height:24px;padding:0 2px;margin:0;
-    border:1px solid var(--border);border-radius:0;background:var(--bg);
-    font-family:var(--mono);font-size:11px;line-height:1;text-align:center;color:var(--text);
+  /* 테두리는 바깥 상자(.rt-size-box)가 갖고, 안에 숫자 칸과 흐린 'px' 가 나란히
+     섭니다 — 숫자만 덩그러니 있으면 무슨 단위인지 알 수 없었습니다(주인 지적). */
+  .rt-toolbar .rt-size-box{flex:none;display:inline-flex;align-items:center;width:42px;height:24px;
+    padding:0 4px 0 2px;box-sizing:border-box;border:1px solid var(--border);background:var(--bg);
+    cursor:text;}
+  .rt-toolbar .rt-size-box:hover{background:var(--surface-2);}
+  .rt-toolbar .rt-size-box:focus-within{border-color:var(--accent);background:var(--bg);}
+  .rt-toolbar .rt-size{flex:1;min-width:0;width:auto;height:100%;padding:0;margin:0;
+    border:0;border-radius:0;background:transparent;
+    font-family:var(--mono);font-size:11px;line-height:1;text-align:right;color:var(--text);
     font-variant-numeric:tabular-nums;}
   .rt-toolbar .rt-size::placeholder{color:var(--text-muted);opacity:.7;}
-  .rt-toolbar .rt-size:hover{background:var(--surface-2);}
-  .rt-toolbar .rt-size:focus{outline:none;border-color:var(--accent);background:var(--bg);}
+  .rt-toolbar .rt-size:focus{outline:none;}
+  .rt-size-unit{flex:none;margin-left:1px;font-family:var(--mono);font-size:9px;
+    color:var(--text-muted);pointer-events:none;}
   /* 정렬 버튼 아이콘 — 맞는 기호가 없어 얇은 선으로 직접 그립니다.
      pointer-events 를 꺼야 클릭이 늘 버튼에 잡힙니다. */
   .rt-ico{width:15px;height:15px;flex:none;fill:none;stroke:currentColor;
@@ -3575,7 +3650,21 @@
      1.4(17.5px)는 한글 본문으로 좁다는 주인 판단에 따라 1.6(20px)으로 올렸고,
      아래 '엔터로 넘긴 줄 4px' 과 '접기 제목 아래 8px' 도 같은 비율(x1.143)로
      함께 키웠습니다. 이 값을 다시 바꾸면 그 둘도 같이 재야 합니다. */
-  .profile-view-text{font-size:12.5px;line-height:1.6;color:var(--text);outline:none;min-height:60px;}
+  /* 줄간격·자간은 SETTING › DISPLAY 에서 바꿉니다(--body-lh / --body-ls, main.js
+     applyLookCfg). 괄호 안의 값이 기본이라, 고른 적이 없으면 예전 그대로입니다.
+     '글 본문 계열'만 따릅니다 — 이 규칙을 입는 것(ARCHIVE·LOG 본문과 편집기,
+     PAIR 소개, OC 자유 글)과 메모 칸(.side-memo)뿐. LOG 카드 미리보기와 HOME
+     소개글은 일부러 제 값을 지킵니다(주인 결정). */
+  .profile-view-text{font-size:12.5px;line-height:var(--body-lh, 1.6);letter-spacing:var(--body-ls, 0px);
+    text-align:var(--body-align, start);
+    color:var(--text);outline:none;min-height:60px;}
+  /* 자간은 그 안에 든 '모양이 정해진 상자'까지 번지지 않게 막습니다 — 복사 칸
+     (11px 에 맞춰 그린 픽셀 글꼴), 코드 블록(적은 그대로), HTML 상자, 목차. */
+  .profile-view-text .copy-box,.side-memo .copy-box,
+  .profile-view-text .code-block,.side-memo .code-block,
+  .profile-view-text .html-embed,.profile-view-text .toc-box{letter-spacing:normal;text-align:start;}
+  /* 양쪽 정렬도 같은 상자들에는 번지지 않게 — 위 줄이 text-align 까지 함께 막습니다.
+     가운데·오른쪽 정렬 단추로 정한 줄은 그 줄에 직접 적힌 값이라 이 설정보다 셉니다. */
   body.logged-in .profile-view-text{border:1px solid var(--border);border-radius:0;padding:8px;}
   .pd-profile-divider{height:1px;background:#f0b89a;margin:8px 0 10px;}
   /* 말풍선: 인덱스 탭(INFO/GALLERY/LOG)과 동일한 오렌지 #EF3921 + 흰 글자 */
@@ -4708,6 +4797,11 @@
     .wg-row{gap:6px;padding:10px 2px;flex-wrap:wrap;}
     .wg-row-id{flex:1 1 100%;order:-1;}
     .wg-chip{height:30px;padding:0 9px;}
+    /* DISPLAY › 글 본문 — 폰에서는 조절 막대 아래로 미리보기를 내립니다 */
+    .disp-text{flex-direction:column;gap:14px;}
+    .disp-ctls{flex:none;width:100%;}
+    .disp-prev-wrap{width:100%;}
+    .mg-pane .disp-prev,body.logged-in .mg-pane .disp-prev{max-width:none;}
     /* DESIGN — 폰에서는 견본을 위에, 조절 줄을 아래에 둡니다.
        (팝업 자체는 폰에서 뜨지 않지만, 고르는 것은 폰에서도 할 수 있게 둡니다) */
     .wgd{flex-direction:column;gap:6px;}
@@ -4752,8 +4846,19 @@
     .smi{letter-spacing:.08em;}
     /* LOCK 이 다섯째 탭으로 들어오면서 폰(375px)에서 줄이 26px 넘쳤습니다 —
        자간(.16em → .08em)과 탭 사이(7 → 5px)를 줄여 한 줄에 들어가게 합니다. */
-    .mg-tab{height:40px;letter-spacing:.08em;}
-    .mg-tabs{gap:5px;}
+    /* LOOK 까지 여섯 탭이 되어 375px 에서 30px 넘쳤습니다 — 자간을 .02em, 사이를 3px 로
+       더 줄입니다(쟰 값: 제목과 9px 띄고 들어감). 그보다 좁은 폰(320px 등)에서는
+       줄이 옆으로 밀리도록 두어, 넘쳐서 화면 밖으로 나가는 일은 없게 합니다. */
+    /* LOOK 가 DISPLAY 로 길어지면서 15px 더 모자라 자간 0 · 사이 2px 까지 줄였습니다 */
+    .mg-tab{height:40px;letter-spacing:0;}
+    .mg-tabs{gap:2px;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;}
+    .mg-tabs::-webkit-scrollbar{display:none;height:0;}
+    #view-setting > .topbar .topbar-actions,
+    #view-widget > .topbar .topbar-actions{flex:1 1 auto;min-width:0;display:flex;justify-content:flex-start;}
+    #view-setting > .topbar .mg-tabs,
+    #view-widget > .topbar .mg-tabs{margin-left:auto;}
+    #view-setting > .topbar h2,
+    #view-widget > .topbar h2{flex:none;margin-right:10px;}
     .ns-add-row{padding:8px 8px 8px 10px;}
     .ns-add-ok,.ns-add-cancel{width:36px;height:36px;font-size:14px;}
     .ns-add-input{padding:9px 10px;font-size:13px;}
@@ -5244,7 +5349,9 @@
     .rt-toolbar button{width:32px;height:32px;font-size:12.5px;}
     .rt-toolbar button:has(.rt-ico){padding-top:0;}
     /* 글자 크기 칸도 다른 폰 제어처럼 32px 높이. 폭은 숫자 넷이 들어가는 40px */
-    .rt-toolbar .rt-size{width:40px;height:32px;font-size:12.5px;}
+    .rt-toolbar .rt-size-box{width:48px;height:32px;}
+    .rt-toolbar .rt-size{font-size:12.5px;}
+    .rt-size-unit{font-size:10px;}
     .rt-toolbar-memo{flex-wrap:nowrap;gap:4px;}
     .rt-toolbar-memo button,
     .rt-toolbar-memo .rt-color{flex:0 1 32px;width:32px;height:32px;min-width:0;}
