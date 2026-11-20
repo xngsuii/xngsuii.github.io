@@ -406,7 +406,9 @@ let state = {
   /* 팝업 위젯의 겉모습 — WIDGET › DESIGN (normalizeWgDesign) */
   wgDesign:null,
   /* 사이트 겉모습 — SETTING › LOOK (normalizeLookCfg) */
-  lookCfg:null
+  lookCfg:null,
+  /* 색 고르기 창의 자주 쓰는 색 — {text:[], hl:[]} (normalizeColorPresets) */
+  colorPresets:null
 };
 
 /* ---- PROMPT 폴더 ----
@@ -815,6 +817,7 @@ async function loadState(){
   state.recentCfg = normalizeRecentCfg(await storageGet('recentCfg', null));
   state.wgDesign = normalizeWgDesign(await storageGet('wgDesign', null));
   state.lookCfg = normalizeLookCfg(await storageGet('lookCfg', null));
+  state.colorPresets = normalizeColorPresets(await storageGet('colorPresets', null));
   state.ocCats = normalizeOcCats(await storageGet('ocCats', null), await storageGet('ocFolders', null));
   state.ocPosts = (await storageGet('ocPosts', [])).map(migrateOcPost);
   /* 카테고리가 이제 필수라, 없어졌거나 유효하지 않은 카테고리를 가리키는 글은
@@ -3961,11 +3964,12 @@ function rtShareUrl(){
 function rtFlashLink(btn, ok){
   if(!btn) return;
   if(btn._rtTimer) clearTimeout(btn._rtTimer);
-  if(btn._rtGlyph == null) btn._rtGlyph = btn.textContent;
+  /* 단추 안은 그린 아이콘(SVG)이라 글자가 아니라 마크업째 기억했다 되돌립니다 */
+  if(btn._rtGlyph == null) btn._rtGlyph = btn.innerHTML;
   btn.textContent = ok ? '✓' : '✕';
   btn.classList.add('rt-link-done');
   btn._rtTimer = setTimeout(()=>{
-    btn.textContent = btn._rtGlyph;
+    btn.innerHTML = btn._rtGlyph;
     btn.classList.remove('rt-link-done');
   }, 1300);
 }
@@ -4211,9 +4215,17 @@ function highlightedWith(color){
 }
 function toggleHighlight(color){
   const next = highlightedWith(color) ? 'transparent' : color;
-  if(!document.execCommand('hiliteColor', false, next)){
-    document.execCommand('backColor', false, next);
+  applyHighlight(next);
+}
+/* 형광펜을 그 색으로 칠합니다('transparent' 면 지웁니다). 색 고르기 창이 부릅니다 —
+   창에서 색을 고른다는 것은 '이 색으로 칠하라'는 뜻이라 껐다 켜기를 하지 않습니다. */
+function applyHighlight(color){
+  if(!document.execCommand('hiliteColor', false, color)){
+    document.execCommand('backColor', false, color);
   }
+  /* 방금 칠한 것도 '밑줄형' 모양을 따르게 색을 옮겨 적습니다(markHighlights) */
+  const ed = document.activeElement;
+  if(ed && ed.isContentEditable) markHighlights(ed);
 }
 
 /* 구버전(일반 텍스트) 본문을 HTML로 */
@@ -4779,6 +4791,7 @@ function decorateContent(el){
   applyMarkdownBlocks(el);
   applyHtmlEmbeds(el, false);
   buildTocs(el);        // 제목(.md-h)이 다 만들어진 뒤라야 목차를 셀 수 있습니다
+  markHighlights(el);   // 형광펜 '밑줄형'이 쓸 색(--hl)을 옮겨 적습니다
 }
 
 /* ============================================================
@@ -4842,14 +4855,62 @@ function buildTocs(root){
 }
 /* 글을 고치는 동안에는 무엇이 있는지만 보여 줍니다 — 목록은 게시해야 채워집니다
    (편집기에는 # 가 아직 제목으로 바뀌지 않은 글자로 들어 있습니다). */
+/* 글을 쓰는 동안의 목차 — 편집기 안의 글자에서 # 줄을 직접 찾아 세웁니다(실시간
+   미리보기, 주인 요청). 편집기에는 # 가 아직 제목으로 바뀌지 않은 글자로 들어
+   있어서 .md-h 를 셀 수 없습니다. 게시한 뒤의 목차와 같은 규칙을 지킵니다:
+     · 복사 칸·목차 상자 안은 보지 않습니다(flattenForFences 가 들여다보지 않음).
+     · ``` 로 감싼 코드 안의 # 은 제목이 아닙니다.
+     · 번호는 tocNumbers 로 — 건너뛴 단계는 한 칸. */
+function editorTocHeads(root){
+  const { text } = flattenForFences(root);
+  const out = [];
+  let inFence = false;
+  text.split('\n').forEach(line=>{
+    const t = line.trim();
+    const fences = (t.match(/```/g) || []).length;
+    if(fences){ if(fences % 2) inFence = !inFence; return; }
+    if(inFence) return;
+    const m = t.match(MD_HEADING_RE);
+    if(!m) return;
+    const label = t.replace(/^#{1,6}\s*/, '').trim();
+    if(label) out.push({ level: m[1].length, text: label });
+  });
+  return out;
+}
 function paintTocEditing(root){
-  root.querySelectorAll('.toc-box').forEach(box=>{
+  const boxes = root.querySelectorAll('.toc-box');
+  if(!boxes.length) return;
+  const heads = editorTocHeads(root);
+  const nums = tocNumbers(heads.map(h=> h.level));
+  boxes.forEach(box=>{
     box.classList.remove('toc-empty');
+    let list = '';
+    heads.forEach((h, i)=>{
+      list += '<div class="toc-item toc-item-live" style="--toc-depth:' + (nums[i].depth - 1) + '">'
+        + '<span class="toc-num">' + escapeHtml(nums[i].num) + '</span>'
+        + '<span class="toc-text">' + escapeHtml(h.text) + '</span></div>';
+    });
     box.innerHTML = '<div class="toc-title">목차</div>'
-      + '<div class="toc-hint"># · ## · ### 로 쓴 제목이 게시할 때 여기 번호와 함께 채워져요.</div>'
+      + (heads.length
+          ? '<div class="toc-list">' + list + '</div>'
+          : '<div class="toc-hint"># · ## · ### 로 제목을 쓰면 여기 번호와 함께 바로 채워져요.</div>')
       + '<button type="button" class="toc-del" title="목차 빼기">✕</button>';
   });
 }
+/* 쓰는 동안 목차를 따라 고칩니다 — 글자 하나마다가 아니라 손이 잠깐 멈출 때(250ms). */
+function initEditorTocLive(editorId){
+  const ed = document.getElementById(editorId);
+  if(!ed || ed._tocLive) return;
+  ed._tocLive = true;
+  let t = 0;
+  ed.addEventListener('input', ()=>{
+    if(!ed.querySelector('.toc-box')) return;
+    clearTimeout(t);
+    t = setTimeout(()=> paintTocEditing(ed), 250);
+  });
+}
+initEditorTocLive('arcContentEditor');
+initEditorTocLive('logContent');
 /* 목차 단추 — 글 **맨 위에** 넣습니다(주인 요청: 상단에 목차). 이미 있으면 하나 더
    만들지 않고 그 자리를 보여 줍니다. 커서가 어디 있든 같은 자리입니다. */
 function insertToc(editorId){
@@ -5684,6 +5745,11 @@ function editorHtml(editorId){
     b.className = 'toc-box';
     b.innerHTML = '';
   });
+  /* 형광펜 '밑줄형'용으로 옮겨 적은 색(--hl)은 화면용이라 저장하지 않습니다 */
+  copy.querySelectorAll('[style*="--hl"]').forEach(el=>{
+    el.style.removeProperty('--hl');
+    if(!el.getAttribute('style')) el.removeAttribute('style');
+  });
   return copy.innerHTML;
 }
 
@@ -6219,17 +6285,24 @@ let currentLogViewId = null;
   // 버튼을 눌러도 본문 선택이 풀리지 않도록
   toolbar.querySelectorAll('button').forEach(b=> b.addEventListener('mousedown', e=> e.preventDefault()));
   toolbar.querySelectorAll('button[data-cmd]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{ editor.focus(); document.execCommand(btn.dataset.cmd, false, null); });
+    btn.addEventListener('click', ()=>{
+      editor.focus();
+      /* 인용구는 execCommand 에 없는 명령이라 ARCHIVE 와 같은 함수로 넣습니다
+         (접기 안에서도 그 줄만 인용구가 되게 — insertBlockquote 의 설명) */
+      if(btn.dataset.cmd === 'blockquote') insertBlockquote('logContent');
+      else document.execCommand(btn.dataset.cmd, false, null);
+    });
   });
   const subBtn = document.getElementById('logSubColorBtn');
   if(subBtn) subBtn.addEventListener('click', ()=>{
     editor.focus();
     toggleForeColor(document.getElementById('logSubColor').value);
   });
-  const hlBtn = document.getElementById('logHighlightBtn');
-  if(hlBtn) hlBtn.addEventListener('click', ()=>{
+  /* 형광펜 — 색 고르기 창에서 색을 고르면 그 색으로 칠합니다(ARCHIVE 와 같음) */
+  const hlInput = document.getElementById('logHighlightColor');
+  if(hlInput) hlInput.addEventListener('input', ()=>{
     editor.focus();
-    toggleHighlight(document.getElementById('logHighlightColor').value);
+    applyHighlight(hlInput.value);
   });
   const divBtn = document.getElementById('logDividerBtn');
   if(divBtn) divBtn.addEventListener('click', ()=>{
@@ -6252,6 +6325,7 @@ let currentLogViewId = null;
   /* 글자 크기는 숫자 칸(.rt-size)입니다 — initSizeBoxes */
   initFoldEnter('logContent');
   initCopyBoxKeys('logContent');
+  initBlockquoteKeys('logContent');   // 인용구 단추가 생겨서 Enter·Backspace 처리도 함께
   /* 사진 삽입 — ARCHIVE 편집기와 같은 방식(본문 안에 data URL 로 넣습니다).
      여러 장을 한 번에 고를 수 있습니다. */
   const imgBtn = document.getElementById('logInsertImageBtn');
@@ -6354,6 +6428,7 @@ async function enterLogEdit(entry){
   ed.innerHTML = entry ? imgUrl(logContentToHtml(entry.content)) : '';
   applyHtmlEmbeds(ed, true);
   paintTocEditing(ed);
+  markHighlights(ed);
   logEditBaseline = logEditSnapshot();
 }
 
@@ -9729,7 +9804,7 @@ function fillMemoBox(editorId, obj, field, persist){
      실제 화면과 어긋납니다. */
   const isDecorated = ()=> !!el.querySelector('.code-block');
   const showRaw = ()=>{ el.innerHTML = obj[field] || ''; };
-  const paint   = ()=>{ showRaw(); applyCodeFences(el); };
+  const paint   = ()=>{ showRaw(); applyCodeFences(el); markHighlights(el); };
   paint();
   el.contentEditable = isLoggedIn ? 'true' : 'false';
   el._toRaw = ()=>{ if(isLoggedIn && isDecorated()) showRaw(); };
@@ -9757,6 +9832,8 @@ function fillMemoBox(editorId, obj, field, persist){
     el._save();
     const to = e && e.relatedTarget;
     if(to && to.classList && to.classList.contains('rt-size') && to.dataset.sizeFor === editorId) return;
+    /* 색 고르기 창의 HEX 칸으로 갈 때도 마찬가지입니다 — 창이 기억해 둔 구간을 지킵니다 */
+    if(to && to.closest && to.closest('.rt-cpick')) return;
     paint();
   };
 }
@@ -9805,6 +9882,7 @@ function fillOcDetail(o){
 
   const free=document.getElementById('ocFree');
   free.innerHTML = o.freeText || '';
+  markHighlights(free);
   free.contentEditable = isLoggedIn ? 'true' : 'false';
   // 접기 블록이 들어갈 수 있으므로 editorHtml 로 꺼냅니다 (펼친 상태는 떼고 저장)
   free.onblur=()=> saveOcFree();
@@ -10179,6 +10257,7 @@ async function enterArcEdit(existingItem){
   editorEl.innerHTML = existingItem ? imgUrl(existingItem.content) : '';
   applyHtmlEmbeds(editorEl, true);   /* 저장된 HTML 상자에 탭·코드 칸을 세웁니다 */
   paintTocEditing(editorEl);         /* 목차 표시에 '게시하면 채워져요' 안내를 세웁니다 */
+  markHighlights(editorEl);
   arcAttachments = existingItem && existingItem.files ? existingItem.files.slice() : [];
   renderArcAttachList();
   arcEditBaseline = arcEditSnapshot();
@@ -10231,6 +10310,11 @@ document.getElementById('arcColorInput').addEventListener('input', (e)=>{
   const editor=document.getElementById('arcContentEditor');
   editor.focus();
   document.execCommand('foreColor', false, e.target.value);
+});
+/* 형광펜 — 일반 글쓰기에는 없었습니다(주인 지적). LOG 와 같은 칠하기 함수입니다. */
+document.getElementById('arcHlColor')?.addEventListener('input', (e)=>{
+  document.getElementById('arcContentEditor').focus();
+  applyHighlight(e.target.value);
 });
 
 initBlockquoteKeys('arcContentEditor');
@@ -11066,48 +11150,51 @@ function filterArchiveItems(items){
   });
 })();
 
-/* ---- 글자색 고르개 ----
-   <input type=color> 는 누르는 순간 운영체제 색 고르개가 열립니다. 그 창은
-   CSS 로도 JS 로도 손댈 수 없어서, 한 번 쓴 색을 다시 쓰려면 색값을 외워
-   매번 새로 찍어 넣어야 했습니다("기본값으로 돌리는 기능이 필요하다").
+/* ---- 색 고르기 창 (글자색 · 형광펜 · LOG 보조색/괄호색) ----
+   단추를 누르면 작은 창이 열립니다(주인이 보낸 그림을 따랐습니다):
+     [색 견본] [HEX 입력칸]
+     자주 쓰는 색 네모들 … [＋]
+     기본값(글자색) / 형광펜 지우기(형광펜)
+   · 견본을 누르면 운영체제의 자세한 고르개가 열립니다(예전의 '직접 고르기').
+   · HEX 칸에 #rrggbb 를 적고 Enter 면 그 색으로.
+   · 자주 쓰는 색은 ＋ 로 지금 색을 넣고, 올리면 나오는 ✕ 로 뺍니다.
+     **글자색과 형광펜이 따로**입니다(주인 결정). 사이트 데이터(colorPresets)에
+     저장되어 다른 기기에서도 같습니다. LOG 의 보조색·괄호색은 글자색 목록을 씁니다.
 
-   그래서 검색 분류 고르개와 같은 수를 씁니다 — 진짜 input 은 지우지 않고
-   자리만 지킨 채 투명하게 두고(.rt-cpick-native), 그 위에 같은 크기의 네모
-   단추를 세웁니다. 누르면 최근에 쓴 색 · 기본값 · 직접 고르기가 담긴 작은
-   목록이 열립니다. 툴바에 단추를 하나도 더 늘리지 않았습니다.
+   진짜 <input type=color> 는 지우지 않고 값 그릇으로 둡니다(.rt-cpick-native) —
+   색을 실제로 칠하는 코드(각 편집기의 'input' 듣기)는 그대로이고, 여기서는 그
+   input 의 값을 바꾸고 input 을 직접 일으킬 뿐입니다.
+   종류는 data-cpick-kind 로 정합니다: text(기본) · hl(형광펜) · set(값만 정함,
+   글에 칠하지 않음 — LOG 의 보조색·괄호색).
 
-   **색을 실제로 칠하는 코드는 한 줄도 고치지 않습니다.** 네 군데
-   (bindRichTextToolbars · bindFreeToolbar · LOG 편집기 · ARCHIVE 편집기)가
-   저마다 input 의 'input' 을 듣고 execCommand('foreColor') 를 부르고 있는데,
-   여기서는 숨은 input 의 value 를 바꾸고 input 을 직접 일으켜 줄 뿐입니다.
-
-   최근 색은 이 브라우저에만 남깁니다(localStorage). 사이트 데이터가 아니라
-   손버릇이라 Firestore 에 적어 읽기 몫을 쓸 이유가 없습니다. */
-const RT_RECENT_KEY = 'rt-recent-colors';
-const RT_RECENT_MAX = 8;
-function rtRecentColors(){
-  try{
-    const v = JSON.parse(localStorage.getItem(RT_RECENT_KEY) || '[]');
-    if(!Array.isArray(v)) return [];
-    return v.filter(c=> typeof c==='string' && /^#[0-9a-f]{6}$/i.test(c))
-            .map(c=>c.toLowerCase()).slice(0, RT_RECENT_MAX);
-  }catch(e){ return []; }   // 사생활 보호 모드 등에서 막힐 수 있습니다
+   **골라 둔 글을 지킵니다.** HEX 칸에 커서가 가는 순간 글의 선택이 풀리므로,
+   창을 열 때 선택을 복사해 두었다가 칠하기 직전에 되돌립니다(글자 크기 칸과
+   같은 방법). 메모 칸은 커서가 빠질 때 화면을 다시 그리므로, 커서가 이 창으로
+   올 때는 다시 그리지 않게 해 두었습니다(fillMemoBox 의 onblur). */
+const CP_MAX = 12;
+function normalizeColorPresets(v){
+  const list = (a)=> (Array.isArray(a) ? a : [])
+    .map(c=> String(c || '').toLowerCase()).filter(c=> /^#[0-9a-f]{6}$/.test(c))
+    .filter((c, i, arr)=> arr.indexOf(c) === i).slice(0, CP_MAX);
+  /* **여기 적지 않은 항목은 불러올 때마다 지워집니다** — normalize* 공통 지뢰 */
+  return { text: list(v && v.text), hl: list(v && v.hl) };
 }
-function rtRememberColor(hex){
-  const h = String(hex||'').toLowerCase();
-  if(!/^#[0-9a-f]{6}$/.test(h)) return;
-  if(h === String(logTextDefault()||'').toLowerCase()) return;   // 기본값은 '최근'이 아닙니다
-  const list = rtRecentColors().filter(c=> c !== h);
-  list.unshift(h);
-  try{ localStorage.setItem(RT_RECENT_KEY, JSON.stringify(list.slice(0, RT_RECENT_MAX))); }catch(e){}
+function colorPresets(){
+  if(!state.colorPresets) state.colorPresets = normalizeColorPresets(null);
+  return state.colorPresets;
 }
+function cpKindList(kind){ return colorPresets()[kind === 'hl' ? 'hl' : 'text']; }
+function cpSavePresets(){ if(isLoggedIn) storageSet('colorPresets', state.colorPresets); }
+const CP_ICON_HL = '<span class="cp-hl-ico" aria-hidden="true">✎</span>';
+
 (function initTextColorPickers(){
   document.querySelectorAll('input.rt-color').forEach(input=>{
     if(input.dataset.cpick) return;
     input.dataset.cpick = '1';
+    const kind = input.dataset.cpickKind || 'text';
 
     const wrap = document.createElement('span');
-    wrap.className = 'rt-cpick';
+    wrap.className = 'rt-cpick rt-cpick-' + kind;
     input.parentNode.insertBefore(wrap, input);
     wrap.appendChild(input);
     input.classList.add('rt-cpick-native');
@@ -11116,90 +11203,176 @@ function rtRememberColor(hex){
     const btn = document.createElement('button');
     btn.type = 'button'; btn.className = 'rt-cpick-btn';
     btn.title = input.title || '글자색';
-    const dot = document.createElement('span');
-    dot.className = 'rt-cpick-dot';
-    btn.appendChild(dot);
+    /* 단추 모양: 글자색은 색 네모, 형광펜은 ✎ 아래 색 띠(LOG 에서 쓰던 그림),
+       보조색·괄호색은 색 네모 + 짧은 이름 */
+    btn.innerHTML = kind === 'hl'
+      ? CP_ICON_HL + '<span class="rt-cpick-bar"></span>'
+      : '<span class="rt-cpick-dot"></span>'
+        + (input.dataset.cpickLabel ? '<span class="rt-cpick-name"></span>' : '');
+    if(input.dataset.cpickLabel) btn.querySelector('.rt-cpick-name').textContent = input.dataset.cpickLabel;
 
     const menu = document.createElement('div');
-    menu.className = 'rt-cpick-menu';
+    menu.className = 'rt-cpick-menu cp-pop';
     wrap.append(btn, menu);
 
-    const paintDot = ()=>{ dot.style.background = input.value; };
-    paintDot();
+    const paintBtn = ()=>{
+      const el = btn.querySelector('.rt-cpick-dot, .rt-cpick-bar');
+      if(el) el.style.background = input.value;
+    };
+    paintBtn();
 
-    /* 폰에서는 ARCHIVE 단추줄이 좌우로 구르는 칸이라(overflow-x:auto),
-       그 안에서 절대 위치로 뜬 이 메뉴가 칸 밖으로 잘려 보이지 않습니다.
-       열 때만 화면 기준(fixed)으로 바꿔 달고 닫을 때 되돌립니다 —
-       PC 에서는 아무 일도 하지 않습니다. */
+    /* 폰에서는 단추줄이 좌우로 구르는 칸이라 절대 위치 창이 잘립니다 —
+       열 때만 화면 기준(fixed)으로 바꿔 답니다(예전과 같습니다). */
     const placeMenu = ()=>{
       if(!isMobileWidth()){ menu.style.position=''; menu.style.top=''; menu.style.left=''; return; }
       const r = btn.getBoundingClientRect();
       menu.style.position = 'fixed';
       menu.style.top  = (r.bottom + 5) + 'px';
-      /* 메뉴는 최소 152px + 테두리·여백. 오른쪽 끝에서 넘치지 않게 당겨 둡니다. */
-      menu.style.left = Math.max(6, Math.min(r.left, window.innerWidth - 178)) + 'px';
+      menu.style.left = Math.max(6, Math.min(r.left, window.innerWidth - 226)) + 'px';
     };
-    const close = ()=>{
+
+    /* ---- 골라 둔 글 지키기 ---- */
+    let saved = null;
+    const editableOf = (node)=>{
+      const el = node && (node.nodeType === 1 ? node : node.parentNode);
+      return el && el.closest ? el.closest('[contenteditable="true"]') : null;
+    };
+    const remember = ()=>{
+      const sel = window.getSelection();
+      saved = null;
+      if(sel && sel.rangeCount){
+        const r = sel.getRangeAt(0);
+        if(editableOf(r.commonAncestorContainer)) saved = r.cloneRange();
+      }
+    };
+    const restore = ()=>{
+      if(!saved) return;
+      const ed = editableOf(saved.commonAncestorContainer);
+      if(!ed || !ed.isConnected) return;
+      ed.focus({ preventScroll:true });
+      const sel = window.getSelection();
+      sel.removeAllRanges(); sel.addRange(saved);
+    };
+
+    const close = (refocus)=>{
+      if(!wrap.classList.contains('open')) return;
       wrap.classList.remove('open');
       menu.style.position = ''; menu.style.top = ''; menu.style.left = '';
-    };
-    const draw = ()=>{
-      const recent = rtRecentColors();
-      menu.innerHTML =
-        (recent.length
-          ? '<div class="rt-cpick-label">최근 사용한 글자색</div>'
-            + '<div class="rt-cpick-swatches">'
-            + recent.map(c=> `<button type="button" class="rt-cpick-sw" data-hex="${c}" title="${c}" style="background:${c}"></button>`).join('')
-            + '</div>'
-          : '')
-        + '<button type="button" class="rt-cpick-item" data-act="default">기본값</button>'
-        + '<button type="button" class="rt-cpick-item" data-act="pick">직접 고르기…</button>';
+      if(refocus) restore();
+      else{
+        /* 메모 칸이 건너뛴 다시 그리기를 해 둡니다(글 칸으로 돌아가지 않은 경우) */
+        const ed = saved && editableOf(saved.commonAncestorContainer);
+        if(ed && ed._paint && document.activeElement !== ed) ed._paint();
+      }
     };
 
-    /* 고른 색을 숨은 input 에 넣고, 사람이 고른 것처럼 input 을 일으킵니다.
-       기본값은 '최근'에 쌓지 않으므로 그때만 기억을 꺼 둡니다. */
-    let skipRemember = false;
-    const apply = (hex, isDefault)=>{
-      skipRemember = !!isDefault;
+    /* 색을 고릅니다 — 값 그릇에 넣고, 사람이 고른 것처럼 input 을 일으킵니다.
+       칠하는 종류(text·hl)는 일으키기 전에 골라 둔 글을 되돌려 둡니다. */
+    const apply = (hex)=>{
       input.value = hex;
+      if(kind !== 'set') restore();
       input.dispatchEvent(new Event('input', { bubbles:true }));
-      skipRemember = false;
-      paintDot();
-      close();
+      paintBtn();
+      close(false);
     };
 
-    /* 운영체제 고르개로 고른 경우에도 여기로 들어옵니다 — 그때 기억해 둡니다 */
-    input.addEventListener('input', ()=>{
-      paintDot();
-      if(!skipRemember) rtRememberColor(input.value);
-    });
+    const isHex = (v)=> /^#?[0-9a-f]{6}$/i.test(String(v || '').trim());
+    const normHex = (v)=>{ let h = String(v || '').trim().toLowerCase(); if(h[0] !== '#') h = '#' + h; return h; };
 
-    /* mousedown 을 막아야 글에서 골라 둔 자리가 풀리지 않습니다 —
-       execCommand 는 '지금 골라진 글'에 칠하므로, 단추를 누르며 커서가
-       옮겨 가면 아무 데도 칠하지 못합니다(툴바의 다른 단추들과 같은 이유). */
+    const draw = ()=>{
+      const list = cpKindList(kind);
+      const cur = String(input.value || '').toLowerCase();
+      const extra = kind === 'hl'
+        ? '<button type="button" class="rt-cpick-item cp-act" data-act="clear">형광펜 지우기</button>'
+        : kind === 'text'
+          ? '<button type="button" class="rt-cpick-item cp-act" data-act="default">기본값</button>'
+          : '';
+      menu.innerHTML =
+        '<div class="cp-label">색상 (HEX)</div>'
+        + '<div class="cp-row">'
+        +   '<button type="button" class="cp-thumb" title="자세히 고르기"></button>'
+        +   '<input type="text" class="cp-hex" maxlength="7" spellcheck="false" autocomplete="off" />'
+        + '</div>'
+        + '<div class="cp-presets">'
+        +   list.map(c=> '<span class="cp-sw-wrap"><button type="button" class="cp-sw" data-hex="' + c + '" title="' + c + '"'
+                + (c === cur ? ' aria-current="true"' : '') + '></button>'
+                + '<button type="button" class="cp-sw-del" data-hex="' + c + '" title="목록에서 빼기">✕</button></span>').join('')
+        +   (list.length < CP_MAX ? '<button type="button" class="cp-add" title="지금 색을 자주 쓰는 색에 넣기">＋</button>' : '')
+        + '</div>'
+        + extra;
+      menu.querySelector('.cp-thumb').style.background = input.value;
+      menu.querySelector('.cp-hex').value = cur.toUpperCase();
+      menu.querySelectorAll('.cp-sw').forEach(b=>{ b.style.background = b.dataset.hex; });
+      const hexEl = menu.querySelector('.cp-hex');
+      hexEl.addEventListener('input', ()=>{
+        if(isHex(hexEl.value)) menu.querySelector('.cp-thumb').style.background = normHex(hexEl.value);
+      });
+      hexEl.addEventListener('keydown', (e)=>{
+        e.stopPropagation();
+        if(e.key === 'Enter'){
+          e.preventDefault();
+          if(isHex(hexEl.value)) apply(normHex(hexEl.value));
+          else hexEl.select();
+        }else if(e.key === 'Escape'){ e.preventDefault(); close(true); }
+      });
+    };
+
+    /* 운영체제 고르개로 고른 경우에도 단추 색을 맞춥니다 */
+    input.addEventListener('input', paintBtn);
+
+    /* 글에서 골라 둔 자리가 풀리지 않게 mousedown 을 막습니다 — HEX 칸만 예외
+       (거기에는 커서가 들어가야 합니다). */
     btn.addEventListener('mousedown', e=> e.preventDefault());
-    menu.addEventListener('mousedown', e=> e.preventDefault());
+    menu.addEventListener('mousedown', (e)=>{ if(!e.target.closest('.cp-hex')) e.preventDefault(); });
 
     btn.addEventListener('click', (e)=>{
       e.stopPropagation();
-      if(wrap.classList.contains('open')){ close(); return; }
+      if(wrap.classList.contains('open')){ close(true); return; }
+      document.querySelectorAll('.rt-cpick.open').forEach(w=>{ if(w !== wrap) w.classList.remove('open'); });
+      remember();
       draw();
       wrap.classList.add('open');
       placeMenu();
     });
     menu.addEventListener('click', (e)=>{
-      const sw = e.target.closest('.rt-cpick-sw');
-      if(sw){ apply(sw.dataset.hex, false); return; }
-      const it = e.target.closest('.rt-cpick-item');
-      if(!it) return;
-      if(it.dataset.act === 'default'){ apply(logTextDefault(), true); return; }
-      /* 직접 고르기 — 숨겨 둔 진짜 input 의 고르개를 엽니다.
-         showPicker 를 모르는 브라우저에서는 click 으로 대신합니다. */
-      close();
-      try{ input.showPicker(); }catch(e2){ input.click(); }
+      e.stopPropagation();
+      const del = e.target.closest('.cp-sw-del');
+      if(del){
+        const list = cpKindList(kind);
+        const i = list.indexOf(del.dataset.hex);
+        if(i >= 0){ list.splice(i, 1); cpSavePresets(); }
+        draw(); return;
+      }
+      const sw = e.target.closest('.cp-sw');
+      if(sw){ apply(sw.dataset.hex); return; }
+      if(e.target.closest('.cp-add')){
+        const hexEl = menu.querySelector('.cp-hex');
+        const h = isHex(hexEl.value) ? normHex(hexEl.value) : String(input.value).toLowerCase();
+        const list = cpKindList(kind);
+        if(!list.includes(h) && list.length < CP_MAX){ list.push(h); cpSavePresets(); }
+        draw(); return;
+      }
+      if(e.target.closest('.cp-thumb')){
+        /* 자세히 고르기 — 숨겨 둔 진짜 input 의 고르개를 엽니다. 그 고르개가 보내는
+           input 이 곧바로 칠하므로, 먼저 글의 선택을 되돌려 둡니다. */
+        if(kind !== 'set') restore();
+        close(false);
+        try{ input.showPicker(); }catch(e2){ input.click(); }
+        return;
+      }
+      const act = e.target.closest('.cp-act');
+      if(act){
+        if(act.dataset.act === 'default') apply(logTextDefault());
+        else if(act.dataset.act === 'clear'){
+          /* 형광펜 지우기 — 값 그릇의 색은 그대로 두고(다음에 다시 쓸 색) 글에서만 걷어냅니다 */
+          restore();
+          applyHighlight('transparent');
+          close(false);
+        }
+      }
     });
-    document.addEventListener('click', (e)=>{ if(!wrap.contains(e.target)) close(); });
-    document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') close(); });
+    document.addEventListener('click', (e)=>{ if(!wrap.contains(e.target)) close(false); });
+    document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') close(true); });
   });
 })();
 
@@ -11238,6 +11411,30 @@ function renderArcFolderBar(){ renderFolderDropdown(ARC_FOLDER_DD); }
 let arcRowsPerPage = 0;    // 재서 얻은 줄 수 (0 = 아직 못 쟴 — 그동안은 10줄)
 let arcRowsFitting = false;  // 다시 그리는 중 (한 번만 돌게)
 const ARC_ROWS_FALLBACK = 10;
+/* 폰의 ARCHIVE 목록(OOC·ETC 표)은 남는 자리 없이 꽉 채웁니다(주인 요청 — 검색줄이
+   들어오며 줄 수가 줄었는데 아래가 비어 보였습니다). 줄 높이를 잰 뒤
+     · 한 줄을 더 넣을 때 줄마다 12% 이하로만 줄면 → 한 줄 더 넣고 줄을 살짝 줄입니다
+     · 아니면 → 그 줄 수 그대로 줄을 살짝 늘려 남는 자리를 나눠 가집니다
+   줄 높이는 칸의 위아래 안쪽 여백(--arc-td-pad)으로만 바꿉니다 — 글자 크기는 그대로.
+   값은 #archiveBody 에 답니다(그 안의 표는 그릴 때마다 새로 만들어지므로).
+   PROMPT 격자와 LOG 표는 손대지 않습니다(주인 결정). PC 에서는 하지 않습니다. */
+const ARC_FILL_SHRINK = 0.88;
+function arcFillPhone(scroll, row, headH){
+  const body = document.getElementById('archiveBody');
+  if(!body) return 0;
+  if(!isMobileWidth()){ body.style.removeProperty('--arc-td-pad'); return 0; }
+  body.style.removeProperty('--arc-td-pad');          // 원래 높이부터 잽니다
+  const natural = row.getBoundingClientRect().height;
+  const td = row.querySelector('td:not(.arc-td-check)');
+  const pad0 = td ? parseFloat(getComputedStyle(td).paddingTop) || 0 : 0;
+  const avail = scroll.clientHeight - headH - 0.5;
+  if(natural <= 0 || avail <= 0) return 0;
+  let n = Math.max(1, Math.floor(avail / natural));
+  if(avail / (n + 1) >= natural * ARC_FILL_SHRINK) n += 1;
+  const pad = Math.max(3, pad0 + (avail / n - natural) / 2);
+  body.style.setProperty('--arc-td-pad', pad.toFixed(2) + 'px');
+  return n;
+}
 function fitArchiveRows(){
   const scroll = document.querySelector('#archiveBody .archive-table-scroll');
   if(!scroll) return;
@@ -11250,7 +11447,8 @@ function fitArchiveRows(){
   const headH = head ? head.getBoundingClientRect().height : 0;
   /* 소수점 높이가 정수로 반올림되며 1px 이 모자라 스크롤이 생기는 것을 막으려고
      0.5px 만 봐줍니다. 넘치는 쪽보다 한 줄 덜 넣는 쪽이 안전합니다. */
-  const fit = Math.max(1, Math.floor((boxH - headH + 0.5) / rowH));
+  const phoneFit = arcFillPhone(scroll, row, headH);
+  const fit = phoneFit || Math.max(1, Math.floor((boxH - headH + 0.5) / rowH));
   if(fit === arcRowsPerPage || arcRowsFitting) return;
   arcRowsPerPage = fit;
   arcRowsFitting = true;
@@ -13373,7 +13571,8 @@ function initLockPane(){
 const LOOK_GRAY_KEYS = ['pair', 'oc', 'prompt'];
 /* 글 본문의 줄간격(배수)·자간(px)·문단 간격(px). 기본값은 지금까지의 값 그대로라
    한 번도 건드리지 않으면 아무것도 달라지지 않습니다. 범위는 화면의 막대와 같습니다. */
-const TEXT_DEFAULT = { lh:1.6, ls:0, gap:4, justify:false };
+const TEXT_DEFAULT = { lh:1.6, ls:0, gap:4, justify:false, hl:'fill' };
+const HL_STYLES = [ { key:'fill', name:'칠하기' }, { key:'under', name:'밑줄형' } ];
 const TEXT_RANGE   = { lh:[1.2, 2.4], ls:[-1, 2], gap:[0, 20] };
 function normalizeLookCfg(v){
   const g = (v && v.gray) || {};
@@ -13387,7 +13586,9 @@ function normalizeLookCfg(v){
   /* **여기 적지 않은 항목은 불러올 때마다 지워집니다** — normalize* 공통 지뢰 */
   return { gray, text:{ lh:num(t.lh, 'lh'), ls:num(t.ls, 'ls'), gap:num(t.gap, 'gap'),
                         /* 양쪽 정렬 — 끈 것이 기본(지금까지처럼 왼쪽 맞춤) */
-                        justify: !!t.justify } };
+                        justify: !!t.justify,
+                        /* 형광펜 모양 — fill 칠하기(기본) / under 글자 아래 절반만 */
+                        hl: t.hl === 'under' ? 'under' : 'fill' } };
 }
 function lookCfg(){
   if(!state.lookCfg) state.lookCfg = normalizeLookCfg(null);
@@ -13404,6 +13605,39 @@ function applyLookCfg(){
   root.style.setProperty('--body-ls', t.ls + 'px');
   root.style.setProperty('--body-gap', t.gap + 'px');
   root.style.setProperty('--body-align', t.justify ? 'justify' : 'start');
+  document.body.classList.toggle('hl-under', t.hl === 'under');
+}
+/* ---- 형광펜 모양 ----
+   저장된 형광펜은 <span style="background-color:…"> 입니다. '밑줄형'은 그 색을 글자
+   아래 절반에만 깔아야 하는데, CSS 는 인라인 style 안의 색을 꺼내 쓸 수 없습니다.
+   그래서 그릴 때 그 색을 --hl 변수로 옮겨 적어 두고(markHighlights), CSS 가 그
+   변수로 아래 절반 띠를 그립니다. 저장된 글은 건드리지 않습니다 — 편집기에서
+   꺼낼 때(editorHtml) 이 변수는 다시 지웁니다. 이미 칠해 둔 형광펜도 그대로
+   새 모양을 따릅니다. */
+function markHighlights(root){
+  if(!root) return;
+  root.querySelectorAll('[style*="background-color"]').forEach(el=>{
+    const c = el.style.backgroundColor;
+    if(c) el.style.setProperty('--hl', c);
+  });
+}
+function renderHlPicks(){
+  const box = document.getElementById('dispHlPicks');
+  if(!box) return;
+  const cur = lookCfg().text.hl;
+  box.innerHTML = '';
+  HL_STYLES.forEach(o=>{
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'opt-pick' + (cur === o.key ? ' active' : '');
+    b.textContent = o.name;
+    b.addEventListener('click', ()=>{
+      lookCfg().text.hl = o.key;
+      applyLookCfg(); renderHlPicks();
+      if(isLoggedIn) storageSet('lookCfg', state.lookCfg);
+    });
+    box.appendChild(b);
+  });
 }
 const fmtLh = (n)=> (Math.round(n * 100) / 100).toFixed(2).replace(/0$/, '');
 function paintDispNums(){
@@ -13423,6 +13657,8 @@ function renderDispText(){
   const v = (id, x)=>{ const el = document.getElementById(id); if(el) el.value = x; };
   v('dispLh', t.lh); v('dispLs', t.ls); v('dispGap', t.gap);
   paintDispNums();
+  renderHlPicks();
+  markHighlights(document.querySelector('.disp-prev'));
 }
 /* 막대를 미는 동안에는 화면만 바꾸고(input), 손을 떼면 저장합니다(change) —
    위젯 DESIGN 의 그림자 농도와 같은 방식입니다. */
@@ -13442,7 +13678,9 @@ function initDispText(){
     if(isLoggedIn) storageSet('lookCfg', state.lookCfg);
   });
   document.getElementById('dispReset')?.addEventListener('click', ()=>{
-    lookCfg().text = Object.assign({}, TEXT_DEFAULT);
+    /* 형광펜 모양은 간격이 아니라서 '기본으로'가 건드리지 않습니다 */
+    const hl = lookCfg().text.hl;
+    lookCfg().text = Object.assign({}, TEXT_DEFAULT, { hl });
     applyLookCfg(); renderDispText();
     if(isLoggedIn) storageSet('lookCfg', state.lookCfg);
   });

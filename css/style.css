@@ -422,7 +422,7 @@
   #modalRecent .modal{overflow:visible;}
   /* 그래도 아래가 좁으면 **위로** 펼칩니다 — ARCHIVE 검색줄이 폰에서 쓰는 수와
      같습니다. main.js 가 자리를 보고 .pick-up 을 답니다. */
-  .pick-dd.pick-up .pick-dd-menu{top:auto;bottom:calc(100% + 4px);}
+  .pick-dd.pick-up .pick-dd-menu{top:auto;bottom:calc(100% - 1px);}
 
   /* ---------- 최신글 위젯 ---------- */
   .recent-widget{position:relative;padding:0 0 16px;}
@@ -1774,6 +1774,8 @@
      왼쪽 조절 막대, 오른쪽 미리보기(위젯 DESIGN 과 같은 짜임). 미리보기는 진짜 글
      본문과 같은 규칙을 입고 있어 막대를 밀면 같이 움직입니다. */
   .disp-sub{margin-top:26px;}
+  /* CURSOR 탭 아래로 합쳐진 커서 이펙트 — DISPLAY 의 '글 본문' 머리와 같은 간격 */
+  .cur-fx-sub{margin-top:26px;}
   .disp-text{display:flex;gap:28px;align-items:flex-start;}
   .disp-ctls{flex:0 1 340px;min-width:0;}
   .disp-row{flex-wrap:nowrap;cursor:default;}
@@ -1900,7 +1902,9 @@
   .folder-dd-btn .fdd-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .folder-dd-btn .fdd-caret{flex:none;font-size:8px;color:inherit;}
   .folder-dd.open .folder-dd-btn{background:var(--accent);color:#fff;border-color:var(--accent);}
-  .folder-dd-menu{display:none;position:absolute;top:calc(100% + 4px);right:0;min-width:100%;
+  /* 펼친 목록은 단추에 **붙어서** 열립니다(주인 요청 — 4px 떨어져 있었습니다).
+     -1px 로 단추의 아래 선과 목록의 위 선을 한 줄로 겹칩니다. */
+  .folder-dd-menu{display:none;position:absolute;top:calc(100% - 1px);right:0;min-width:100%;
     max-width:260px;max-height:60vh;overflow-y:auto;background:var(--bg);
     border:1px solid var(--border);z-index:60;padding:0;}
   .folder-dd.open .folder-dd-menu{display:block;}
@@ -3008,6 +3012,8 @@
   .arc-editor img{max-width:100%;display:block;margin:8px 0;cursor:pointer;}
   .arc-editor pre{background:var(--surface);border:1px solid var(--border);padding:8px;overflow-x:auto;font-family:var(--mono);font-size:11px;}
   .arc-editor blockquote{border-left:3px solid var(--accent);margin:8px 0;padding:4px 12px;color:var(--text);}
+  /* LOG 서식 줄에도 인용구 단추가 생겨 편집기에서도 같은 모양으로 보이게 합니다 */
+  .log-editor blockquote{border-left:3px solid var(--accent);margin:8px 0;padding:4px 12px;color:var(--text);}
   .arc-view-content img{max-width:100%;display:block;margin:8px 0;}
   .arc-view-content pre{background:var(--surface);border:1px solid var(--border);padding:8px;overflow-x:auto;font-family:var(--mono);font-size:11px;}
   .arc-view-content blockquote{border-left:3px solid var(--accent);margin:8px 0;padding:4px 12px;color:var(--text);}
@@ -3077,6 +3083,9 @@
     font-variation-settings:'wght' 600;font-weight:600;}
   .toc-text{flex:1;min-width:0;}
   .toc-item:hover .toc-text{color:var(--accent);text-decoration:underline;text-underline-offset:3px;}
+  /* 쓰는 동안의 목차(실시간 미리보기)는 보여 주기만 합니다 — 누를 곳이 아닙니다 */
+  .toc-item.toc-item-live{cursor:default;}
+  .toc-item.toc-item-live:hover .toc-text{color:inherit;text-decoration:none;}
   /* 편집 중에는 안내 한 줄과 ✕ 만 — 목록은 게시해야 채워집니다 */
   .toc-box{position:relative;}
   .toc-hint{font-size:11px;color:var(--text-muted);line-height:1.5;}
@@ -3463,7 +3472,8 @@
   .pick-dd.open .pick-dd-btn{background:var(--accent);color:#fff;border-color:var(--accent);}
   .pick-dd-btn .pdd-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .pick-dd-btn .pdd-caret{flex:none;font-size:8px;}
-  .pick-dd-menu{display:none;position:absolute;top:calc(100% + 4px);left:0;min-width:100%;
+  /* 폴더 단추와 같이 단추에 붙여서 엽니다(-1px 로 선을 한 줄로) */
+  .pick-dd-menu{display:none;position:absolute;top:calc(100% - 1px);left:0;min-width:100%;
     max-width:260px;max-height:50vh;overflow-y:auto;background:var(--bg);
     border:1px solid var(--border);z-index:60;}
   .pick-dd.open .pick-dd-menu{display:block;}
@@ -3549,8 +3559,11 @@
      KoPub 기준 2.5px 은 반대로 0.8px 끌어내리고 있었습니다). 남겨 두는 까닭은
      글자마다 값이 조금씩 다르기 때문입니다 — B I ＋ 0.45 / U S ▾ 0.37 /
      ― 0.03. 한 값으로는 다 맞출 수 없어서 가장 흔한 쪽에 맞춥니다. */
-  .rt-toolbar button{width:24px;height:24px;padding:0.9px 0 0;border:1px solid var(--border);
-    background:var(--bg);border-radius:0;font-size:11px;
+  /* 단추를 두르던 네모 테두리는 뺐습니다(주인 요청) — 올리면 옅은 바탕만 깔립니다.
+     선을 없애지 않고 투명하게 두는 까닭: 1px 이 빠지면 단추가 22px 이 되어 줄의
+     높이와 위 글리프 보정값이 모두 달라집니다. */
+  .rt-toolbar button{width:24px;height:24px;padding:0.9px 0 0;border:1px solid transparent;
+    background:transparent;border-radius:0;font-size:11px;color:var(--text);
     display:inline-flex;align-items:center;justify-content:center;line-height:1;}
   /* 정렬 아이콘은 글자가 아니라 그림(SVG)이라 이미 정확히 가운데입니다.
      같이 내리면 그것만 어긋나므로 보정에서 뺍니다. */
@@ -3564,11 +3577,13 @@
      34px. 고른 글이 없으면 'px' 만 흐리게 보입니다. */
   /* 테두리는 바깥 상자(.rt-size-box)가 갖고, 안에 숫자 칸과 흐린 'px' 가 나란히
      섭니다 — 숫자만 덩그러니 있으면 무슨 단위인지 알 수 없었습니다(주인 지적). */
+  /* 테두리 대신 밑줄 한 줄 — 단추들의 네모가 빠졌으니 이 칸만 상자로 남으면 튑니다.
+     그래도 '적는 칸'이라는 표시는 있어야 해서 아래 선만 남깁니다. */
   .rt-toolbar .rt-size-box{flex:none;display:inline-flex;align-items:center;width:42px;height:24px;
-    padding:0 4px 0 2px;box-sizing:border-box;border:1px solid var(--border);background:var(--bg);
-    cursor:text;}
+    padding:0 4px 0 2px;box-sizing:border-box;border:1px solid transparent;
+    border-bottom-color:var(--rule-soft);background:transparent;cursor:text;}
   .rt-toolbar .rt-size-box:hover{background:var(--surface-2);}
-  .rt-toolbar .rt-size-box:focus-within{border-color:var(--accent);background:var(--bg);}
+  .rt-toolbar .rt-size-box:focus-within{border-bottom-color:var(--accent);background:transparent;}
   .rt-toolbar .rt-size{flex:1;min-width:0;width:auto;height:100%;padding:0;margin:0;
     border:0;border-radius:0;background:transparent;
     font-family:var(--mono);font-size:11px;line-height:1;text-align:right;color:var(--text);
@@ -3602,12 +3617,50 @@
      않게(opacity:0) 같은 자리에 겹쳐 둡니다. */
   .rt-cpick .rt-cpick-native{position:absolute;left:0;top:0;width:100%;height:100%;
     opacity:0;pointer-events:none;border:0;padding:0;margin:0;}
-  .rt-cpick .rt-cpick-btn{width:24px;height:24px;padding:3px;border:1px solid var(--border);
-    background:var(--bg);border-radius:0;display:inline-flex;align-items:center;justify-content:center;}
-  .rt-cpick-dot{display:block;width:100%;height:100%;}
+  .rt-cpick .rt-cpick-btn{width:24px;height:24px;padding:5px;border:1px solid transparent;
+    background:transparent;border-radius:0;display:inline-flex;align-items:center;justify-content:center;gap:3px;}
+  .rt-cpick .rt-cpick-btn:hover{background:var(--surface-2);}
+  /* 색 네모 — 단추의 테두리가 빠졌으니 흰색을 골라도 보이게 견본에 얇은 선을 둡니다 */
+  .rt-cpick-dot{display:block;width:100%;height:100%;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18);}
+  /* 형광펜 단추 — LOG 에서 쓰던 ✎ 와, 그 아래 지금 형광펜 색 띠.
+     ✎ 는 Pretendard 에 없어 기호 서체를 못박습니다(이 파일의 기호 대체 규칙). */
+  .rt-cpick-hl .rt-cpick-btn{flex-direction:column;gap:1px;padding:2px 4px 3px;}
+  .cp-hl-ico{font-family:system-ui,'Segoe UI Symbol',sans-serif;font-size:11px;line-height:1;color:var(--text);}
+  .rt-cpick-bar{display:block;width:13px;height:3px;flex:none;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12);}
+  /* LOG 의 보조색·괄호색 — 색 네모 + 짧은 이름 */
+  .rt-cpick-set .rt-cpick-btn{width:auto;padding:5px 5px 5px 4px;}
+  .rt-cpick-set .rt-cpick-dot{width:12px;height:12px;flex:none;}
+  .rt-cpick-name{font-family:var(--mono);font-size:10px;color:var(--text-muted);white-space:nowrap;}
   .rt-cpick-menu{display:none;position:absolute;top:calc(100% + 5px);left:0;z-index:70;
-    background:var(--bg);border:1px solid var(--border);padding:9px 10px 6px;min-width:152px;}
+    background:var(--bg);border:1px solid var(--border);padding:11px 12px 8px;min-width:152px;}
   .rt-cpick.open .rt-cpick-menu{display:block;}
+  /* ---- 색 고르기 창 (주인이 보낸 그림: 견본 | HEX, 아래에 자주 쓰는 색) ---- */
+  .cp-pop{width:214px;font-family:var(--mono);}
+  .cp-label{font-size:10px;font-weight:700;color:var(--text-muted);margin-bottom:6px;}
+  .cp-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+  .rt-cpick .cp-thumb{width:34px;height:34px;flex:none;padding:0;border:1px solid var(--rule-soft);
+    border-radius:0;cursor:pointer;}
+  .rt-cpick .cp-thumb:hover{border-color:var(--text);}
+  .rt-cpick .cp-hex{flex:1;min-width:0;height:34px;padding:0 9px;border:1px solid var(--rule-soft);
+    border-radius:0;font-family:var(--mono);font-size:12.5px;font-variation-settings:'wght' 600;
+    letter-spacing:.04em;color:var(--text);background:var(--bg);outline:none;}
+  .rt-cpick .cp-hex:focus{border-color:var(--accent);}
+  .cp-presets{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;}
+  .cp-sw-wrap{position:relative;display:inline-flex;}
+  .rt-cpick .cp-sw{width:22px;height:22px;padding:0;border:1px solid var(--rule-soft);border-radius:0;cursor:pointer;}
+  .rt-cpick .cp-sw:hover,.rt-cpick .cp-sw[aria-current="true"]{border-color:var(--text);
+    box-shadow:inset 0 0 0 1px var(--bg);}
+  /* 빼기 ✕ — 올렸을 때만 오른쪽 위 모서리에 */
+  .rt-cpick .cp-sw-del{position:absolute;top:-6px;right:-6px;width:13px;height:13px;padding:0;
+    border:1px solid var(--rule-soft);border-radius:50%;background:var(--bg);color:var(--text-muted);
+    font-size:7px;line-height:1;display:none;align-items:center;justify-content:center;cursor:pointer;
+    font-family:system-ui,'Segoe UI Symbol',sans-serif;}
+  .cp-sw-wrap:hover .cp-sw-del{display:inline-flex;}
+  .rt-cpick .cp-sw-del:hover{color:#c0392b;border-color:#c0392b;}
+  .rt-cpick .cp-add{width:22px;height:22px;padding:0;border:1px dashed var(--rule-soft);border-radius:0;
+    background:transparent;color:var(--text-muted);font-size:12px;line-height:1;cursor:pointer;}
+  .rt-cpick .cp-add:hover{color:var(--accent);border-color:var(--accent);}
+  .rt-cpick .cp-act{margin-top:2px;}
   .rt-cpick-label{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;
     text-transform:uppercase;color:var(--text-muted);margin-bottom:7px;white-space:nowrap;}
   .rt-cpick-swatches{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:9px;}
@@ -3663,6 +3716,16 @@
   .profile-view-text .copy-box,.side-memo .copy-box,
   .profile-view-text .code-block,.side-memo .code-block,
   .profile-view-text .html-embed,.profile-view-text .toc-box{letter-spacing:normal;text-align:start;}
+  /* ---- 형광펜 '밑줄형' (SETTING › DISPLAY, body.hl-under) ----
+     칠한 색을 글자 아래 절반(55% 아래)에만 깝니다. 색은 JS 가 --hl 로 옮겨 둔 것
+     (markHighlights) — 인라인 background-color 를 !important 로 지우고 그 자리에
+     띠를 그립니다. 줄이 넘어가면 줄마다 따로 그려지게 clone 을 겁니다. */
+  body.hl-under .profile-view-text [style*="background-color"],
+  body.hl-under .side-memo [style*="background-color"],
+  body.hl-under .disp-prev [style*="background-color"]{
+    background-color:transparent !important;
+    background-image:linear-gradient(to bottom, transparent 55%, var(--hl, transparent) 55%);
+    -webkit-box-decoration-break:clone;box-decoration-break:clone;}
   /* 양쪽 정렬도 같은 상자들에는 번지지 않게 — 위 줄이 text-align 까지 함께 막습니다.
      가운데·오른쪽 정렬 단추로 정한 줄은 그 줄에 직접 적힌 값이라 이 설정보다 셉니다. */
   body.logged-in .profile-view-text{border:1px solid var(--border);border-radius:0;padding:8px;}
@@ -4849,9 +4912,11 @@
     /* LOOK 까지 여섯 탭이 되어 375px 에서 30px 넘쳤습니다 — 자간을 .02em, 사이를 3px 로
        더 줄입니다(쟰 값: 제목과 9px 띄고 들어감). 그보다 좁은 폰(320px 등)에서는
        줄이 옆으로 밀리도록 두어, 넘쳐서 화면 밖으로 나가는 일은 없게 합니다. */
-    /* LOOK 가 DISPLAY 로 길어지면서 15px 더 모자라 자간 0 · 사이 2px 까지 줄였습니다 */
-    .mg-tab{height:40px;letter-spacing:0;}
-    .mg-tabs{gap:2px;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;}
+    /* EFFECT 를 CURSOR 로 합쳐 탭이 다섯이 되면서 자리가 남아, 줄였던 자간을 예전 값
+       (.08em)으로 되돌렸습니다 — 너무 붙어 보인다는 지적이 있었습니다. 사이는 4px
+       (5px 이면 375px 화면에서 3px 모자랐습니다 — 쟰 값). */
+    .mg-tab{height:40px;letter-spacing:.08em;}
+    .mg-tabs{gap:4px;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;}
     .mg-tabs::-webkit-scrollbar{display:none;height:0;}
     #view-setting > .topbar .topbar-actions,
     #view-widget > .topbar .topbar-actions{flex:1 1 auto;min-width:0;display:flex;justify-content:flex-start;}
@@ -5105,6 +5170,9 @@
     .log-table th.arc-th-check{width:28px;}
     .log-table td.log-td-title{padding-right:12px;}
     .log-table td{padding:12px 4px;}
+    /* ARCHIVE 목록만 — 남는 자리를 채우도록 줄 높이를 살짝 바꿉니다(main.js arcFillPhone).
+       체크 칸은 여백이 0 이라 빼 둡니다(넣으면 그 칸이 줄 높이를 정해 버립니다). */
+    #archiveBody .log-table td:not(.arc-td-check){padding-top:var(--arc-td-pad, 12px);padding-bottom:var(--arc-td-pad, 12px);}
     .archive-search{margin:0 0 14px;}
 
     /* 검색 컨트롤 4개를 한 줄에 유지합니다.
@@ -5126,6 +5194,9 @@
         ⋮ 는 이제 창이 아니라 상단바 안에만 있습니다.) */
     .arc-detail-bar{padding-left:0;}
     .arc-detail-bar .arc-kebab-btn{width:30px;height:38px;top:auto;right:auto;font-size:17px;}
+    /* 링크 복사 단추도 ⋮ 와 같은 키로 — 26px 이던 때는 6px 떠 보였습니다(주인 지적) */
+    .arc-detail-bar .rt-link-btn{width:30px;height:38px;}
+    .arc-detail-bar .rt-link-ico{width:17px;height:17px;}
     .arc-detail-bar .arc-kebab-menu{top:46px;right:6px;}
     .arc-detail-col{width:100%;}
     .arc-detail-body{overflow-x:hidden;}
@@ -5360,6 +5431,10 @@
     .rt-toolbar-memo .rt-cpick .rt-cpick-btn{width:32px;height:32px;padding:4px;}
     .rt-color{width:32px;height:32px;}
     .rt-cpick .rt-cpick-btn{width:32px;height:32px;padding:4px;}
+    .rt-cpick-hl .rt-cpick-btn{padding:6px 4px 7px;}
+    .cp-hl-ico{font-size:13px;}
+    .rt-cpick-bar{width:16px;}
+    .rt-cpick-set .rt-cpick-btn{width:auto;padding:4px 7px 4px 6px;}
     /* 페어 프로필의 서식 줄 — 단추가 여섯(＋ B I 색 ˄ ˅)인데, 폰에서는
        프로필 둘이 나란히 서서 그 칸이 화면 절반밖에 안 됩니다. 32px 로는 두 줄이
        됩니다 — 필요 217px / 있는 폭 177px (393px 화면에서 쟴 값). 두 줄이 되면
@@ -5568,15 +5643,19 @@
      보기 모드에서는 이 단추가 그 자리를 그대로 차지합니다.
      평소에는 회색으로 물러서 있다가 손이 닿으면 살아나는 ⋮ 와 같은 방식입니다 —
      그림글자가 제 색을 들고 오면 한 지면에서 혼자 튜어나옵니다. */
+  /* 🔗 이모지를 그린 아이콘으로 바꿨습니다 — 이모지는 기기마다 그림·크기·높이가
+     달라 폰에서 ⋮ 보다 떠 보였습니다(주인 지적). ⋮ 와 같은 회색(--text-muted)으로
+     서 있다가 올리면 진해집니다. */
   .rt-link-btn{flex:none;width:22px;height:26px;margin-right:5px;padding:0;border:0;
-    background:transparent;font-size:12.5px;line-height:1;
+    background:transparent;font-size:12.5px;line-height:1;color:var(--text-muted);
     display:flex;align-items:center;justify-content:center;cursor:pointer;
-    filter:grayscale(1);opacity:.5;transition:opacity .16s ease,filter .16s ease;}
-  .rt-link-btn:hover{opacity:1;filter:grayscale(0);}
+    transition:color .16s ease;}
+  .rt-link-btn:hover{color:var(--text);}
+  .rt-link-ico{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.4;
+    stroke-linecap:round;display:block;}
   /* 복사된 순간만 — 글쇠 하나가 체크로 바뀝니다(알림 창을 띄우지 않는 까닭은
      rtFlashLink 쪽 주석에). 그림글자가 아니라 글자이므로 회색 걸기를 풉니다. */
-  .rt-link-btn.rt-link-done{opacity:1;filter:none;color:var(--accent);
-    font-size:13px;font-weight:800;}
+  .rt-link-btn.rt-link-done{color:var(--accent);font-size:13px;font-weight:800;}
   /* 고치는 중에는 없습니다 — 아직 저장되지 않은 글의 링크는 쓸 데가 없습니다 */
   .arcd-editing .rt-link-btn{display:none;}
 
