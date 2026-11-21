@@ -5512,9 +5512,141 @@ function initCopyBoxKeys(editorId){
   });
 }
 
+/* ---- 접기 블록을 지우는 키 ----
+   접기의 ▸ 는 contenteditable="false" 라 브라우저의 평범한 지우기로는
+   블록이 없어지지 않습니다. 제목·내용 칸을 잘못 지워 .fold-body 가 사라진
+   블록(실제로 저장된 글에 있습니다 — OC 자유 텍스트)은 그 상태로 굳어서
+   **어떻게 해도 지워지지 않았습니다.** 그래서 지우기를 직접 받습니다:
+   · 제목 맨 앞에서 백스페이스 → 블록이 통째로 사라집니다. 안에 글이 있으면
+     글은 평범한 줄로 남기고(제목 줄 + 내용) 접기 틀만 걷어냅니다 — 글까지
+     한 번에 날리면 되돌릴 길이 없습니다.
+   · 내용 맨 앞에서 백스페이스 → 블록이 비어 있으면 통째로 지우고, 아니면
+     커서를 제목 끝으로 올립니다(칸끼리 합쳐져 틀이 깨지는 것을 막습니다).
+   · 블록 바로 뒤에서 백스페이스 / 바로 앞에서 Delete → 빈 블록은 지우고,
+     글이 든 블록은 **먼저 통째로 골라** 줍니다. 한 번 더 누르면 지워집니다.
+   · 제목 끝·내용 끝에서 Delete 는 칸이 합쳐지지 않게 막습니다. */
+function foldIsEmpty(block){
+  const parts = [...block.children].filter(c=> !c.classList.contains('fold-head'));
+  const title = block.querySelector(':scope > .fold-head > .fold-title');
+  const text = (title ? title.textContent : '') + parts.map(p=> p.textContent).join('');
+  if(text.replace(/​/g, '').trim()) return false;
+  return !parts.some(p=> p.querySelector('img,hr,iframe,.copy-box,.html-embed,.code-block,.code-embed,.img-pair'));
+}
+function foldAtEdge(range, field, back){
+  const probe = document.createRange();
+  probe.selectNodeContents(field);
+  if(back) probe.setEnd(range.startContainer, range.startOffset);
+  else     probe.setStart(range.startContainer, range.startOffset);
+  const frag = probe.cloneContents();
+  /* 칸 끝에 붙은 <br> 하나는 빈 칸의 자리 채움이라 글로 치지 않습니다 */
+  return !probe.toString().replace(/​/g, '').length && !frag.querySelector('img,hr,iframe,.copy-box,.html-embed')
+    && (back || frag.querySelectorAll('br').length <= 1);
+}
+function foldNear(range, root, back){
+  let n = cbAdjacentNode(range, root, back);
+  for(let hop = 0; n && hop <= 2; hop++){
+    if(n.nodeType === 1 && n.classList && n.classList.contains('fold-block')) return n;
+    const skippable = (n.nodeType === 1 && n.tagName === 'BR') || (n.nodeType === 3 && !n.data.trim());
+    if(!skippable) return null;
+    n = back ? n.previousSibling : n.nextSibling;
+  }
+  return null;
+}
+function foldRemove(block, sel, keepText){
+  const parent = block.parentNode;
+  let idx = Array.prototype.indexOf.call(parent.childNodes, block);
+  let first = null;
+  if(keepText && !foldIsEmpty(block)){
+    const frag = document.createDocumentFragment();
+    const title = block.querySelector(':scope > .fold-head > .fold-title');
+    if(title && title.textContent.trim()){
+      const d = document.createElement('div');
+      while(title.firstChild) d.appendChild(title.firstChild);
+      frag.appendChild(d);
+    }
+    [...block.children].forEach(c=>{
+      if(c.classList.contains('fold-head')) return;
+      if(c.classList.contains('fold-body')){
+        if(!c.textContent.trim() && !c.querySelector('img,hr,iframe,.copy-box,.html-embed,.code-block,.code-embed,.img-pair')) return;
+        const d = document.createElement('div');
+        while(c.firstChild) d.appendChild(c.firstChild);
+        frag.appendChild(d);
+      }else frag.appendChild(c);
+    });
+    first = frag.firstChild;
+    parent.replaceChild(frag, block);
+  }else block.remove();
+  const r = document.createRange();
+  if(first && first.isConnected){ r.selectNodeContents(first); r.collapse(true); }
+  else{ r.setStart(parent, Math.min(idx, parent.childNodes.length)); r.collapse(true); }
+  sel.removeAllRanges(); sel.addRange(r);
+}
+function initFoldKeys(editorId){
+  const editor = document.getElementById(editorId);
+  if(!editor || editor._foldKeys) return;
+  editor._foldKeys = true;
+  editor.addEventListener('keydown', (e)=>{
+    if(e.key !== 'Backspace' && e.key !== 'Delete') return;
+    if(e.defaultPrevented) return;
+    const sel = window.getSelection();
+    if(!sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    if(!editor.contains(range.startContainer)) return;
+    const back = e.key === 'Backspace';
+
+    /* 블록 하나를 통째로 골라 둔 상태 — 그 블록을 지웁니다 */
+    if(!range.collapsed){
+      const c = range.startContainer;
+      if(c === range.endContainer && c.nodeType === 1 && range.endOffset - range.startOffset === 1){
+        const n = c.childNodes[range.startOffset];
+        if(n && n.classList && n.classList.contains('fold-block')){ e.preventDefault(); foldRemove(n, sel, false); }
+      }
+      return;
+    }
+
+    const startEl = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
+    if(!startEl) return;
+    /* 더 안쪽의 복사 칸·인용구·HTML 칸이 임자입니다 */
+    const inner = startEl.closest('.copy-box, blockquote, .html-embed');
+    const title = startEl.closest('.fold-title');
+    const body  = startEl.closest('.fold-body');
+    const owner = title || body;
+    if(inner && (!owner || owner.contains(inner))) return;
+
+    if(title && editor.contains(title)){
+      const block = title.closest('.fold-block');
+      if(back && foldAtEdge(range, title, true)){ e.preventDefault(); foldRemove(block, sel, true); return; }
+      if(!back && foldAtEdge(range, title, false)){ e.preventDefault(); return; }
+      return;
+    }
+    if(body && editor.contains(body)){
+      const block = body.closest('.fold-block');
+      const firstBody = body.previousElementSibling && body.previousElementSibling.classList.contains('fold-head');
+      if(back && firstBody && foldAtEdge(range, body, true)){
+        e.preventDefault();
+        if(foldIsEmpty(block)){ foldRemove(block, sel, false); return; }
+        const t = block.querySelector(':scope > .fold-head > .fold-title');
+        if(t){ const r = document.createRange(); r.selectNodeContents(t); r.collapse(false); sel.removeAllRanges(); sel.addRange(r); }
+        return;
+      }
+      if(!back && !body.nextElementSibling && foldAtEdge(range, body, false)){ e.preventDefault(); return; }
+      if(!back) return;
+    }
+
+    const near = foldNear(range, editor, back);
+    if(!near) return;
+    e.preventDefault();
+    if(foldIsEmpty(near)){ foldRemove(near, sel, false); return; }
+    const r = document.createRange();
+    r.selectNode(near);
+    sel.removeAllRanges(); sel.addRange(r);
+  });
+}
+
 function initFoldEnter(editorId){
   const editor = document.getElementById(editorId);
   if(!editor) return;
+  initFoldKeys(editorId);   // 접기가 있는 편집기는 지우기 키도 함께 받습니다
   editor.addEventListener('keydown', (e)=>{
     if(e.key !== 'Enter' || e.shiftKey) return;
     const sel = window.getSelection();

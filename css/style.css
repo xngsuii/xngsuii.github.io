@@ -5411,9 +5411,15 @@
        9×32 + 구분선 9 + 여백 32 = 329px (393px 화면의 칸이 363px).
        폭을 flex 기준값으로 주는 장치는 그대로 둡니다: 더 좁은 기기(375px 화면의
        345px 칸)에서 아홉 개가 알아서 조금씩 줄어 넘치지 않게 합니다.
-       OC 자유 글 칸(.rt-toolbar-ocfree)은 단추가 11개라 32px 로도 두 줄입니다 —
-       전부터 두 줄이었으므로 그대로 둡니다. */
+       OC 자유 글 칸(.rt-toolbar-ocfree)은 단추가 많아 32px 로도 두 줄이었는데,
+       주인 요청으로 ARCHIVE 서식 줄처럼 **한 줄 + 옆으로 넘기기**로 바꿨습니다
+       (스크롤바는 숨김). 색 고르기 창은 폰에서 화면 기준(fixed)으로 열리므로
+       이 줄의 overflow 에 잘리지 않습니다. */
     .rt-toolbar{gap:5px;}
+    .rt-toolbar-ocfree{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;
+      scrollbar-width:none;-ms-overflow-style:none;}
+    .rt-toolbar-ocfree::-webkit-scrollbar{display:none;height:0;}
+    .rt-toolbar-ocfree > *{flex:none;}
     /* 여기 있던 padding-top:3.2px 은 KoPub 기준이었습니다. Pretendard 가 이
        크기에서 필요로 하는 값은 0 에 가까워서 데스크톱의 0.9px 을 그대로
        물려받게 둡니다. 아래 :has(.rt-ico) 는 그래도 필요합니다(그림은 이미 정확하므로 0). */
