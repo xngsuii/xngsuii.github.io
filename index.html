@@ -69,9 +69,11 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
-<link rel="stylesheet" href="css/style.css?v=270" />
+<link rel="stylesheet" href="css/style.css?v=289" />
 </head>
 <body>
+<!-- 재단선 — 패널 네 모서리의 ㄱ 자 표시(css .trim-marks). 테두리로 그려야 또렷합니다 -->
+<div class="trim-marks" aria-hidden="true"><i class="tm-tl"></i><i class="tm-tr"></i><i class="tm-bl"></i><i class="tm-br"></i></div>
 <div class="app-window">
 <div class="app-shell">
 
@@ -101,7 +103,8 @@
       <div class="nav-sub" id="ocSub"></div>
       <button class="nav-item" data-view="archive">Archive</button>
       <div class="nav-sub" id="archiveSub">
-        <button class="nav-sub-item active" data-archivesub="nai">PROMPT</button>
+        <button class="nav-sub-item active" data-archivesub="review">REVIEW</button>
+        <button class="nav-sub-item" data-archivesub="nai">PROMPT</button>
         <button class="nav-sub-item" data-archivesub="ooc">OOC</button>
         <button class="nav-sub-item" data-archivesub="etc">ETC</button>
       </div>
@@ -407,7 +410,8 @@
         <span class="smi-dot" aria-hidden="true">·</span>
         <button class="smi" type="button" data-menu="widget">WIDGET</button>
         <span class="smi-dot" aria-hidden="true">·</span>
-        <button class="smi" type="button" data-menu="write">WRITE</button>
+        <!-- 예전엔 WRITE(ARCHIVE 글쓰기)였습니다 — 잘 안 써서 주인 결정으로 바꿨습니다 -->
+        <button class="smi" type="button" data-menu="preview">PREVIEW</button>
       </div>
     </div>
 
@@ -619,7 +623,7 @@
     <!-- ---------- ARCHIVE ---------- -->
     <section class="view" id="view-archive">
       <div class="topbar">
-        <h2 id="archiveTitle">Archive · PROMPT</h2>
+        <h2 id="archiveTitle">Archive · REVIEW</h2>
         <!-- 선택/삭제는 PROMPT 에서만 씁니다 — 카테고리에 따라 JS 가 보였다 숨깁니다.
              폴더는 OC 와 같은 방식으로 편집 전용 묶음 바깥, 맨 오른쪽에 둡니다. -->
         <div class="topbar-actions">
@@ -1623,6 +1627,35 @@
   </div>
 </div>
 
+<!-- REVIEW 고치기 창 — 읽기는 목록의 카드(뒤집으면 후기)가 맡고, 이 창은 새로
+     쓰고 고칠 때만 뜹니다. .rv-editing 은 늘 붙어 있습니다(편집 칸 모양을 그 이름으로 씁니다). -->
+<div class="modal-overlay" id="modalReview">
+  <div class="modal rv-card rv-editing" id="rvCard">
+    <button class="modal-close" type="button" id="rvClose">✕</button>
+    <div class="rv-c-poster empty" id="rvPoster"><span class="rv-c-poster-hint">포스터 고르기</span></div>
+    <div class="rv-c-info">
+      <div class="rv-c-top">
+        <span class="rv-c-kindpick"><select id="rvKindSel" class="pick-dd-src"></select></span>
+        <span class="rv-c-no" id="rvNo"></span>
+      </div>
+      <input type="text" class="rv-c-title-in" id="rvTitleIn" placeholder="제목" autocomplete="off">
+      <div class="rv-c-meta">
+        <label class="rv-c-field"><span>관람일</span><input type="date" id="rvDateIn"></label>
+        <label class="rv-c-field rv-c-field-n"><span>시간</span><input type="time" id="rvTimeIn"></label>
+      </div>
+      <div class="rv-c-stars" id="rvStars"></div>
+      <div class="rv-c-rule"></div>
+      <div class="rv-c-body profile-view-text" id="rvBody" contenteditable="true" data-ph="후기를 적어주세요"></div>
+      <div class="rv-c-actions">
+        <button type="button" class="btn-ghost gf-danger rv-c-del" id="rvDeleteBtn">삭제</button>
+        <span class="rv-c-gap"></span>
+        <button type="button" class="btn-ghost" id="rvCancelBtn">취소</button>
+        <button type="button" class="btn-primary" id="rvSaveBtn">저장</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- 최신글 설정 -->
 <div class="modal-overlay" id="modalRecent">
   <div class="modal gf-modal">
@@ -1970,7 +2003,7 @@
        (그 목록을 만드는 것도 JS인데 새 CSS 가 감싸이지 않은 select 를 폭 0 으로
        접습니다), 스티커 서랍이 엉뚱한 자리에 놓였습니다.
        **CSS 와 JS 를 함께 고쳤으면 번호도 함께 올리세요.** -->
-<script src="js/main.js?v=270"></script>
-<script type="module" src="js/firebase-store.js?v=126"></script>
+<script src="js/main.js?v=284"></script>
+<script type="module" src="js/firebase-store.js?v=127"></script>
 </body>
 </html>

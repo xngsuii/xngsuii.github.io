@@ -60,6 +60,11 @@ function rtRevealPops(){
    비밀번호는 코드에 저장하지 않으며, 편집 권한은
    Firestore 보안 규칙이 서버에서 최종 확인합니다. */
 let isLoggedIn = false;
+/* PREVIEW — 로그인은 그대로 두고 화면만 보기 모드로 봅니다(✦ MENU 의 PREVIEW).
+   켜져 있는 동안 isLoggedIn 은 false 이고 storageSet 은 아무것도 쓰지 않습니다 —
+   보는 사람과 똑같은 상태를 보여주는 것이 목적이라, 그 사이 무언가가 저장되면
+   안 됩니다. 새로고침하면 꺼집니다(세션 동안만). 끄는 단추는 #previewBadge. */
+let previewMode = false;
 
 /* 한 군데가 터져도 나머지 화면은 계속 그리도록 감쌉니다 —
    예전에 렌더 한 곳이 예외를 내면 그 뒤가 통째로 멈춰 편집 모드에 갇혔습니다. */
@@ -307,6 +312,7 @@ async function storageGet(key, fallback){
    올라왔습니다(주인 지적). 그릴 것이 없으면 renderRecent 가 곧바로 돌아옵니다. */
 const RECENT_WATCH = ['pairPosts', 'ocPosts', 'archive'];
 async function storageSet(key, value){
+  if(previewMode) return;      // 미리보기 중에는 아무것도 저장하지 않습니다
   try{ await window.SiteStore.set(key, value); }catch(e){ console.error('저장 실패', e); }
   if(RECENT_WATCH.includes(key) && typeof renderRecent === 'function'){
     safely('최신글', renderRecent);
@@ -422,12 +428,19 @@ let state = {
 const ARC_DEFAULT_FOLDER = 'arcdefault';
 /* 세부 카테고리(OOC·PROMPT·ETC)마다 폴더 목록을 따로 둡니다 — 담기는 글이
    서로 다르니 폴더도 섞이면 안 됩니다. PROMPT 는 먼저 있던 키를 그대로 씁니다. */
-const ARC_FOLDER_KEY = { ooc:'archiveFoldersOoc', nai:'archiveFolders', etc:'archiveFoldersEtc' };
-const ARC_DEFAULT_FOLDER_ID = { ooc:'arcoocdefault', nai:ARC_DEFAULT_FOLDER, etc:'arcetcdefault' };
+const ARC_FOLDER_KEY = { ooc:'archiveFoldersOoc', nai:'archiveFolders', etc:'archiveFoldersEtc', review:'archiveFoldersReview' };
+const ARC_DEFAULT_FOLDER_ID = { ooc:'arcoocdefault', nai:ARC_DEFAULT_FOLDER, etc:'arcetcdefault', review:'revmusical' };
+/* REVIEW 의 폴더는 '종류'입니다. 처음엔 네 가지를 깔아 둡니다(주인 요청).
+   const 로 두지 않는 까닭 — arcFoldersOf 가 데이터가 오기 전에도 불리는데,
+   그때 아래쪽 const 줄은 아직 실행 전이라 읽으면 터집니다. */
+function reviewDefaultFolders(){
+  return [['revmusical','MUSICAL'],['revplay','PLAY'],['revmovie','MOVIE'],['revnovel','NOVEL']]
+    .map(([id, name])=> ({ id, name, secret:false, pwHash:'', blur:false }));
+}
 function arcFoldersOf(cat){
   const key = ARC_FOLDER_KEY[cat] || ARC_FOLDER_KEY.ooc;
   if(!Array.isArray(state[key]) || !state[key].length){
-    state[key] = normalizeArcFolders(null, ARC_DEFAULT_FOLDER_ID[cat]);
+    state[key] = cat === 'review' ? reviewDefaultFolders() : normalizeArcFolders(null, ARC_DEFAULT_FOLDER_ID[cat]);
   }
   return state[key];
 }
@@ -579,6 +592,7 @@ function migrateOcPost(o){
 state.archiveFolders    = normalizeArcFolders(null, ARC_DEFAULT_FOLDER_ID.nai);
 state.archiveFoldersOoc = normalizeArcFolders(null, ARC_DEFAULT_FOLDER_ID.ooc);
 state.archiveFoldersEtc = normalizeArcFolders(null, ARC_DEFAULT_FOLDER_ID.etc);
+state.archiveFoldersReview = reviewDefaultFolders();
 state.ocCats = normalizeOcCats(null, null);
 
 /* 글이 가리키는 폴더가 지워졌으면 그 글이 속한 카테고리의 첫 폴더로 봅니다 */
@@ -800,6 +814,12 @@ async function loadState(){
   state.archiveFolders    = normalizeArcFolders(await storageGet('archiveFolders', null),    ARC_DEFAULT_FOLDER_ID.nai);
   state.archiveFoldersOoc = normalizeArcFolders(await storageGet('archiveFoldersOoc', null), ARC_DEFAULT_FOLDER_ID.ooc);
   state.archiveFoldersEtc = normalizeArcFolders(await storageGet('archiveFoldersEtc', null), ARC_DEFAULT_FOLDER_ID.etc);
+  {
+    /* 한 번도 저장한 적이 없으면 네 종류를 깝니다. 폴더를 다 지웠더라도 하나는
+       남으므로(canDelete) 빈 목록이 저장될 일은 없습니다. */
+    const rv = await storageGet('archiveFoldersReview', null);
+    state.archiveFoldersReview = (Array.isArray(rv) && rv.length) ? normalizeArcFolders(rv, ARC_DEFAULT_FOLDER_ID.review) : reviewDefaultFolders();
+  }
   /* 처음 열 때는 예전부터 있던 Ai chat / Dream 을 그대로 씁니다.
      OC 는 카테고리가 하나 있어야 하므로, 카테고리 개념이 생기기 전
      전역으로 저장돼 있던 OC 폴더 목록(ocFolders)을 그 첫 카테고리가 이어받습니다 —
@@ -1431,8 +1451,8 @@ navItems.forEach(btn=>{
       renderOcPosts();
     }
     if(btn.dataset.view==='archive'){
-      currentArchiveCategory='nai';
-      document.querySelectorAll('#archiveSub .nav-sub-item').forEach(b=>b.classList.toggle('active', b.dataset.archivesub==='nai'));
+      currentArchiveCategory='review';   // 큰 메뉴로 들어오면 REVIEW 부터(주인 요청)
+      document.querySelectorAll('#archiveSub .nav-sub-item').forEach(b=>b.classList.toggle('active', b.dataset.archivesub==='review'));
       arcPage=1;
       arcUnblurred.clear();
       arcSelectedIds.clear();   // 카테고리를 옮기면 골라둔 것도 비웁니다
@@ -2035,9 +2055,9 @@ sideMenuBtn?.addEventListener('click', (e)=>{
 document.querySelectorAll('#sideMenuItems .smi').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     const which = btn.dataset.menu;
-    if(which === 'write'){
+    if(which === 'preview'){
       setSideMenuOpen(false);
-      openArcWrite('etc');   // 기본 분류는 ETC
+      setPreviewMode(true);
     }else{
       openManageView(which);
     }
@@ -3182,7 +3202,7 @@ function isAllFolderId(id){ return id === ALL_FOLDER_ID; }
 let currentPairFolderId = ALL_FOLDER_ID;
 let draggedPairId = null;
 let currentOcFilter = 'all';        // PAIR 과 마찬가지로 '전체'부터 보여줍니다
-let currentArchiveCategory='nai';   // ARCHIVE 첫 진입은 PROMPT
+let currentArchiveCategory='review';   // ARCHIVE 첫 진입은 REVIEW(주인 요청 — 예전엔 PROMPT)
 let selectMode=false;
 let selectedPairIds=new Set();
 
@@ -6083,14 +6103,19 @@ function layoutLogCards(wrap){
   if(!cards.length){ grid.style.height=''; return; }
   const total = grid.clientWidth;
   if(!total) return;                 // 아직 안 보임 — 위 감시자가 다시 부릅니다
-  const cols = LOG_CARD_COLS;
+  /* REVIEW 목록도 이 배치를 빌려 씁니다. 폰에서는 2열이라 칸 수를 겉 칸에 적어 넘깁니다 */
+  const cols = Number(wrap.dataset.cols) || LOG_CARD_COLS;
   const w = Math.floor((total - LOG_CARD_GAP*(cols-1)) / cols);
   const colH = new Array(cols).fill(0);
-  cards.forEach(card=>{
+  /* data-order="row" 이면 가장 낮은 칸이 아니라 **차례대로** 왼쪽부터 놓습니다
+     (REVIEW — 주인 요청: 넷째 카드는 왼쪽 아래에 와야 순서가 읽힙니다). */
+  const byRow = wrap.dataset.order === 'row';
+  cards.forEach((card, idx)=>{
     card.style.width = w + 'px';
     /* 가장 낮은 칸을 찾습니다. 같으면 왼쪽이 먼저라 첫 줄이 1·2·3 순이 됩니다. */
     let c = 0;
-    for(let i=1;i<cols;i++) if(colH[i] < colH[c] - 0.5) c = i;
+    if(byRow) c = idx % cols;
+    else for(let i=1;i<cols;i++) if(colH[i] < colH[c] - 0.5) c = i;
     card.style.left = (c * (w + LOG_CARD_GAP)) + 'px';
     card.style.top  = colH[c] + 'px';
     colH[c] += card.offsetHeight + LOG_CARD_GAP;
@@ -10522,6 +10547,7 @@ async function enterArcEdit(existingItem){
 function openArcWrite(cat){
   if(!isLoggedIn) return;
   if(cat) openArchiveCategory(cat);
+  if(currentArchiveCategory === 'review'){ openReviewCard(null); return; }
   arcListPage = arcPage;
   openDetailView('archive-detail');
   document.getElementById('arcViewTitle').innerText = '';
@@ -11246,6 +11272,9 @@ let arcSelectedIds = new Set();
 let arcUnblurred = new Set();
 let draggedArcId = null;
 function openArcView(item){
+  /* REVIEW 글은 글 화면이 아니라 목록의 뒤집힌 카드로 보여줍니다 — 최신글 위젯·주소 링크처럼
+     밖에서 들어오는 길도 모두 여기를 지나므로 한 군데서 갈라 줍니다. */
+  if(item && item.category === 'review'){ rvShowItem(item); return; }
   /* 읽으려고 여는 자리이므로 수정 모드는 무조건 끕니다. 위의 두 장치가
      이미 막고 있지만, 이 한 줄이 '글을 열면 글이 보인다'를 이 함수 안에서
      스스로 보장합니다 — 나가는 길이 하나 더 생겨도 여기서 걸립니다. */
@@ -11294,7 +11323,7 @@ function extractFirstImage(html){
   return m ? m[1] : '';
 }
 /* 사이드바 세부 카테고리 키 → 상단 표기 */
-const ARCHIVE_CAT_LABEL = { ooc:'OOC', nai:'PROMPT', etc:'ETC' };
+const ARCHIVE_CAT_LABEL = { ooc:'OOC', nai:'PROMPT', etc:'ETC', review:'REVIEW' };
 
 /* --- ARCHIVE 검색 (보기·편집 두 모드, LOG 와 같은 방식) --- */
 let arcSearchTerm = '';
@@ -11684,6 +11713,7 @@ function arcFillPhone(scroll, row, headH){
   return n;
 }
 function fitArchiveRows(){
+  if(currentArchiveCategory === 'review') return;   // 카드 목록 — 잴 줄이 없습니다
   const scroll = document.querySelector('#archiveBody .archive-table-scroll');
   if(!scroll) return;
   const row = scroll.querySelector('tbody tr');
@@ -11771,7 +11801,7 @@ function renderArchive(){
   }
 
   if(catItems.length===0){
-    wrap.innerHTML = folderBarHtml + '<div class="empty-note">아직 백업된 항목이 없어요.</div>';
+    wrap.innerHTML = folderBarHtml + '<div class="empty-note">' + (currentArchiveCategory === 'review' ? '아직 기록이 없어요.' : '아직 백업된 항목이 없어요.') + '</div>';
     renderArcFolderBar();
     return;
   }
@@ -11781,6 +11811,8 @@ function renderArchive(){
     renderArcFolderBar();
     return;
   }
+  /* REVIEW 는 표·격자 대신 티켓 목록입니다 */
+  if(currentArchiveCategory === 'review'){ renderReviewList(wrap, found, allFolder); return; }
   const pinned = found.filter(x=>x.pinned).slice(0,3).sort((a,b)=>(a.seq||0)-(b.seq||0));
   const rest = found.filter(x=>!x.pinned).slice().sort((a,b)=>(b.seq||0)-(a.seq||0));
   const items = [...pinned, ...rest];
@@ -11956,6 +11988,369 @@ function renderArchive(){
      중간에서 부르면 이 호출이 새로 그려진 화면에 단추를 한 번 더 묶습니다. */
   if(!isGallery) fitArchiveRows();
 }
+
+
+/* ============================================================
+   REVIEW — ARCHIVE 의 네 번째 분류. 본 공연·영화·읽은 책을 적어 둡니다.
+   ------------------------------------------------------------
+   글은 다른 ARCHIVE 글과 **같은 state.archive** 에 category:'review' 로 들어갑니다.
+   그래야 폴더(=종류), 선택·일괄 삭제, 끌어서 폴더 옮기기, 검색, 최신글 위젯을
+   새로 만들지 않고 그대로 씁니다.
+
+   한 작품 = 글 하나. 관람일(viewDate, 'YYYY-MM-DD')과 시간(viewTime, 'HH:MM', 없어도 됨)
+   만 적습니다 — 회차 목록도, 관람 횟수도 주인 결정으로 뺐습니다.
+   예전 모양(views:[{date}])으로 저장된 글은 읽을 때 거기서 셉니다.
+   목록 순서와 번호는 첫 관람일 기준(주인 결정): 최근에 처음 본 것이 위,
+   번호는 처음 본 순서대로 1 부터. item.date 에는 첫 관람일을 'YYYY.MM.DD' 로
+   적어 둡니다 — 날짜 검색(dateKeyOf)이 그 칸을 읽습니다. 별점은 0.5 단위.
+
+   목록은 LOG 카드 모양이고, 보이는 쪽은 포스터, 카드를 누르면 **그 자리에서
+   뒤집혀** 글(후기까지)이 보입니다(주인 요청 — 처음엔 카드 창이었고, 앞뒤를 한 번 바꿨다가 되돌렸습니다). 고치기만 창에서 합니다.
+   ============================================================ */
+function rvOldViews(item){ return Array.isArray(item && item.views) ? item.views : []; }
+function rvFirstDate(item){
+  if(item && item.viewDate) return item.viewDate;
+  return rvOldViews(item).map(v=> v.date).filter(Boolean).sort()[0] || '';
+}
+/* 같은 날 본 것끼리는 시간으로 가립니다 */
+function rvSortKey(item){ const d = rvFirstDate(item); return d ? d + ' ' + (item.viewTime || '') : ''; }
+function rvFmtDate(d){ return d ? String(d).replace(/-/g, '.') : ''; }
+/* 카드에 보이는 날짜 — '2026.11.25 WED 20:00'(주인 요청). 시간은 적었을 때만 */
+const RV_WD = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+function rvDateLine(item){
+  const d = rvFirstDate(item);
+  if(!d) return '';
+  const m = d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const wd = m ? RV_WD[new Date(+m[1], +m[2] - 1, +m[3]).getDay()] : '';
+  return [rvFmtDate(d), wd, item.viewTime || ''].filter(Boolean).join(' ');
+}
+function rvToday(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+/* 첫 관람일이 늦은 것이 위. 날짜가 없는 것은 맨 아래 */
+function rvSorted(items){
+  return items.slice().sort((x, y)=>{
+    const a = rvSortKey(x), b = rvSortKey(y);
+    if(a !== b){ if(!a) return 1; if(!b) return -1; return a < b ? 1 : -1; }
+    return (y.seq||0) - (x.seq||0);
+  });
+}
+/* 번호는 REVIEW 전체에서 처음 본 순서 — 폴더(종류)를 바꿔 봐도 같은 번호입니다 */
+function rvNoMap(){
+  const all = state.archive.filter(x=> x.category === 'review');
+  all.sort((x, y)=>{
+    const a = rvSortKey(x) || '9999', b = rvSortKey(y) || '9999';
+    return a < b ? -1 : a > b ? 1 : (x.seq||0) - (y.seq||0);
+  });
+  return new Map(all.map((it, i)=> [it.id, i + 1]));
+}
+function rvKindName(item){
+  const f = arcFoldersOf('review').find(x=> x.id === arcFolderIdOf(item));
+  return f ? f.name : '';
+}
+
+/* 별 — 서체 기호(★)는 Pretendard 에 없어 기기마다 모양이 달라지므로 직접 그립니다.
+   빈 별 줄 위에 같은 줄을 한 번 더 얹고, 위쪽만 점수만큼 잘라 보입니다.
+   별 다섯 개가 빈틈없이 16 씩 붙어 있어서 4.5 → 90% 가 정확히 다섯째 별의 반입니다. */
+const RV_STAR = 'M8 1.4 9.85 5.6l4.55.42-3.45 3.02 1.03 4.46L8 11.15 4.02 13.5l1.03-4.46L1.6 6.02l4.55-.42z';
+function rvStarRow(){
+  let s = '';
+  for(let i = 0; i < 5; i++) s += '<path transform="translate(' + (i*16) + ' 0)" d="' + RV_STAR + '"/>';
+  return '<svg viewBox="0 0 80 16" aria-hidden="true">' + s + '</svg>';
+}
+function rvStarsHtml(r){
+  const v = Math.max(0, Math.min(5, Number(r) || 0));
+  return '<span class="rv-stars" title="' + v + ' / 5"><span class="rv-st-bg">' + rvStarRow()
+    + '</span><span class="rv-st-fg" style="width:' + (v / 5 * 100) + '%">' + rvStarRow() + '</span></span>';
+}
+
+/* ---- 목록 ----
+   LOG 의 카드 목록과 **같은 장치**로 그립니다. 마크업이 .log-list > .log-cards-scroll
+   > .log-cards > .log-card 그대로라 layoutLogCards 가 가장 낮은 칸에 하나씩 얹어
+   쌓아 줍니다. 한 페이지 12장, PC 3열 / 폰 2열(data-cols). 4열도 해 봤다가 되돌렸습니다.
+
+   카드 하나에 앞면·뒷면 두 장이 겹쳐 있습니다. 앞면은 흐름 안에 있어 카드 높이를
+   정하고, 뒷면은 그 위에 absolute 로 겹친 채 Y 축으로 180° 돌아가 있습니다.
+   뒤집은 카드는 rvFlipped 에 기억해서 다시 그려도(저장·페이지 이동) 뒤집힌 채
+   남습니다. 페이지를 새로 열면 다 앞면입니다. */
+const REVIEW_PER_PAGE = 12;
+const rvFlipped = new Set();
+function renderReviewList(wrap, found, allFolder){
+  const items = rvSorted(found);
+  const no = rvNoMap();
+  const per = REVIEW_PER_PAGE;
+  const total = Math.max(1, Math.ceil(items.length / per));
+  if(arcPage > total) arcPage = total;
+  if(arcPage < 1) arcPage = 1;
+  const start = (arcPage - 1) * per;
+  const page = items.slice(start, start + per);
+  let cards = '';
+  page.forEach((it, i)=>{
+    const lk = allFolder ? arcLockedFolderOf(it) : null;
+    const checked = arcSelectedIds.has(it.id);
+    const flipped = !lk && !arcSelectMode && rvFlipped.has(it.id);
+    const title = (it.title || '').trim();
+    const titleHtml = lk
+      ? '<span class="arc-lk-mark" title="비밀 폴더">🔒</span><span class="arc-lk-txt">' + escapeHtml(title || '제목 없음') + '</span>'
+      : (title ? escapeHtml(title) : '<span class="rv-untitled">제목 없음</span>');
+    /* 번호는 카드 오른쪽 위 구석(주인 요청), 종류는 왼쪽 위 */
+    const head = '<span class="rv-lc-no">' + String(no.get(it.id) || '').padStart(2, '0') + '</span>'
+      + '<div class="lc-no"><span class="rv-lc-kind">' + escapeHtml(rvKindName(it)) + '</span></div>'
+      + '<h4 class="lc-title">' + titleHtml + '</h4>'
+      + '<div class="rv-lc-date">' + escapeHtml(rvDateLine(it)) + '</div>'
+      + '<div class="rv-lc-rate">' + rvStarsHtml(it.rating) + '</div>';
+    cards += '<article class="log-card rv-card-item' + (checked ? ' selected' : '') + (flipped ? ' flipped' : '') + (lk ? ' locked' : '') + '" data-abs="' + (start + i) + '">'
+      + ((arcSelectMode && !lk) ? '<div class="gallery-check lc-check' + (checked ? ' checked' : '') + '">' + (checked ? '✓' : '') + '</div>' : '')
+      /* 두 면을 한 겹(.rv-flip)에 담아 그 겹을 통째로 돌립니다 — 면을 하나씩 따로
+         돌리면 가운데쯤에서 카드가 사라졌다 나타나는 것처럼 보였습니다(주인 지적). */
+      + '<div class="rv-flip">'
+      /* 앞면이 글(종류·제목·날짜·별점·후기), 뒷면이 포스터 한 장입니다(주인 결정 —
+         포스터를 앞에 두니 카드가 너무 길었습니다). **카드 크기는 포스터가 정합니다** —
+         뒷면 포스터가 흐름 안에 있고 앞면 글이 그 위에 같은 크기로 겹칩니다(주인 요청).
+         포스터가 없으면 2:3 빈 칸이 그 노릇을 합니다. */
+      + '<div class="rv-face rv-front">' + head
+      + (lk ? '' : '<div class="rv-rule"></div><div class="rv-body profile-view-text"></div>'
+      +   '<div class="lc-foot rv-edit-foot"><button type="button" class="rv-back-edit">수정</button></div>')
+      + '</div>'
+      + (lk ? '' : '<div class="rv-face rv-back rv-back-poster' + (it.poster ? '' : ' empty') + '">'
+      +   (it.poster ? '<img alt="" />' : '<span class="rv-back-title">' + escapeHtml(title || '제목 없음') + '</span>') + '</div>')
+      + '</div></article>';
+  });
+  wrap.innerHTML = '<div class="log-list rv-cards" data-order="row" data-cols="' + (isMobileWidth() ? 2 : 3) + '">'
+    + '<div class="log-cards-scroll"><div class="log-cards">' + cards + '</div></div></div>'
+    + '<div class="log-pagination-slot">' + (total > 1 ? '<div class="log-pagination">' + pagerHtml(total, arcPage) + '</div>' : '') + '</div>';
+  renderArcFolderBar();
+  const list = wrap.querySelector('.rv-cards');
+  wrap.querySelectorAll('.log-card[data-abs]').forEach(el=>{
+    const it = items[Number(el.dataset.abs)];
+    const lk = allFolder ? arcLockedFolderOf(it) : null;
+    el.dataset.rvid = it.id;
+    const im = el.querySelector('.rv-back-poster img');
+    if(im){
+      /* 빈 주소를 넣으면 곧바로 error 가 나므로 받은 뒤에만 넣습니다(LOG 와 같은 규칙).
+         사진이 들어오면 카드 높이가 바뀌므로 배치를 다시 잽니다. */
+      const draw = ()=>{ const u = imgUrl(it.poster); if(u) im.src = u; };
+      draw();
+      whenImgArrives(it.poster, im, draw);
+      im.addEventListener('load', ()=> layoutLogCards(list));
+      im.addEventListener('error', ()=>{ const b = im.closest('.rv-back-poster'); if(b) b.classList.add('empty'); im.remove(); layoutLogCards(list); });
+    }
+    const back = el.querySelector('.rv-body');
+    if(back){
+      if(htmlToPlainText(it.content || '').trim()) back.innerHTML = it.content;
+      else back.innerHTML = '<span class="rv-untitled">아직 후기가 없어요.</span>';
+    }
+    const ed = el.querySelector('.rv-back-edit');
+    if(ed) ed.addEventListener('click', (e)=>{ e.stopPropagation(); openReviewCard(it); });
+    el.addEventListener('click', (e)=>{
+      if(lk){ openFolderUnlock(lk, ()=> renderArchive()); return; }
+      if(arcSelectMode){
+        if(arcSelectedIds.has(it.id)) arcSelectedIds.delete(it.id);
+        else arcSelectedIds.add(it.id);
+        renderArchive();
+        return;
+      }
+      /* 뒷면 후기를 드래그해 고르는 중이면 뒤집지 않습니다 */
+      const sel = window.getSelection && window.getSelection();
+      if(sel && !sel.isCollapsed && back && back.contains(sel.anchorNode)) return;
+      if(e.target.closest('a')) return;
+      const on = !el.classList.contains('flipped');
+      el.classList.toggle('flipped', on);
+      if(on) rvFlipped.add(it.id); else rvFlipped.delete(it.id);
+    });
+    /* 편집 모드에서는 끌어서 폴더(종류) 단추에 놓으면 그 종류로 옮겨집니다 */
+    if(isLoggedIn && !lk){
+      el.setAttribute('draggable', 'true');
+      el.addEventListener('dragstart', ()=>{ draggedArcId = it.id; el.classList.add('dragging'); });
+      el.addEventListener('dragend', ()=>{ el.classList.remove('dragging'); draggedArcId = null; });
+    }
+  });
+  layoutLogCards(list);
+  wrap.querySelectorAll('.log-pg-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(btn.dataset.pg === 'prev') arcPage = Math.max(1, arcPage - 1);
+      else if(btn.dataset.pg === 'next') arcPage = Math.min(total, arcPage + 1);
+      else arcPage = Number(btn.dataset.pg);
+      rvFlipped.clear();
+      renderArchive();
+    });
+  });
+}
+/* 밖(최신글 위젯·#arc= 주소)에서 REVIEW 글을 열면 — REVIEW 목록으로 가서 그 글이
+   있는 페이지를 펴고 카드를 뒤집어 둡니다. 비밀 폴더면 목록만 엽니다. */
+function rvShowItem(item){
+  openArchiveCategory('review');
+  const cur = curArcFolderId('review');
+  if(!isAllFolderId(cur) && arcFolderIdOf(item) !== cur){ setCurArcFolderId(ALL_FOLDER_ID, 'review'); }
+  arcSearchTerm = ''; arcSearchDate = '';
+  const inp = document.getElementById('arcSearchInput'); if(inp) inp.value = '';
+  const allF = isAllFolderId(curArcFolderId('review'));
+  const pool = state.archive.filter(x=> x.category === 'review' && (allF || arcFolderIdOf(x) === arcFolderIdOf(item)));
+  const idx = rvSorted(pool).indexOf(item);
+  arcPage = idx < 0 ? 1 : Math.floor(idx / REVIEW_PER_PAGE) + 1;
+  if(!arcLockedFolderOf(item)) rvFlipped.add(item.id);
+  renderArchive();
+  const el = document.querySelector('#archiveBody .log-card[data-rvid="' + item.id + '"]');
+  if(el) setTimeout(()=> el.scrollIntoView({ block:'nearest' }), 60);
+}
+
+/* ---- 고치기 창 ----
+   목록이 읽기를 맡으므로 이 창은 쓰고 고치는 데만 씁니다. rvDraft 라는 사본만
+   만지고 저장을 눌러야 글에 옮겨 적습니다 — 취소하면 아무것도 남지 않습니다.
+   저장 안 한 채로 닫으려 하면 한 번 묻습니다. */
+let rvItem = null;       // 고치는 글 (새 글이면 null)
+let rvDraft = null;
+let rvBase = '';
+
+function rvOverlay(){ return document.getElementById('modalReview'); }
+function rvCardEl(){ return document.getElementById('rvCard'); }
+function rvDirty(){ return !!rvDraft && JSON.stringify(rvDraft) !== rvBase; }
+
+function openReviewCard(item){
+  if(!isLoggedIn) return;
+  const ov = rvOverlay();
+  if(!ov) return;
+  rvItem = item || null;
+  let src = item;
+  if(!item){
+    const cur = curArcFolderId('review');
+    const folders = arcFoldersOf('review');
+    const fid = (!isAllFolderId(cur) && folders.some(f=> f.id === cur)) ? cur : (folders[0] ? folders[0].id : '');
+    src = { title:'', poster:'', rating:0, folderId:fid, content:'', viewDate:rvToday(), viewTime:'' };
+  }
+  rvDraft = {
+    title: src.title || '', poster: src.poster || '', rating: Number(src.rating) || 0,
+    folderId: src.id ? arcFolderIdOf(src) : (src.folderId || ''), content: src.content || '',
+    viewDate: rvFirstDate(src), viewTime: src.viewTime || ''
+  };
+  rvBase = JSON.stringify(rvDraft);
+  rvCardEl().classList.toggle('rv-new', !item);
+  rvPaintPoster(rvDraft.poster);
+  const sel = document.getElementById('rvKindSel');
+  sel.innerHTML = arcFoldersOf('review').map(f=>
+    '<option value="' + escapeHtml(f.id) + '">' + escapeHtml(f.name) + (f.secret ? ' 🔒' : '') + '</option>').join('');
+  sel.value = rvDraft.folderId;
+  bindPickDD(sel);
+  syncPickDDs();
+  document.getElementById('rvNo').innerText = item ? ('No.' + (rvNoMap().get(item.id) || '')) : 'NEW';
+  document.getElementById('rvTitleIn').value = rvDraft.title;
+  document.getElementById('rvDateIn').value = rvDraft.viewDate;
+  document.getElementById('rvTimeIn').value = rvDraft.viewTime;
+  rvPaintStarsEdit();
+  document.getElementById('rvBody').innerHTML = rvDraft.content;
+  ov.classList.add('open');
+  ov.querySelector('.modal').scrollTop = 0;
+}
+function closeReviewCardNow(){
+  const ov = rvOverlay();
+  if(ov) ov.classList.remove('open');
+  rvDraft = null; rvItem = null;
+}
+async function requestCloseReview(){
+  if(rvDirty() && !(await siteConfirm('저장하지 않은 내용이 있어요. 그래도 닫을까요?', '닫기'))) return;
+  closeReviewCardNow();
+}
+function rvPaintPoster(src){
+  const p = document.getElementById('rvPoster');
+  p.style.backgroundImage = '';
+  p.classList.toggle('empty', !src);
+  if(src) applyThumbBg(p, src);
+}
+function rvPaintStarsEdit(preview){
+  const v = preview != null ? preview : rvDraft.rating;
+  document.getElementById('rvStars').innerHTML = rvStarsHtml(v)
+    + '<span class="rv-score">' + v.toFixed(1) + '</span>';
+}
+/* 별을 누른 자리 → 0.5 단위 점수. 반 개보다 왼쪽을 누르면 0.5 */
+function rvRatingAt(e){
+  const st = document.querySelector('#rvStars .rv-stars');
+  if(!st) return null;
+  const r = st.getBoundingClientRect();
+  if(e.clientX < r.left - 4 || e.clientX > r.right + 4) return null;
+  const x = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+  return Math.max(0.5, Math.ceil(x * 10) / 2);
+}
+async function rvSave(){
+  const d = rvDraft;
+  d.title = document.getElementById('rvTitleIn').value.trim();
+  d.content = document.getElementById('rvBody').innerHTML;
+  if(!htmlToPlainText(d.content).trim()) d.content = '';
+  if(!d.title){ alert('제목을 적어주세요.'); return; }
+  const fields = { title:d.title, poster:d.poster, rating:d.rating, folderId:d.folderId,
+                   content:d.content, viewDate:d.viewDate || '', viewTime:d.viewTime || '',
+                   date: rvFmtDate(d.viewDate || '') };
+  let item = rvItem;
+  if(item){
+    Object.assign(item, fields);
+    delete item.views;            // 예전 회차 목록 — 첫 관람일로 옮겨 적었습니다
+    delete item.count;            // 관람 횟수 — 주인 결정으로 뺐습니다
+  }else{
+    state.archiveSeqCounter = (state.archiveSeqCounter||0) + 1;
+    item = Object.assign({ id:Date.now(), seq:state.archiveSeqCounter, category:'review',
+                           subtitle:'', files:[], pinned:false }, fields);
+    state.archive.push(item);
+    await storageSet('archiveSeqCounter', state.archiveSeqCounter);
+  }
+  await storageSet('archive', state.archive);
+  closeReviewCardNow();
+  if(currentArchiveCategory === 'review') renderArchive();
+}
+async function rvDelete(){
+  if(!rvItem) return;
+  if(!await siteConfirm('이 기록을 삭제할까요? 되돌릴 수 없습니다.')) return;
+  const id = rvItem.id;
+  state.archive = state.archive.filter(x=> x.id !== id);
+  rvFlipped.delete(id);
+  await storageSet('archive', state.archive);
+  closeReviewCardNow();
+  if(currentArchiveCategory === 'review') renderArchive();
+}
+(function initReviewCard(){
+  const ov = rvOverlay();
+  if(!ov) return;
+  /* 바깥을 누르면 닫습니다 — 고치던 중이면 먼저 묻습니다. 모든 창에 걸린
+     '바깥 누르면 닫기'보다 먼저 받아서 그쪽은 막습니다. */
+  ov.addEventListener('click', (e)=>{
+    if(e.target !== ov) return;
+    e.stopImmediatePropagation();
+    requestCloseReview();
+  }, true);
+  document.getElementById('rvClose').addEventListener('click', requestCloseReview);
+  document.addEventListener('keydown', (e)=>{
+    if(e.key !== 'Escape' || !ov.classList.contains('open')) return;
+    if(document.querySelector('#modalConfirm.open')) return;
+    if(document.querySelector('.pick-dd.open')) return;
+    e.preventDefault();
+    requestCloseReview();
+  });
+  document.getElementById('rvSaveBtn').addEventListener('click', rvSave);
+  document.getElementById('rvCancelBtn').addEventListener('click', requestCloseReview);
+  document.getElementById('rvDeleteBtn').addEventListener('click', rvDelete);
+  document.getElementById('rvPoster').addEventListener('click', async ()=>{
+    if(!rvDraft) return;
+    const url = await pickImageFile();
+    if(!url || !rvDraft) return;
+    rvDraft.poster = url;
+    rvPaintPoster(url);
+  });
+  document.getElementById('rvKindSel').addEventListener('change', (e)=>{ if(rvDraft) rvDraft.folderId = e.target.value; });
+  document.getElementById('rvTitleIn').addEventListener('input', (e)=>{ if(rvDraft) rvDraft.title = e.target.value; });
+  document.getElementById('rvTitleIn').addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); document.getElementById('rvBody').focus(); } });
+  document.getElementById('rvDateIn').addEventListener('input', (e)=>{ if(rvDraft) rvDraft.viewDate = e.target.value; });
+  document.getElementById('rvTimeIn').addEventListener('input', (e)=>{ if(rvDraft) rvDraft.viewTime = e.target.value; });
+  document.getElementById('rvBody').addEventListener('input', (e)=>{ if(rvDraft) rvDraft.content = e.currentTarget.innerHTML; });
+  const stars = document.getElementById('rvStars');
+  stars.addEventListener('pointermove', (e)=>{ if(!rvDraft) return; const v = rvRatingAt(e); if(v != null) rvPaintStarsEdit(v); });
+  stars.addEventListener('pointerleave', ()=>{ if(rvDraft) rvPaintStarsEdit(); });
+  stars.addEventListener('click', (e)=>{
+    if(!rvDraft) return;
+    const v = rvRatingAt(e);
+    if(v == null) return;
+    rvDraft.rating = (v === rvDraft.rating) ? 0 : v;   // 같은 자리를 또 누르면 0
+    rvPaintStarsEdit();
+  });
+})();
 
 /* ---- 선택 모드 (세 카테고리 공용) ---- */
 const arcSelectBtnEl = document.getElementById('arcSelectBtn');
@@ -13840,7 +14235,7 @@ function initLockPane(){
    (주인 요청: PAIR·OC 만 켜고 PROMPT 는 끄는 식). 마우스가 없는 기기(폰)에서는
    색을 되돌릴 방법이 없으므로 CSS 가 (hover:hover) 일 때만 겁니다.
    **여기 적지 않은 항목은 불러올 때마다 지워집니다** — normalize* 공통 지뢰. */
-const LOOK_GRAY_KEYS = ['pair', 'oc', 'prompt'];
+const LOOK_GRAY_KEYS = ['pair', 'oc', 'prompt', 'review'];
 /* 글 본문의 줄간격(배수)·자간(px)·문단 간격(px). 기본값은 지금까지의 값 그대로라
    한 번도 건드리지 않으면 아무것도 달라지지 않습니다. 범위는 화면의 막대와 같습니다. */
 const TEXT_DEFAULT = { lh:1.6, ls:0, gap:4, justify:false, hl:'fill' };
@@ -13962,7 +14357,7 @@ function renderLookPane(){
   const box = document.getElementById('lookGray');
   if(!box) return;
   box.innerHTML = '';
-  const label = { pair: navName('pair'), oc: navName('oc'), prompt: 'PROMPT' };
+  const label = { pair: navName('pair'), oc: navName('oc'), prompt: 'PROMPT', review: 'REVIEW' };
   LOOK_GRAY_KEYS.forEach(k=>{
     const on = !!lookCfg().gray[k];
     const b = document.createElement('button');
@@ -16423,7 +16818,9 @@ async function boot(){
   initSizeBoxes();
 
   window.SiteStore.onAuthChange((admin)=>{
-    isLoggedIn = admin;
+    if(!admin) previewMode = false;          // 정말 로그아웃하면 미리보기도 끝납니다
+    isLoggedIn = admin && !previewMode;
+    syncPreviewBadge();
     // 로그인/로그아웃 시 비밀 폴더 열람 기록을 비운다.
     // (편집 모드에서 열어둔 폴더가 보기 모드로 돌아온 뒤에도 열려 있으면 안 된다)
     secretUnlocked = false;
@@ -16470,6 +16867,35 @@ async function boot(){
    저장은 자동(입력 후 약 1초)이라 성공/실패가 보이지 않으면
    저장된 줄 알고 창을 닫게 됩니다. 상태를 항상 보여줍니다.
    ------------------------------------------------------------ */
+/* ---- PREVIEW (로그인 유지한 채 보기 모드로 보기) ----
+   들어가는 길은 ✦ MENU 의 PREVIEW(예전 WRITE 자리 — 주인 결정), 나오는 길은
+   오른쪽 아래의 표시. 들어가면 ✦ MENU 가 편집 전용이라 사라지므로 나오는
+   단추를 따로 둡니다. 이 표시는 진짜 관리자일 때만 뜹니다. */
+function syncPreviewBadge(){
+  let el = document.getElementById('previewBadge');
+  if(!el){
+    el = document.createElement('button');
+    el.type = 'button';
+    el.id = 'previewBadge';
+    el.innerHTML = '<span class="pvb-tag">PREVIEW</span><span class="pvb-act">편집 모드로</span>';
+    el.title = '미리보기를 끝내고 편집 모드로 돌아갑니다';
+    el.addEventListener('click', ()=> setPreviewMode(false));
+    document.body.appendChild(el);
+  }
+  el.classList.toggle('on', previewMode);
+  document.body.classList.toggle('previewing', previewMode);
+}
+function setPreviewMode(on){
+  const admin = !!(window.SiteStore && window.SiteStore.isAdmin);
+  if(on && !admin) return;
+  previewMode = !!on;
+  isLoggedIn = admin && !previewMode;
+  secretUnlocked = false;
+  if(typeof unlockedFolders !== 'undefined' && unlockedFolders.clear) unlockedFolders.clear();
+  syncPreviewBadge();
+  applyEditMode();
+}
+
 function initSaveIndicator(){
   const el = document.createElement('div');
   el.id = 'saveIndicator';

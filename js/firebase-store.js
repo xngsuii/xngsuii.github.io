@@ -43,7 +43,7 @@ const blobsRef = () => collection(db, ROOT[0], ROOT[1], 'blobs');
 /* pairCats / ocCats 는 사이드바의 세부 분류 목록입니다({id,name} 몇 개뿐이라 meta 문서에 함께 둡니다).
    글 쪽에 type 이 적혀 있어 분류-글 연결은 글 문서들이 갖습니다. */
 const SCALAR_KEYS = ['profile', 'siteName', 'homeIntro', 'homeBanner', 'archiveSeqCounter',
-                     'archiveFolders', 'archiveFoldersOoc', 'archiveFoldersEtc',
+                     'archiveFolders', 'archiveFoldersOoc', 'archiveFoldersEtc', 'archiveFoldersReview',
                      'ocFolders', 'pairCats', 'ocCats',
                      /* 사이드바 뮤직 위젯의 재생 목록. 곡마다 영상 번호와 제목·아티스트뿐이라
                         몇십 곡이 되어도 작습니다(음량은 기기별 취향이라 저장하지 않습니다). */
