@@ -94,7 +94,9 @@ const SCALAR_KEYS = ['profile', 'siteName', 'homeIntro', 'homeBanner', 'archiveS
                      /* 사이트 겉모습 — SETTING › LOOK. 지금은 목록 사진 흑백 켜기 셋. */
                      'lookCfg',
                      /* 색 고르기 창의 자주 쓰는 색 — 글자색·형광펜 따로, 각 12개까지 */
-                     'colorPresets'];
+                     'colorPresets',
+                     /* 변경 기록 위젯 — [{id,date:'261124',title,body}]. 글자뿐입니다. */
+                     'changelog'];
 const LIST_KEYS   = ['cards', 'pairPosts', 'archive', 'ocPosts'];
 
 /* Firestore 문서 1개 최대 1MiB. 여유를 두고 자릅니다. */

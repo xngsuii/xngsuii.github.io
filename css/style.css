@@ -231,7 +231,7 @@
   .app-shell{display:flex;height:100%;flex:1;overflow:hidden;min-width:0;}
 
   /* ---- 재단선 ----
-     인쇄물의 재단 표시처럼 네 모서리에만 짧은 ㄱ 자를 찍습니다.
+     인쇄물의 재단 표시처럼 네 모서리에만 짧은 십자를 찍습니다.
      여백이 흰색이고 패널도 흰색이라 이 표시가 없으면 패널의 경계를 눈이
      찾지 못합니다 — 화면을 덜 쓰는 것처럼 보이는 것도 그 때문입니다.
      장식이 아니라 **'여기까지가 지면'이라고 알려 주는 표시**입니다.
@@ -242,21 +242,31 @@
 
      .app-window 가 아니라 body 에 붙이는 까닭 — 창에는 overflow:hidden 이
      걸려 있어서, 창 바깥으로 18px 나간 표시가 잘려 버립니다. */
+  /* 십자(+) 모양입니다(예전에는 ㄱ 자). 십자는 모서리 점을 가운데로 사방에 반 획씩
+     뻗어야 하는데 배경은 상자 밖에 못 그리므로, 상자를 반 획(--trim-half)만큼 사방으로
+     더 키우고 모서리 점을 그만큼 안쪽에 둡니다. 점의 자리 자체는 예전 ㄱ 자의 꼭짓점
+     그대로입니다. 굵기는 --trim-w(.5px) — 1px 에서 한 단계 얇게(주인 지시). */
   body::before{
     content:'';position:fixed;left:50%;top:50%;
     transform:translate(-50%,-50%);
-    width:calc(var(--panel-w) + var(--trim-gap) * 2);
-    height:calc(var(--panel-h) + var(--trim-gap) * 2);
+    --trim-half:calc(var(--trim-len) / 2);
+    --trim-w:.5px;
+    width:calc(var(--panel-w) + (var(--trim-gap) + var(--trim-half)) * 2);
+    height:calc(var(--panel-h) + (var(--trim-gap) + var(--trim-half)) * 2);
     pointer-events:none;z-index:1;
     background:
-      linear-gradient(var(--border),var(--border)) var(--trim-left-x) 0    / 1px var(--trim-len) no-repeat,
-      linear-gradient(var(--border),var(--border)) var(--trim-left-x) 0    / var(--trim-len) 1px no-repeat,
-      linear-gradient(var(--border),var(--border)) 100%               0    / 1px var(--trim-len) no-repeat,
-      linear-gradient(var(--border),var(--border)) 100%               0    / var(--trim-len) 1px no-repeat,
-      linear-gradient(var(--border),var(--border)) var(--trim-left-x) 100% / 1px var(--trim-len) no-repeat,
-      linear-gradient(var(--border),var(--border)) var(--trim-left-x) 100% / var(--trim-len) 1px no-repeat,
-      linear-gradient(var(--border),var(--border)) 100%               100% / 1px var(--trim-len) no-repeat,
-      linear-gradient(var(--border),var(--border)) 100%               100% / var(--trim-len) 1px no-repeat;
+      /* 왼쪽 위 — 가로 · 세로 */
+      linear-gradient(var(--border),var(--border)) var(--trim-left-x) var(--trim-half) / var(--trim-len) var(--trim-w) no-repeat,
+      linear-gradient(var(--border),var(--border)) calc(var(--trim-left-x) + var(--trim-half)) 0 / var(--trim-w) var(--trim-len) no-repeat,
+      /* 오른쪽 위 */
+      linear-gradient(var(--border),var(--border)) 100% var(--trim-half) / var(--trim-len) var(--trim-w) no-repeat,
+      linear-gradient(var(--border),var(--border)) calc(100% - var(--trim-half) + var(--trim-w)) 0 / var(--trim-w) var(--trim-len) no-repeat,
+      /* 왼쪽 아래 */
+      linear-gradient(var(--border),var(--border)) var(--trim-left-x) calc(100% - var(--trim-half) + var(--trim-w)) / var(--trim-len) var(--trim-w) no-repeat,
+      linear-gradient(var(--border),var(--border)) calc(var(--trim-left-x) + var(--trim-half)) 100% / var(--trim-w) var(--trim-len) no-repeat,
+      /* 오른쪽 아래 */
+      linear-gradient(var(--border),var(--border)) 100% calc(100% - var(--trim-half) + var(--trim-w)) / var(--trim-len) var(--trim-w) no-repeat,
+      linear-gradient(var(--border),var(--border)) calc(100% - var(--trim-half) + var(--trim-w)) 100% / var(--trim-w) var(--trim-len) no-repeat;
   }
   /* 인쇄할 때는 종이가 곧 지면이라 표시가 필요 없습니다 */
   @media print{ body::before{display:none;} }
@@ -460,6 +470,46 @@
   .rc-item.rc-one{flex-direction:row;align-items:baseline;gap:8px;}
   .rc-item.rc-one .rc-line{flex:1;min-width:0;width:auto;}
   .rc-item.rc-one .rc-item-sub{flex:none;margin-left:auto;white-space:nowrap;}
+  /* ---------- 변경 기록 위젯 ----------
+     최신글과 같은 말투 — 상자 없이 날짜 · 제목 한 줄, 줄 사이 옅은 금.
+     누르면 아래로 자세한 내용이 펼쳐집니다. 팝업에서는 전부 보여 주고
+     목록 안에서 스크롤합니다(사이드바는 다섯 개라 넘칠 일이 없습니다). */
+  .cl-widget{position:relative;padding:0 0 16px;}
+  .cl-list{display:flex;flex-direction:column;}
+  .wg-pop-body .cl-list{max-height:260px;overflow-y:auto;}
+  .cl-item + .cl-item{border-top:1px solid var(--rule-soft);}
+  .cl-head{display:flex;align-items:baseline;gap:8px;width:100%;padding:5px 0;
+    background:transparent;border:none;border-radius:0;text-align:left;cursor:pointer;}
+  .cl-head.cl-nobody{cursor:default;}
+  .cl-date{flex:none;font-family:var(--mono);font-size:9px;letter-spacing:.06em;
+    color:var(--text-muted);font-variant-numeric:tabular-nums;}
+  .cl-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    font-family:var(--mono);font-size:12px;color:var(--text);
+    font-variation-settings:'wght' 400;transition:color .18s ease,font-variation-settings .18s ease;}
+  .cl-head:not(.cl-nobody):hover .cl-title,
+  .cl-item.open .cl-title{color:var(--accent);font-variation-settings:'wght' 800;}
+  .cl-body{display:none;padding:0 0 7px;font-family:var(--mono);font-size:11px;line-height:1.55;
+    color:var(--text-muted);white-space:pre-wrap;word-break:keep-all;overflow-wrap:anywhere;}
+  .cl-item.open .cl-body{display:block;}
+  /* 관리 창 */
+  .cl-modal{max-width:560px;}
+  .cl-add{margin:4px 0 12px;}
+  .cl-edit-list{display:flex;flex-direction:column;gap:12px;max-height:56vh;overflow-y:auto;}
+  .cl-edit-row{display:flex;flex-direction:column;gap:5px;padding-bottom:12px;
+    border-bottom:1px solid var(--rule-soft);}
+  .cl-edit-top{display:flex;align-items:center;gap:6px;}
+  .cl-edit-row input,.cl-edit-row textarea{font-family:var(--mono);font-size:12px;padding:6px 8px;
+    border:1px solid var(--rule-soft);border-radius:0;background:var(--bg);color:var(--text);
+    box-sizing:border-box;}
+  .cl-edit-row input:focus,.cl-edit-row textarea:focus{outline:none;border-color:var(--accent);}
+  .cl-e-date{flex:none;width:72px;font-variant-numeric:tabular-nums;}
+  .cl-e-title{flex:1;min-width:0;}
+  .cl-e-body{width:100%;resize:vertical;line-height:1.5;}
+  .cl-e-del{flex:none;width:28px;height:28px;padding:0;border:none;background:transparent;
+    color:var(--text-muted);cursor:pointer;font-family:system-ui,'Segoe UI Symbol',sans-serif;}
+  .cl-e-del:hover{color:#c0392b;}
+  #modalChangelog h3{letter-spacing:0;}
+
   /* 앞머리 고르는 줄 — 켜고끕 단추 뒤로 기호들이 이어집니다 */
   .rc-bul-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px;}
   .rc-bul-picks .opt-pick{padding:0 6px;font-size:12px;}
@@ -811,6 +861,56 @@
      방향은 main.js 가 재 보고 정합니다(mbVolSide). */
   .music-block.mb-mini .mb-vol-wrap.vol-down .mb-vol-pop{bottom:auto;top:calc(100% + 6px);}
 
+  /* ---------- 뮤직 — 심플 모양 ----------
+     레코드 없이 글자만: > NOW PLAYING... / 제목 / 아티스트, 그 아래 점선 한 줄과
+     오른쪽 끝의 이전·재생·다음. 미니처럼 **같은 요소를 다시 놓기만 합니다**.
+     .mb-info 를 두 칸 격자로 바꿔 맨 아랫줄에 음량(왼쪽)과 단추(오른쪽)를 나란히 둡니다.
+     곡 목록은 레코드 대신 곡 이름을 누르면 펼쳐집니다(main.js). */
+  .music-block.mb-simple .mb-lp,
+  .music-block.mb-simple .mb-time,
+  .music-block.mb-simple .mb-note{display:none;}
+  .music-block.mb-simple .mb-info{display:grid;grid-template-columns:auto 1fr;gap:0;}
+  .music-block.mb-simple .mb-top,
+  .music-block.mb-simple .mb-song{grid-column:1 / -1;}
+  .music-block.mb-simple .mb-label{font-size:9.5px;letter-spacing:.08em;}
+  .music-block.mb-simple .mb-label::after{content:'.';}
+  .music-block.mb-simple .mb-song{margin-top:7px;}
+  .music-block.mb-simple .mb-song{cursor:pointer;}
+  /* 팝업에서도 목록은 닫힌 채로 시작하고 곡 이름을 누르면 펼쳐집니다(주인 지시) —
+     보통·미니의 '팝업에선 늘 펼침'(.wg-pop-body .mb-playlist)을 심플만 거둡니다. */
+  .wg-pop-body .music-block.mb-simple .mb-playlist:not(.open){display:none;}
+  /* 심플은 글자뿐이라 팝업을 조금 좁게 (236 → 204). 위젯 목록의 미리보기도 같은 규칙. */
+  .wg-pop:has(.music-block.mb-simple){width:204px;}
+  .music-block.mb-simple .mb-artist{margin-top:1px;}
+  /* 점선 — 음량 칸과 단추 칸이 한 줄에 붙어 있어 둘의 윗선이 이어져 한 줄이 됩니다 */
+  .music-block.mb-simple .mb-vol-wrap,
+  .music-block.mb-simple .mb-controls{margin-top:9px;padding-top:7px;
+    border-top:1px dotted var(--rule-soft);}
+  /* 자리를 못 박습니다 — 글 차례로는 단추가 음량보다 앞이라 그냥 두면 단추가 왼쪽에 섭니다 */
+  .music-block.mb-simple .mb-controls{grid-row:3;grid-column:2;justify-content:flex-end;gap:4px;}
+  .music-block.mb-simple .mb-vol-wrap{grid-row:3;grid-column:1;}
+  .music-block.mb-simple .mb-vol-wrap{position:relative;display:flex;align-items:center;}
+  .music-block.mb-simple .mb-vol-btn{display:flex;align-items:center;justify-content:center;
+    width:18px;height:18px;padding:0;background:transparent;border:none;cursor:pointer;
+    color:var(--text-muted);opacity:.7;}
+  .music-block.mb-simple .mb-vol-btn:hover,
+  .music-block.mb-simple .mb-vol-wrap.open .mb-vol-btn{opacity:1;color:var(--accent);}
+  .music-block.mb-simple .mb-vol-pop{display:none;position:absolute;left:9px;bottom:calc(100% + 6px);
+    transform:translateX(-50%);width:26px;height:84px;z-index:6;
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);
+    box-shadow:0 6px 18px rgba(0,0,0,.12);}
+  .music-block.mb-simple .mb-vol-wrap.open .mb-vol-pop{display:block;}
+  .music-block.mb-simple .mb-vol-wrap.vol-down .mb-vol-pop{bottom:auto;top:calc(100% + 6px);}
+  .music-block.mb-simple .mb-vol{position:absolute;top:50%;left:50%;width:68px;margin:0;
+    transform:translate(-50%,-50%) rotate(-90deg);}
+  /* 단추 그림 — 보통·미니는 글자(≪ ▶ ≫), 심플만 그림입니다 */
+  .mb-btn .mb-ico{display:none;}
+  .music-block.mb-simple .mb-btn .mb-glyph{display:none;}
+  .music-block.mb-simple .mb-btn .mb-ico{display:block;width:12px;height:12px;}
+  .music-block.mb-simple .mb-btn{width:20px;height:18px;opacity:.85;}
+  .mb-ico .mb-ico-fill{fill:currentColor;}
+  .mb-ico .mb-ico-bar{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:square;}
+
   .mb-playlist{display:none;overflow:hidden;padding-top:12px;}
   .mb-playlist.open{display:block;animation:mbp-drop .34s cubic-bezier(.22,1,.36,1);}
   @keyframes mbp-drop{
@@ -1010,7 +1110,7 @@
      applyWgDesign 이 :root 에 변수로 적습니다). 변수가 없을 때의 기본값이 곧
      예전 모양입니다 — 고른 적이 없으면 아무것도 달라지지 않습니다. */
   .wg-pop{position:fixed;z-index:70;width:236px;box-sizing:border-box;overflow:hidden;
-    background:var(--bg);border:1px solid var(--wp-border, var(--border));border-radius:var(--radius);
+    background:var(--bg);border:1px var(--wp-border-style, solid) var(--wp-border, var(--border));border-radius:var(--radius);
     box-shadow:var(--wp-shadow, 0 6px 20px rgba(0,0,0,.14));}
   /* 제목줄이 곧 손잡이입니다. 끌기는 **스티커와 같은 포인터 방식** —
      브라우저 기본 드래그는 끌리는 그림이 반투명해지고 손댈 수 없습니다. */
@@ -1019,17 +1119,31 @@
     border-bottom:1px solid var(--rule-soft);cursor:grab;touch-action:none;user-select:none;}
   /* 상단바 모양 — 선 없음 */
   :root[data-wp-bar="plain"] .wg-pop-bar{border-bottom-color:transparent;}
-  /* 상단바 모양 — 올릴 때만. 상자 위에 겹쳐 두고 감췄다가 마우스를 올리면(또는 끄는
-     동안) 나타납니다. 겹쳐 두는 까닭: 자리를 접었다 펴면 상자 키가 바뀌어 아래
-     위젯이 출렁입니다. 바탕을 고르지 않았으면 흰 바탕을 깔아 내용 위에서도 읽히게 합니다. */
-  :root[data-wp-bar="hover"] .wg-pop-bar{position:absolute;top:0;left:0;right:0;z-index:2;
-    background:var(--wp-bar-solid, var(--bg));opacity:0;transition:opacity .18s ease;}
-  :root[data-wp-bar="hover"] .wg-pop:hover .wg-pop-bar,
-  :root[data-wp-bar="hover"] .wg-pop.wg-dragging .wg-pop-bar{opacity:1;}
+  /* 올릴 때만 — 선 있음/선 없음과 따로 켜는 스위치입니다(data-wp-hover).
+     **내용 위에 겹쳐 뜨지 않고, 늘 보일 때와 같은 자리에 섭니다**(주인 지시).
+     그러려면 바가 접혀 있는 동안 상자를 바 높이(--wp-bar-h)만큼 아래로 내려 두고,
+     올리면 상자가 그만큼 위로 늘어나며 바가 펴집니다 — 내용은 한 픽셀도 안 움직이고,
+     상자의 윗변만 위로 올라갑니다. 저장되는 자리(top)는 늘 바의 윗변이라 끌기와
+     맞습니다. 33 = 위아래 여백 6+6 + 단추 20 + 밑줄 1 (잰 값). */
+  :root{--wp-bar-h:33px;}
+  :root[data-wp-hover="1"] .wg-pop-bar{box-sizing:border-box;height:0;padding-top:0;padding-bottom:0;
+    border-bottom-width:0;overflow:hidden;opacity:0;
+    transition:height .2s ease,padding .2s ease,border-bottom-width .2s ease,opacity .16s ease;}
+  :root[data-wp-hover="1"] .wg-pop:hover .wg-pop-bar,
+  :root[data-wp-hover="1"] .wg-pop.wg-dragging .wg-pop-bar{height:var(--wp-bar-h);padding-top:6px;
+    padding-bottom:6px;border-bottom-width:1px;opacity:1;}
+  /* 내려 두기는 진짜 팝업만 — 견본(.wg-design-demo)과 위젯 목록 미리보기(.wg-pop-demo)는
+     제자리에 놓인 상자라 내리면 칸 아래로 비어져 나갑니다(주인 지적). */
+  :root[data-wp-hover="1"] .wg-pop:not(.wg-design-demo):not(.wg-pop-demo){transform:translateY(var(--wp-bar-h));
+    transition:transform .2s ease;}
+  :root[data-wp-hover="1"] .wg-pop:not(.wg-design-demo):not(.wg-pop-demo):hover,
+  :root[data-wp-hover="1"] .wg-pop.wg-dragging{transform:none;}
   /* 마우스가 없는 기기(태블릿)에서는 올릴 수가 없어 손잡이가 영영 안 보입니다 —
      거기서는 늘 보이게 둡니다. */
   @media (hover:none){
-    :root[data-wp-bar="hover"] .wg-pop-bar{position:static;opacity:1;}
+    :root[data-wp-hover="1"] .wg-pop-bar{height:auto;padding-top:6px;padding-bottom:6px;
+      border-bottom-width:1px;opacity:1;}
+    :root[data-wp-hover="1"] .wg-pop:not(.wg-design-demo):not(.wg-pop-demo){transform:none;}
   }
   .wg-pop.wg-dragging .wg-pop-bar{cursor:grabbing;}
   /* ☰ 는 이제 '사이드바로 되돌리기' 단추입니다(보기만 하던 표식이 아닙니다) */
@@ -1091,7 +1205,7 @@
      (끌지 않았으면 누른 것으로 봅니다 — 스티커와 같은 규칙). */
   .wg-mini{position:fixed;z-index:70;width:38px;height:38px;padding:0;
     display:flex;align-items:center;justify-content:center;
-    background:var(--bg);border:1px solid var(--wp-border, var(--border));border-radius:50%;
+    background:var(--bg);border:1px var(--wp-border-style, solid) var(--wp-border, var(--border));border-radius:50%;
     box-shadow:var(--wp-mini-shadow, 0 4px 12px rgba(0,0,0,.14));color:var(--text-muted);
     cursor:grab;touch-action:none;}
   .wg-mini:hover{color:var(--accent);border-color:var(--accent);}
@@ -1339,6 +1453,10 @@
   .wgd-opts .wg-row-ctl{flex:1;display:flex;flex-wrap:wrap;align-items:center;gap:8px;justify-content:flex-end;}
   .wgd-shadow .mb-vol{flex:1;width:auto;max-width:180px;margin:0;}
   .wgd-cols{gap:12px;}
+  /* 상단바 모양 줄 — 고르기 둘 | 올릴 때만 스위치. 세로 금 하나로 '하나 고르기' 와
+     '따로 켜고 끄기' 를 나눕니다 */
+  .wgd-sep{flex:none;width:1px;height:16px;background:var(--rule-soft);}
+  .wgd-sw-lab{font-family:var(--mono);font-size:11px;color:var(--text-muted);}
   /* 추가 장 */
   /* 폭을 다 씁니다. 560px 로 묶어 두었더니 오른쪽에 쓸모없는 빈 자리가 넓게
      남았습니다(주인 지적) — 글줄이 아니라 **코드 칸**이라 좁힐 까닭이 없습니다. */
@@ -2628,7 +2746,11 @@
      탭이 24px 에서 시작합니다 — 갤러리 탭(8 + 16)과 같은 자리입니다.
      갤러리 탭을 내리면서 이 값도 10px 함께 내렸습니다. */
   .log-pane-toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;
-    margin-top:11.5px;margin-bottom:0;flex:none;}
+    margin-top:15.5px;margin-bottom:4px;flex:none;}
+  /* .add-mini-btn 의 기본 margin-bottom:10px 이 이 줄에서는 단추만 5px 위로 띄웠습니다
+     (폴더 탭·검색 밑줄과 어긋남 — 주인 지적). 이 줄에서는 0 으로 두고, 줄 높이가
+     36 → 28 로 준 만큼 위·아래 여백에 4px 씩 옮겨 탭 자리(24px)와 목록 높이는 그대로 둡니다. */
+  .log-pane-toolbar .add-mini-btn{margin:0;}
   /* 검색줄은 이 줄의 오른쪽 끝에 섭니다. 편집 모드의 단추들과 같은 자리인데,
      둘은 서로 반대 모드에서만 나오므로 부딪히지 않습니다. */
   .log-pane-toolbar .log-search{flex:none;margin:0;justify-content:flex-start;padding-top:0;border-top:0;}
@@ -2717,7 +2839,7 @@
      위아래 여백 합계(10px)도 같게 둡니다. */
   /* 보기 모드에서는 ＋게시글 추가가 사라져 가운데 맞추기가 벌던 3.5px 도
      함께 사라집니다. 그만큼 위 여백으로 옮겨 담아 탭 자리는 24px 그대로. */
-  body:not(.logged-in) .log-pane-toolbar{margin-top:15px;margin-bottom:0;}
+  body:not(.logged-in) .log-pane-toolbar{margin-top:19px;margin-bottom:4px;}
   /* .gallery-folder-bar 의 위아래 여백을 지웁니다 — 뒤에 오는 규칙이라 여기서 이겨야 합니다 */
   .log-pane-toolbar .log-folder-bar{margin:0;flex:1 1 auto;min-width:0;flex-wrap:nowrap;
     overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-ms-overflow-style:none;}
@@ -3083,9 +3205,8 @@
     font-variation-settings:'wght' 600;font-weight:600;}
   .toc-text{flex:1;min-width:0;}
   .toc-item:hover .toc-text{color:var(--accent);text-decoration:underline;text-underline-offset:3px;}
-  /* 쓰는 동안의 목차(실시간 미리보기)는 보여 주기만 합니다 — 누를 곳이 아닙니다 */
-  .toc-item.toc-item-live{cursor:default;}
-  .toc-item.toc-item-live:hover .toc-text{color:inherit;text-decoration:none;}
+  /* 쓰는 동안의 목차도 누르면 그 # 줄로 갑니다(커서도 그 줄로) — main.js 의 tocJumpEditing.
+     게시한 뒤와 같은 손가락 모양·밑줄을 그대로 씁니다. */
   /* 편집 중에는 안내 한 줄과 ✕ 만 — 목록은 게시해야 채워집니다 */
   .toc-box{position:relative;}
   .toc-hint{font-size:11px;color:var(--text-muted);line-height:1.5;}
@@ -5386,7 +5507,8 @@
        폴더 탭이 왼쪽에서 남는 폭을 다 쓰고(좌우로 밀어 봅니다) 단추는
        오른쪽에 그대로 두되, 그래도 모자라면 줄을 바꿉니다. */
     .log-pane-toolbar{flex-wrap:wrap;row-gap:8px;}
-    .log-pane-toolbar .log-folder-bar{flex:1 1 100%;order:-1;}
+    /* 단추 줄(선택·게시글 추가·넓게)이 위, 폴더 탭이 아래 — 주인 요청 */
+    .log-pane-toolbar .log-folder-bar{flex:1 1 100%;order:2;}
     .log-pane-toolbar .log-search{flex:1 1 auto;}
     /* LOG 검색줄은 폰에서 목록 아래로 옮겨집니다(placeLogSearch) — ARCHIVE 의
        #view-archive > .archive-search 와 같은 모양입니다. 분류 목록은 화면 아래라 위로 펼칩니다.

@@ -69,7 +69,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
-<link rel="stylesheet" href="css/style.css?v=265" />
+<link rel="stylesheet" href="css/style.css?v=270" />
 </head>
 <body>
 <div class="app-window">
@@ -193,9 +193,9 @@
           <div class="mb-controls">
             <!-- 앞·뒤 곡은 .mb-skip — 미니에서는 이 둘을 접습니다(주인 지시).
                  노래 관리(＋)는 여기 없습니다 — 위젯 목록의 ⚙ 창으로 옮겨습니다. -->
-            <button type="button" class="mb-btn mb-skip" id="mbPrev" title="이전 곡">≪</button>
+            <button type="button" class="mb-btn mb-skip" id="mbPrev" title="이전 곡"><span class="mb-glyph">≪</span><svg class="mb-ico" viewBox="0 0 24 24" aria-hidden="true"><path class="mb-ico-fill" d="M20 3.75L8.5 12L20 20.25Z"/><path class="mb-ico-bar" d="M4 3.75V20.25"/></svg></button>
             <button type="button" class="mb-btn mb-play" id="mbPlay" title="재생">▶</button>
-            <button type="button" class="mb-btn mb-skip" id="mbNext" title="다음 곡">≫</button>
+            <button type="button" class="mb-btn mb-skip" id="mbNext" title="다음 곡"><span class="mb-glyph">≫</span><svg class="mb-ico" viewBox="0 0 24 24" aria-hidden="true"><path class="mb-ico-fill" d="M4 3.75L15.5 12L4 20.25Z"/><path class="mb-ico-bar" d="M20 3.75V20.25"/></svg></button>
           </div>
           <!-- 음량. **보통 모양에서는 감싼 칸이 없는 셔입니다**(display:contents) —
                바가 지금처럼 한 줄로 놓입니다. 미니 모양에서만 감싼 칸이 살아나고,
@@ -309,6 +309,14 @@
         <span class="rc-title">LATEST</span>
       </div>
       <div class="rc-list" id="rcList"></div>
+    </div>
+
+    <!-- ---- 변경 기록 ----
+         사이트가 바뀐 기록. 사이드바에서는 최근 다섯 개만, 팝업에서는 전부(스크롤).
+         줄을 누르면 그 아래로 자세한 내용이 펼쳐집니다. 고치는 곳은 위젯 목록의 ⚙. -->
+    <div class="cl-widget" id="changelogWidget" data-widget="changelog" data-place="sidebar">
+      <div class="rc-head"><span class="rc-title">CHANGELOG</span></div>
+      <div class="cl-list" id="clList"></div>
     </div>
 
     <!-- ---- 단어사전 ----
@@ -650,7 +658,7 @@
               <option value="title">제목</option>
               <option value="content">내용</option>
             </select>
-            <input type="text" id="arcSearchInput" placeholder="검색어를 입력하세요" />
+            <input type="text" id="arcSearchInput" placeholder="Search" />
             <button type="button" id="arcSearchClear" class="sf-more" title="검색 초기화">✕</button>
           </div>
 
@@ -915,7 +923,7 @@
                 <span class="wg-row-name">외곽선</span>
                 <span class="wg-row-ctl wgd-cols">
                   <label class="dd-col"><span>색</span><input type="color" id="wgdBorderCol" /></label>
-                  <button class="wg-chip" type="button" id="wgdBorder"></button>
+                  <span class="opt-picks" id="wgdBorderPicks"></span>
                 </span>
               </div>
               <div class="wg-row sb-row">
@@ -936,7 +944,11 @@
               </div>
               <div class="wg-row sb-row wgd-picks-row">
                 <span class="wg-row-name">상단바 모양</span>
-                <span class="wg-row-ctl"><span class="opt-picks" id="wgdBarPicks"></span></span>
+                <span class="wg-row-ctl wgd-bar-ctl"><span class="opt-picks" id="wgdBarPicks"></span>
+                  <span class="wgd-sep" aria-hidden="true"></span>
+                  <span class="wgd-sw-lab">올릴 때만</span>
+                  <button class="wg-sw" type="button" role="switch" id="wgdBarHover" aria-checked="false" title="마우스를 올렸을 때만 상단바 보이기"><span class="wg-sw-k"></span></button>
+                </span>
               </div>
               <div class="wg-row sb-row wgd-picks-row">
                 <span class="wg-row-name">작게 한 단추</span>
@@ -1178,7 +1190,7 @@
                 <option value="title">제목</option>
                 <option value="content">내용</option>
               </select>
-              <input type="text" class="log-search-input" id="logSearchInput" placeholder="검색어를 입력하세요" />
+              <input type="text" class="log-search-input" id="logSearchInput" placeholder="Search" />
               <button type="button" class="log-search-clear" id="logSearchClear" title="검색 초기화">✕</button>
             </div>
             <!-- 넓게 보기 — 보기·편집 두 모드에서 다 보여야 하므로
@@ -1377,7 +1389,7 @@
                 <option value="title">제목</option>
                 <option value="content">내용</option>
               </select>
-              <input type="text" class="log-search-input" placeholder="검색어를 입력하세요" />
+              <input type="text" class="log-search-input" placeholder="Search" />
               <button type="button" class="log-search-clear" title="검색 초기화">✕</button>
             </div>
             <!-- 넓게 보기 — 보기·편집 두 모드에서 다 보여야 하므로
@@ -1594,6 +1606,19 @@
     <div class="mm-list" id="mmList"></div>
     <div class="form-actions">
       <button type="button" class="btn-primary" data-close="modalMusicOpt">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 변경 기록 관리 — 날짜(261124 꼴) · 제목 · 자세한 내용. 고치면 바로 저장됩니다. -->
+<div class="modal-overlay" id="modalChangelog">
+  <div class="modal gf-modal cl-modal">
+    <button class="modal-close" type="button" data-close="modalChangelog">✕</button>
+    <h3>변경 기록</h3>
+    <button type="button" class="btn-ghost cl-add" id="clAddBtn">＋ 기록 추가</button>
+    <div class="cl-edit-list" id="clEditList"></div>
+    <div class="form-actions">
+      <button type="button" class="btn-primary" data-close="modalChangelog">닫기</button>
     </div>
   </div>
 </div>
@@ -1945,7 +1970,7 @@
        (그 목록을 만드는 것도 JS인데 새 CSS 가 감싸이지 않은 select 를 폭 0 으로
        접습니다), 스티커 서랍이 엉뚱한 자리에 놓였습니다.
        **CSS 와 JS 를 함께 고쳤으면 번호도 함께 올리세요.** -->
-<script src="js/main.js?v=265"></script>
-<script type="module" src="js/firebase-store.js?v=125"></script>
+<script src="js/main.js?v=270"></script>
+<script type="module" src="js/firebase-store.js?v=126"></script>
 </body>
 </html>

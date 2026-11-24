@@ -403,6 +403,8 @@ let state = {
   dictWord:null,
   /* 최신글 위젯 설정 — {source, count} */
   recentCfg:{ source:'all', count:5 },
+  /* 변경 기록 — [{id, date:'261124', title, body}] (normalizeChangelog) */
+  changelog:[],
   /* 팝업 위젯의 겉모습 — WIDGET › DESIGN (normalizeWgDesign) */
   wgDesign:null,
   /* 사이트 겉모습 — SETTING › LOOK (normalizeLookCfg) */
@@ -815,6 +817,7 @@ async function loadState(){
   state.ddayCfg = normalizeDdayCfg(await storageGet('ddayCfg', null));
   state.dictWord = normalizeDictWords(await storageGet('dictWord', null));
   state.recentCfg = normalizeRecentCfg(await storageGet('recentCfg', null));
+  state.changelog = normalizeChangelog(await storageGet('changelog', null));
   state.wgDesign = normalizeWgDesign(await storageGet('wgDesign', null));
   state.lookCfg = normalizeLookCfg(await storageGet('lookCfg', null));
   state.colorPresets = normalizeColorPresets(await storageGet('colorPresets', null));
@@ -2404,15 +2407,26 @@ function paintMusicState(){
   const lp = document.getElementById('mbLp');
   const play = document.getElementById('mbPlay');
   if(lp) lp.classList.toggle('spinning', musicPlaying);
-  if(play){ play.innerText = musicPlaying ? '❚❚' : '▶'; play.title = musicPlaying ? '멈춤' : '재생'; }
+  /* 글자(≪ ▶ ≫)와 그림을 둘 다 넣어 두고 모양마다 하나만 보입니다 — 심플만 그림을 씁니다.
+     **innerText 로 덮으면 그림이 지워집니다.** */
+  if(play){
+    play.innerHTML = '<span class="mb-glyph">' + (musicPlaying ? '❚❚' : '▶') + '</span>' +
+      (musicPlaying ? MB_ICO_PAUSE : MB_ICO_PLAY);
+    play.title = musicPlaying ? '멈춤' : '재생';
+  }
   paintMusicTime();
 }
 /* ---- 뮤직 모양 고르기 ----
    위젯 목록의 ⚙ 가 엽니다. 고르면 그 자리에서 바뀜 모양이 보입니다. */
 const MB_LAYOUTS = [
   { key:'normal', name:'보통', hint:'레코드와 두 줄 글자' },
-  { key:'mini',   name:'미니', hint:'한 줄로 짧게' }
+  { key:'mini',   name:'미니', hint:'한 줄로 짧게' },
+  { key:'simple', name:'심플', hint:'레코드 없이 글자만' }
 ];
+function mbLayoutKey(w){ return (w && MB_LAYOUTS.some(L=> L.key === w.layout)) ? w.layout : 'normal'; }
+/* 심플 모양의 재생/멈춤 그림 (주인이 준 SVG, 색만 currentColor 로) */
+var MB_ICO_PLAY  = '<svg class="mb-ico" viewBox="0 0 24 24" aria-hidden="true"><path class="mb-ico-fill" d="M3.78 2.75L19.53 12L3.78 21.25Z"/></svg>';
+var MB_ICO_PAUSE = '<svg class="mb-ico" viewBox="0 0 24 24" aria-hidden="true"><path class="mb-ico-fill" d="M4.75 3H9.75V21H4.75Z"/><path class="mb-ico-fill" d="M14.25 3H19.25V21H14.25Z"/></svg>';
 function openMusicOpt(){
   renderMusicOpt();
   /* 같은 창에 노래 관리가 들어 있습니다 — 열 때마다 적던 칸을 비우고 목록을 다시 그립니다 */
@@ -2424,7 +2438,7 @@ function renderMusicOpt(){
   const box = document.getElementById('mbLayoutPicks');
   if(!box) return;
   const w = wgFind('music');
-  const cur = (w && w.layout === 'mini') ? 'mini' : 'normal';
+  const cur = mbLayoutKey(w);
   box.innerHTML = '';
   MB_LAYOUTS.forEach(L=>{
     const b = document.createElement('button');
@@ -2667,6 +2681,16 @@ function toggleMusicPlaylist(){
 /* 여닫는 것은 LP 와 Esc 뿐입니다 — 바깥을 눌렀다고 닫으면 메뉴를 고르는
    순간 목록이 접히면서 화면이 위로 튀어 오릅니다(떠 있던 창일 때와 다릅니다). */
 bindOnce(document.getElementById('mbLp'), toggleMusicPlaylist);
+/* 심플에는 레코드가 없어 곡 이름이 그 일을 맡습니다 — 팝업에서도 같습니다
+   (보통·미니의 팝업은 목록이 늘 펼쳐 있지만, 심플은 닫힌 채로 시작합니다) */
+(function(){
+  const song = document.querySelector('.music-block .mb-song');
+  if(!song) return;
+  song.addEventListener('click', ()=>{
+    const blk = song.closest('.music-block');
+    if(blk && blk.classList.contains('mb-simple')) toggleMusicPlaylist();
+  });
+})();
 document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeMusicPlaylist(); });
 
 /* ---- 노래 관리 창 (편집 모드) ---- */
@@ -4862,10 +4886,13 @@ function buildTocs(root){
      · ``` 로 감싼 코드 안의 # 은 제목이 아닙니다.
      · 번호는 tocNumbers 로 — 건너뛴 단계는 한 칸. */
 function editorTocHeads(root){
-  const { text } = flattenForFences(root);
+  const { text, marks } = flattenForFences(root);
   const out = [];
   let inFence = false;
+  let at = 0;                       // 이 줄이 펼친 글자에서 시작하는 자리
   text.split('\n').forEach(line=>{
+    const start = at;
+    at += line.length + 1;
     const t = line.trim();
     const fences = (t.match(/```/g) || []).length;
     if(fences){ if(fences % 2) inFence = !inFence; return; }
@@ -4873,7 +4900,9 @@ function editorTocHeads(root){
     const m = t.match(MD_HEADING_RE);
     if(!m) return;
     const label = t.replace(/^#{1,6}\s*/, '').trim();
-    if(label) out.push({ level: m[1].length, text: label });
+    /* pos — 그 줄의 # 자리. 쓰는 중의 목차를 눌렀을 때 커서를 보낼 곳입니다 */
+    if(label) out.push({ level: m[1].length, text: label,
+                         pos: start + (line.length - line.trimStart().length), marks });
   });
   return out;
 }
@@ -4886,7 +4915,7 @@ function paintTocEditing(root){
     box.classList.remove('toc-empty');
     let list = '';
     heads.forEach((h, i)=>{
-      list += '<div class="toc-item toc-item-live" style="--toc-depth:' + (nums[i].depth - 1) + '">'
+      list += '<div class="toc-item toc-item-live" data-toc-i="' + i + '" style="--toc-depth:' + (nums[i].depth - 1) + '">'
         + '<span class="toc-num">' + escapeHtml(nums[i].num) + '</span>'
         + '<span class="toc-text">' + escapeHtml(h.text) + '</span></div>';
     });
@@ -4928,6 +4957,37 @@ function insertToc(editorId){
   box.classList.remove('toc-flash'); void box.offsetWidth; box.classList.add('toc-flash');
   setTimeout(()=> box.classList.remove('toc-flash'), 700);
 }
+/* 쓰는 중의 목차 줄 — 그 # 줄로 화면을 옮기고 커서도 그 줄 앞에 놓습니다(주인 요청).
+   편집기에는 아직 제목 요소가 없어서, 목록을 그릴 때와 **같은 계산을 지금 다시**
+   해 몇 번째 제목인지로 자리를 찾습니다(그린 뒤에 글이 바뀌었을 수 있으니 미리
+   쥐어 둔 자리를 믿지 않습니다). 펼친 글자의 자리는 resolveFenceOffset 이 실제
+   글자 노드 위치로 돌려줍니다 — 코드 펜스가 쓰는 것과 같은 장치입니다. */
+function tocJumpEditing(item){
+  const ed = item.closest('[contenteditable="true"]');
+  if(!ed) return;
+  const h = editorTocHeads(ed)[Number(item.dataset.tocI)];
+  if(!h || !h.marks || !h.marks.length) return;
+  const p = resolveFenceOffset(h.marks, h.pos);
+  const node = p.container;
+  const max = node.nodeType === 3 ? node.length : node.childNodes.length;
+  const off = Math.max(0, Math.min(p.offset, max));
+  const el = node.nodeType === 3 ? node.parentElement : node;
+  let f = el && el.closest('.fold-block');
+  while(f){ if(!f.classList.contains('open')) setFoldOpen(f, true); f = f.parentElement && f.parentElement.closest('.fold-block'); }
+  ed.focus({ preventScroll:true });
+  const r = document.createRange();
+  r.setStart(node, off); r.collapse(true);
+  const sel = window.getSelection();
+  sel.removeAllRanges(); sel.addRange(r);
+  /* 글자 노드는 scrollIntoView 가 없어 감싼 요소로 옮깁니다. 줄이 편집기 자신에
+     바로 들어 있으면(감싼 요소가 없으면) 커서 자리를 재서 스크롤을 직접 맞춥니다. */
+  if(el && el !== ed){ el.scrollIntoView({ block:'start' }); return; }
+  const rect = r.getBoundingClientRect();
+  let sc = ed.parentElement;
+  while(sc && sc !== document.body && !(sc.scrollHeight > sc.clientHeight && /auto|scroll/.test(getComputedStyle(sc).overflowY))) sc = sc.parentElement;
+  if(ed.scrollHeight > ed.clientHeight && /auto|scroll/.test(getComputedStyle(ed).overflowY)) sc = ed;
+  if(sc && rect && rect.height) sc.scrollTop += rect.top - sc.getBoundingClientRect().top - 8;
+}
 /* 목차 줄을 누르면 그 제목으로 갑니다. 제목이 접기 안에 있으면 접기부터 엽니다 —
    닫힌 접기 안의 제목은 화면에 없어서 갈 곳이 없습니다.
    ✕(편집 중에만 있음)는 목차를 통째로 뺍니다. */
@@ -4941,6 +5001,7 @@ document.addEventListener('click', (e)=>{
     return;
   }
   const item = e.target.closest('.toc-item');
+  if(item && item.classList.contains('toc-item-live')){ e.preventDefault(); tocJumpEditing(item); return; }
   if(!item || !item._tocTarget) return;
   e.preventDefault();
   const h = item._tocTarget;
@@ -6995,43 +7056,98 @@ function initFolderUnlock(){
    있을 때만 반응하도록 해서 섞이지 않게 합니다. */
 let draggedFolderId = null;
 let draggedFolderBar = null;
+/* ---- 폴더 순서 끌기 — 끄는 동안 자리가 실시간으로 바뀝니다 ----
+   예전에는 놓는 순간 목록을 다시 그려서 폴더들이 한 번에 툭 바뀌었습니다.
+   이제는 끄는 폴더가 다른 폴더 위를 지나면 그 자리로 **요소를 옮기고**
+   (insertBefore), 밀려난 폴더들은 원래 자리에서 새 자리로 미끄러집니다(FLIP).
+   다시 그리지 않는 까닭은 사이드바 카테고리·노래 목록과 같습니다 — 끄는 요소가
+   부서지면 dragend 가 오지 않습니다. 순서는 dragend 에서 DOM 을 읽어 저장합니다.
+
+   자리 판정은 대상의 **가운데선**입니다(가로 탭 줄은 x, 드롭다운 메뉴는 y).
+   이렇게 해야 폭이 다른 두 탭이 서로 자리를 계속 맞바꾸며 떨지 않습니다.
+   가운데선은 FLIP 이 걸어 둔 transform 을 뺀 '도착할 자리'로 잽니다 —
+   미끄러지는 중의 위치로 재면 같은 문제가 생깁니다.
+   움직임은 setTimeout 으로 겁니다(배경 탭에서는 requestAnimationFrame 이 멎습니다). */
+let draggedFolderEl = null;
+function folderFlipCapture(bar){
+  const m = new Map();
+  bar.querySelectorAll('[data-fid]').forEach(el=>{ if(el !== draggedFolderEl) m.set(el, el.getBoundingClientRect()); });
+  return m;
+}
+function folderFlipPlay(before){
+  before.forEach((b, el)=>{
+    const a = el.getBoundingClientRect();
+    const dx = b.left - a.left, dy = b.top - a.top;
+    if(!dx && !dy) return;
+    el.style.transition = 'none';
+    el.style.transform = `translate(${dx}px,${dy}px)`;
+    void el.offsetWidth;
+    setTimeout(()=>{
+      el.style.transition = 'transform .22s cubic-bezier(.2,0,.2,1)';
+      el.style.transform = '';
+    }, 16);
+  });
+}
+function folderRestRect(el){
+  const r = el.getBoundingClientRect();
+  const t = getComputedStyle(el).transform;
+  if(!t || t === 'none') return r;
+  const m = new DOMMatrixReadOnly(t);
+  return { left:r.left - m.e, right:r.right - m.e, top:r.top - m.f, bottom:r.bottom - m.f, width:r.width, height:r.height };
+}
 function bindFolderTabReorder(btn, folder, ctx, bar){
   // 속성으로 넣어야 우리 드래그 엔진(initDragEngine)이 같이 걸립니다
   btn.setAttribute('draggable','true');
+  btn.dataset.fid = String(folder.id);
   btn.addEventListener('dragstart', (e)=>{
     draggedFolderId = folder.id;
     draggedFolderBar = bar;
+    draggedFolderEl = btn;
     btn.classList.add('dragging');
     if(e.dataTransfer){
       e.dataTransfer.effectAllowed='move';
       e.dataTransfer.setData('text/plain', String(folder.id));
     }
   });
-  btn.addEventListener('dragend', ()=>{
+  btn.addEventListener('dragend', async ()=>{
     btn.classList.remove('dragging');
-    draggedFolderId=null; draggedFolderBar=null;
-    bar.querySelectorAll('.drop-target').forEach(el=> el.classList.remove('drop-target'));
+    const wasMine = draggedFolderBar === bar && draggedFolderEl === btn;
+    draggedFolderId=null; draggedFolderBar=null; draggedFolderEl=null;
+    bar.querySelectorAll('[data-fid]').forEach(el=>{ el.style.transition=''; el.style.transform=''; });
+    if(!wasMine) return;
+    /* DOM 의 순서대로 목록을 다시 세웁니다 — 같은 순서면 저장하지 않습니다 */
+    const ids = [...bar.querySelectorAll('[data-fid]')].map(el=> el.dataset.fid);
+    const list = ctx.getList();
+    const before = list.map(x=> String(x.id)).join('\u0000');
+    const pos = (x)=>{ const i = ids.indexOf(String(x.id)); return i < 0 ? 1e9 : i; };
+    const next = list.slice().sort((a, b)=> pos(a) - pos(b));
+    if(next.map(x=> String(x.id)).join('\u0000') === before) return;
+    list.splice(0, list.length, ...next);
+    await ctx.save();
+    ctx.rerender();
   });
   btn.addEventListener('dragover', (e)=>{
     if(draggedFolderId==null || draggedFolderBar!==bar) return;
-    if(draggedFolderId===folder.id) return;
     e.preventDefault();
-    btn.classList.add('drop-target');
+    const drag = draggedFolderEl;
+    if(!drag || drag === btn || drag.parentNode !== btn.parentNode) return;
+    const r = folderRestRect(btn);
+    const vertical = getComputedStyle(btn.parentNode).flexDirection.startsWith('column')
+                  || getComputedStyle(btn.parentNode).display === 'block';
+    const p = vertical ? e.clientY : e.clientX;
+    const mid = vertical ? (r.top + r.height / 2) : (r.left + r.width / 2);
+    const dragIsBefore = !!(drag.compareDocumentPosition(btn) & Node.DOCUMENT_POSITION_FOLLOWING);
+    let ref;
+    if(dragIsBefore){ if(p < mid) return; ref = btn.nextSibling; }
+    else            { if(p > mid) return; ref = btn; }
+    if(ref === drag || drag.nextSibling === ref) return;
+    const snap = folderFlipCapture(bar);
+    btn.parentNode.insertBefore(drag, ref);
+    folderFlipPlay(snap);
   });
-  btn.addEventListener('dragleave', ()=> btn.classList.remove('drop-target'));
-  btn.addEventListener('drop', async (e)=>{
+  btn.addEventListener('drop', (e)=>{
     if(draggedFolderId==null || draggedFolderBar!==bar) return;
-    e.preventDefault();
-    btn.classList.remove('drop-target');
-    const list = ctx.getList();
-    const from = list.findIndex(x=>x.id===draggedFolderId);
-    const to   = list.findIndex(x=>x.id===folder.id);
-    draggedFolderId=null; draggedFolderBar=null;
-    if(from<0 || to<0 || from===to) return;
-    const [moved] = list.splice(from,1);
-    list.splice(to,0,moved);
-    await ctx.save();
-    ctx.rerender();
+    e.preventDefault();       // 순서는 이미 바뀌어 있고, dragend 가 저장합니다
   });
 }
 
@@ -11927,6 +12043,9 @@ const WG_BUILTIN = [
   { id:'recent',  name:'최신글', icon:'box',
     el:()=> document.getElementById('recentWidget'),
     opt:()=> openRecentOpt() },
+  { id:'changelog', name:'변경 기록', icon:'pen',
+    el:()=> document.getElementById('changelogWidget'),
+    opt:()=> openChangelogOpt() },
   { id:'dict',    name:'단어사전', icon:'star',
     el:()=> document.getElementById('dictWidget'),
     /* 설정은 '장마다 사진 보이기' 하나뿐입니다. 단어·뜻은 내용이라 계속 위젯
@@ -11969,7 +12088,7 @@ function normalizeWidgets(list){
       min: !!x.min,
       /* 뮤직의 보통/미니. **여기서 옮겨 주지 않으면 불러올 때마다 지워집니다**
          — 이 파일의 normalize* 들이 모두 빠뜨리는 지뢰입니다. */
-      layout: x.layout === 'mini' ? 'mini' : 'normal',
+      layout: mbLayoutKey(x),
       html: builtin ? '' : String(x.html || ''),
       css:  builtin ? '' : String(x.css  || '')
     });
@@ -12024,6 +12143,7 @@ function wgPaintBuiltin(w, el){
   if(w.id !== 'music') return;
   const mini = w.layout === 'mini';
   el.classList.toggle('mb-mini', mini);
+  el.classList.toggle('mb-simple', w.layout === 'simple');
   const svg = el.querySelector('.mb-lp svg');
   if(svg) svg.setAttribute('viewBox', mini ? '1 4 56 56' : '0 0 72 64');
   /* 모양이 바뀜면 제목 칸 폭이 달라져 흐르는 글자를 다시 재야 합니다 */
@@ -12223,17 +12343,26 @@ function wgPlacePopup(w, el, pops){
    딴 사이트처럼 보입니다. 값은 CSS 변수로 :root 에 적고 CSS 가 그 변수를 씁니다
    (.wg-pop / .wg-mini / DESIGN 장의 미리보기가 같은 규칙을 봅니다).
      border    외곽선                      true / false
+     borderStyle 외곽선 모양               solid 실선 / dotted 점선
      shadow    그림자                      true / false
      shadowAmt 그림자 농도 0~100            35 = 예전 값(투명도 .14)
      barBg     상단바 바탕색  '' = 없음(상자와 같은 흰색)
      barFg     상단바 글자색  '' = 기본 회색
-     bar       상단바 모양   line 선 있음 / plain 선 없음 / hover 올릴 때만
+     bar       상단바 모양   line 선 있음 / plain 선 없음
+     barHover  올릴 때만     true / false — 모양과 따로 켜고 끕니다. 예전에는 bar 의
+               셋째 값('hover')이었고, 그 값은 불러올 때 line + barHover 로 옮깁니다
+               (그때 선이 늘 보였으므로).
      dock      작게 한 단추   false 제자리(끌어 옮김) / true 오른쪽 아래에 모으기
    **여기 적지 않은 항목은 불러올 때마다 지워집니다** — normalize* 공통 지뢰. */
 const WG_BAR_STYLES = [
   { key:'line',  name:'선 있음' },
-  { key:'plain', name:'선 없음' },
-  { key:'hover', name:'올릴 때만' }
+  { key:'plain', name:'선 없음' }
+];
+/* 외곽선 — 실선/점선/없음 하나를 고릅니다. '없음' 은 border:false 로 적습니다 */
+const WG_BORDER_STYLES = [
+  { key:'solid',  name:'실선' },
+  { key:'dotted', name:'점선' },
+  { key:'none',   name:'없음' }
 ];
 const WG_DOCK_MODES = [
   { key:'free', name:'제자리' },
@@ -12244,6 +12373,7 @@ function normalizeWgDesign(v){
   const amt = parseInt(v && v.shadowAmt, 10);
   return {
     border:    !(v && v.border === false),
+    borderStyle: (v && v.borderStyle === 'dotted') ? 'dotted' : 'solid',
     /* 외곽선 색 — '' 이면 사이트 기본 선 색(--border, #000000) */
     borderCol: col(v && v.borderCol),
     shadow:    !(v && v.shadow === false),
@@ -12251,6 +12381,7 @@ function normalizeWgDesign(v){
     barBg:     col(v && v.barBg),
     barFg:     col(v && v.barFg),
     bar:       WG_BAR_STYLES.some(s=> s.key === (v && v.bar)) ? v.bar : 'line',
+    barHover:  !!(v && (v.barHover || v.bar === 'hover')),
     dock:      !!(v && v.dock)
   };
 }
@@ -12273,7 +12404,9 @@ function applyWgDesign(){
   /* '올릴 때만' 은 글 위에 겹쳐 뜨므로 바탕이 비어 있으면 흰 바탕을 깝니다 */
   root.style.setProperty('--wp-bar-solid', d.barBg || 'var(--bg)');
   root.style.setProperty('--wp-bar-fg', d.barFg || 'var(--text-muted)');
+  root.style.setProperty('--wp-border-style', d.borderStyle);
   root.dataset.wpBar = d.bar;
+  root.dataset.wpHover = d.barHover ? '1' : '';
   root.dataset.wpFg = d.barFg ? '1' : '';
   root.dataset.wpDock = d.dock ? '1' : '';
 }
@@ -12291,7 +12424,6 @@ function renderDesignPane(){
     el.textContent = on ? onText : offText;
     el.classList.toggle('wg-chip-on', on);
   };
-  chip('wgdBorder', d.border, '보임', '없음');
   const bc = document.getElementById('wgdBorderCol');
   if(bc){ bc.value = d.borderCol || WGD_BORDER_DEFAULT; bc.disabled = !d.border; }
   chip('wgdShadow', d.shadow, '켬', '끔');
@@ -12319,6 +12451,14 @@ function renderDesignPane(){
     });
   };
   picks('wgdBarPicks', WG_BAR_STYLES, d.bar, (k)=>{ wgDesign().bar = k; wgdCommit(); });
+  picks('wgdBorderPicks', WG_BORDER_STYLES, d.border ? d.borderStyle : 'none', (k)=>{
+    const g = wgDesign();
+    g.border = (k !== 'none');
+    if(k !== 'none') g.borderStyle = k;
+    wgdCommit();
+  });
+  const hv = document.getElementById('wgdBarHover');
+  if(hv) hv.setAttribute('aria-checked', d.barHover ? 'true' : 'false');
   picks('wgdDockPicks', WG_DOCK_MODES, d.dock ? 'dock' : 'free',
     (k)=>{ wgDesign().dock = (k === 'dock'); wgdCommit(true); });
   const mini = document.getElementById('wgdMini');
@@ -12333,7 +12473,7 @@ function wgdCommit(relayout){
 }
 function initDesignPane(){
   const on = (id, ev, fn)=>{ const el = document.getElementById(id); if(el) el.addEventListener(ev, fn); };
-  on('wgdBorder', 'click', ()=>{ wgDesign().border = !wgDesign().border; wgdCommit(); });
+  on('wgdBarHover', 'click', ()=>{ wgDesign().barHover = !wgDesign().barHover; wgdCommit(); });
   on('wgdShadow', 'click', ()=>{ wgDesign().shadow = !wgDesign().shadow; wgdCommit(); });
   /* 끄는 동안에는 화면만 바꾸고, 손을 떼면 저장합니다 */
   on('wgdShadowAmt', 'input', (e)=>{
@@ -14822,15 +14962,400 @@ function initDict(){
   });
 }
 
+/* ============================================================
+   변경 기록 위젯
+   ------------------------------------------------------------
+   [{id, date, title, body}]. date 는 '261124'(연월일 두 자리씩) 글자 그대로
+   적고 보입니다 — 날짜 고르개를 쓰지 않는 것은 보이는 꼴과 적는 꼴을 같게 두려는
+   것입니다. 보일 때는 날짜가 늦은 것부터(같은 날이면 나중에 적은 것부터).
+   **저장한 적이 한 번도 없으면(null) CHANGELOG_SEED 를 씁니다** — git 기록을
+   보고 채운 첫 내용입니다. 한 번이라도 고치면 그때부터는 저장된 목록이 전부이고,
+   다 지워 빈 목록([])이 되어도 씨앗은 다시 돌아오지 않습니다.
+   사이드바에서는 CL_SIDEBAR_N(5) 개만, 팝업에서는 전부(목록 안에서 스크롤).
+   ============================================================ */
+const CL_SIDEBAR_N = 5;
+const CHANGELOG_SEED = [
+  {
+  "id": "cl26112100",
+  "date": "261121",
+  "title": "접기 블록 지우기",
+  "body": "본문이 깨진 접기 블록도 백스페이스로 통째로 지워져요.\n폰에서 자유 텍스트 서식 줄이 한 줄로, 옆으로 넘겨 써요."
+  },
+  {
+  "id": "cl26112001",
+  "date": "261120",
+  "title": "서식 줄 정리",
+  "body": "서식 줄 테두리를 없애고 LOG 글쓰기를 일반 글쓰기와 맞췄어요.\n형광펜(밑줄형 포함)과 새 색 고르기 창(자주 쓰는 색)을 더했어요.\n목차가 쓰는 동안 바로 바뀌어요."
+  },
+  {
+  "id": "cl26111902",
+  "date": "261119",
+  "title": "SETTING › DISPLAY",
+  "body": "목록 사진 흑백, 본문 줄간격·자간·문단 간격·양쪽 정렬을 미리보며 고를 수 있어요.\n목차, 글자 크기 px, 위젯 외곽선 색, 탭 순서."
+  },
+  {
+  "id": "cl26111703",
+  "date": "261117",
+  "title": "큰 글 나눠 저장",
+  "body": "글이 아주 커져 LOG 저장이 계속 실패하던 것을 고쳤어요. 큰 글은 조각으로 나눠 저장해요."
+  },
+  {
+  "id": "cl26111504",
+  "date": "261115",
+  "title": "위젯 DESIGN · 비밀번호 하나로",
+  "body": "팝업 위젯의 외곽선·그림자·상단바를 DESIGN 탭에서 골라요. 디데이 순서 끌기, 단어장 장마다 사진.\n비밀 폴더 비밀번호를 하나로 — 한 번 열면 그 방문 동안 전부 열려요.\n글자 크기 숫자 칸, 편집 모드 검색, 버그 몇 가지."
+  },
+  {
+  "id": "cl26100705",
+  "date": "261007",
+  "title": "위젯 · SETTING 화면",
+  "body": "✦ MENU 줄과 SETTING · WIDGET 화면이 생겼어요.\n스티커·뮤직을 위젯으로, 팝업 위젯과 직접 만드는 위젯. 디데이·최신글·단어사전.\n커서·이펙트·효과음 설정, 글 링크 복사."
+  },
+  {
+  "id": "cl26100606",
+  "date": "261006",
+  "title": "스크롤 막대 · 따옴표",
+  "body": "스크롤 막대는 띠에 올렸을 때만 보여요.\n따옴표 두 종류 색칠, ARCHIVE 카테고리 따라가기, 스티커 움직임 고르기."
+  },
+  {
+  "id": "cl26100207",
+  "date": "261002",
+  "title": "사진 여러 장 넣기",
+  "body": "본문에 사진을 한 번에 여러 장 넣어요. 페어 설명칸 글자 크기, 쪽 번호 열 개."
+  },
+  {
+  "id": "cl26092908",
+  "date": "260929",
+  "title": "본문 HTML 상자 · 폴더 전체",
+  "body": "본문에 HTML 상자를 넣을 수 있어요. LOG 넓게 보기.\n폴더 목록 맨 위에 전체."
+  },
+  {
+  "id": "cl26092709",
+  "date": "260927",
+  "title": "아이폰 복사 고침",
+  "body": "아이폰에서 'OOC: …' 가 이상한 글자로 붙던 것을 고쳤어요."
+  },
+  {
+  "id": "cl26092610",
+  "date": "260926",
+  "title": "폰 단추 크기 통일",
+  "body": "폰 단추 크기 통일, 넓은 화면 프로필 비율, 배너 덮개, 썸네일 화질."
+  },
+  {
+  "id": "cl26092411",
+  "date": "260924",
+  "title": "사진 나란히 합치기 고침",
+  "body": "본문 사진끼리 끌어 나란히 합치기가 다시 돼요."
+  },
+  {
+  "id": "cl26092312",
+  "date": "260923",
+  "title": "PAIR 폴더 · PORTAL",
+  "body": "PAIR 에도 폴더가 생겼어요. PORTAL 메뉴, 글쓰기에서 폴더 고르기, 본문 사진 다루기."
+  },
+  {
+  "id": "cl26091913",
+  "date": "260919",
+  "title": "복사 칸 · 제목 잘림",
+  "body": "메모·자유 글 칸에도 복사 칸. OOC·ETC 제목 잘림 고침."
+  },
+  {
+  "id": "cl26091614",
+  "date": "260916",
+  "title": "대표사진 지정",
+  "body": "갤러리에서 대표사진을 고르면 배너와 목록 썸네일이 한 번에 바뀌어요.\n폰 상단바 정리, ARCHIVE 검색창 자리."
+  },
+  {
+  "id": "cl26091515",
+  "date": "260915",
+  "title": "폰 썸네일 까맣게 보이던 것",
+  "body": "폰에서 갤러리 썸네일이 까맣게 보이던 것, 라이트박스 썸네일 줄 가운데 맞추기."
+  },
+  {
+  "id": "cl26091416",
+  "date": "260914",
+  "title": "복사 칸 아이폰",
+  "body": "복사 칸이 아이폰에서 주소처럼 붙던 것을 고쳤어요."
+  },
+  {
+  "id": "cl26091217",
+  "date": "260912",
+  "title": "턴테이블 · 앨범아트",
+  "body": "뮤직 위젯이 턴테이블이 됐어요 — 앨범아트가 레코드 라벨로.\nPAIR/OC 썸네일 확대 효과."
+  },
+  {
+  "id": "cl26091118",
+  "date": "260911",
+  "title": "클릭 소리 · 카드 링크",
+  "body": "클릭 소리, 탭 제목이 사이트 이름을 따라가요. LOVE INTEREST 카드에 링크."
+  },
+  {
+  "id": "cl26091019",
+  "date": "260910",
+  "title": "SIGN IN · 스티커 그림자",
+  "body": "SIGN IN / SIGN OUT 단추, 스티커 그림자, 복사 칸 전부 복사."
+  },
+  {
+  "id": "cl26090920",
+  "date": "260909",
+  "title": "글을 화면 안에서",
+  "body": "ARCHIVE · LOG 글을 창이 아니라 화면 안에서 읽고 써요. 복사 칸.\nHOME 등장 선 긋기, LOG 부제목."
+  },
+  {
+  "id": "cl26090821",
+  "date": "260908",
+  "title": "디자인 전면 교체",
+  "body": "새 디자인 — 스위스 타이포그래피 · 브루탈리즘.\nPAIR · OC 상세를 창에서 지면으로."
+  },
+  {
+  "id": "cl26082922",
+  "date": "260829",
+  "title": "파비콘",
+  "body": "탭에 사이트 마크가 생겼어요."
+  },
+  {
+  "id": "cl26082623",
+  "date": "260826",
+  "title": "홈 화면 앱 아이콘",
+  "body": "iOS 홈 화면에 추가하면 앱 아이콘으로."
+  },
+  {
+  "id": "cl26082124",
+  "date": "260821",
+  "title": "갤러리 사진 제목",
+  "body": "크게 보기에서 사진마다 제목을 달 수 있어요."
+  },
+  {
+  "id": "cl26081625",
+  "date": "260816",
+  "title": "마크다운 중첩",
+  "body": "마크다운 중첩, 인용구 안 헤더, 순백 바탕, 폰 LOG 줄 목록."
+  },
+  {
+  "id": "cl26081526",
+  "date": "260815",
+  "title": "스티커 좌우반전 · 저장 용량",
+  "body": "스티커 좌우반전, 저장 용량 게이지, 본문 행간."
+  },
+  {
+  "id": "cl26081427",
+  "date": "260814",
+  "title": "스티커",
+  "body": "화면 어디에나 붙이는 스티커. 투명 PNG 그대로."
+  },
+  {
+  "id": "cl26081228",
+  "date": "260812",
+  "title": "뮤직 위젯 · 엽서 로그인",
+  "body": "사이드바 뮤직 위젯과 재생 목록. 로그인이 엽서 자리로.\n음원 파일 재생, PAIR 상세를 스크롤로 넘기기."
+  },
+  {
+  "id": "cl26081129",
+  "date": "260811",
+  "title": "사진 빨리 불러오기",
+  "body": "사진은 볼 때만 받고, 한 번 받은 것은 브라우저에 남겨 다음엔 바로 떠요."
+  },
+  {
+  "id": "cl26081030",
+  "date": "260810",
+  "title": "갤러리 스택",
+  "body": "사진 여러 장을 한 칸으로 묶는 스택. 목록 순서 저장."
+  },
+  {
+  "id": "cl26080831",
+  "date": "260808",
+  "title": "OC 전체 카테고리",
+  "body": "OC 전체 카테고리, 잠긴 글 가리기."
+  },
+  {
+  "id": "cl26080732",
+  "date": "260807",
+  "title": "메모 칸 · 키워드 칩",
+  "body": "메모 칸, PAIR 소개·키워드 칩."
+  },
+  {
+  "id": "cl26080633",
+  "date": "260806",
+  "title": "크게보기 개선",
+  "body": "크게보기 확대·키보드·썸네일 줄, PAIR INFO 3단 구성."
+  },
+  {
+  "id": "cl26080534",
+  "date": "260805",
+  "title": "LOG 폴더 · 사진 두 칸",
+  "body": "LOG 폴더, 사진 두 칸 블록, 마크다운 일부."
+  },
+  {
+  "id": "cl26080435",
+  "date": "260804",
+  "title": "폴더 드롭다운",
+  "body": "폴더를 상단바 드롭다운으로."
+  },
+  {
+  "id": "cl26080336",
+  "date": "260803",
+  "title": "카테고리 · 접기 블록",
+  "body": "PAIR·OC 카테고리, 접기 블록 정비, 나가기 확인창."
+  },
+  {
+  "id": "cl26080237",
+  "date": "260802",
+  "title": "PAIR INFO 오른쪽 칸",
+  "body": "이미지·TIMELINE·메시지·테마곡 네 장. HOME 카드 페이지."
+  },
+  {
+  "id": "cl26080138",
+  "date": "260801",
+  "title": "OC 메뉴",
+  "body": "OC 메뉴, 코드블록·접기, PROMPT 폴더, LOG 고정."
+  },
+  {
+  "id": "cl26073139",
+  "date": "260731",
+  "title": "모바일 손질",
+  "body": "모바일 글자 크기, INFO 가로 배치. LOVE INTEREST 아이콘 칸."
+  },
+  {
+  "id": "cl26073040",
+  "date": "260730",
+  "title": "모바일 반응형 · 시작",
+  "body": "폰에서도 볼 수 있게 — 서랍 메뉴, 터치 드래그.\n사이트를 Firestore 로 옮겨 어디서나 같은 내용이 보여요."
+  }
+  ];
+function normalizeChangelog(v){
+  if(!Array.isArray(v)) return CHANGELOG_SEED.map(e=> Object.assign({}, e));
+  return v.filter(e=> e && typeof e === 'object').map((e, i)=>({
+    id: String(e.id || ('cl' + Date.now() + i)),
+    date: String(e.date || '').replace(/\D/g, '').slice(0, 6),
+    title: String(e.title || ''),
+    body: String(e.body || '')
+  }));
+}
+function saveChangelog(){ return storageSet('changelog', state.changelog); }
+function clToday(){
+  const d = new Date();
+  const p = (n)=> String(n).padStart(2, '0');
+  return p(d.getFullYear() % 100) + p(d.getMonth() + 1) + p(d.getDate());
+}
+/* 늦은 날짜가 위로. 같은 날이면 목록에서 앞에 있던 것(나중에 적은 것)이 위 */
+function clSorted(){
+  const list = (state.changelog || []).map((e, i)=> ({ e, i }));
+  list.sort((a, b)=> (b.e.date || '').localeCompare(a.e.date || '') || a.i - b.i);
+  return list.map(x=> x.e);
+}
+/* 펼친 줄 — 다시 그려도 열린 채로 남게 id 로 기억합니다(세션 동안만) */
+const clOpen = new Set();
+function renderChangelog(){
+  const box = document.getElementById('clList');
+  if(!box) return;
+  const wg = document.getElementById('changelogWidget');
+  const inPop = !!(wg && wg.closest('.wg-pop-body'));
+  const all = clSorted();
+  const items = inPop ? all : all.slice(0, CL_SIDEBAR_N);
+  box.innerHTML = '';
+  if(!items.length){
+    const n = document.createElement('div');
+    n.className = 'rc-none';
+    n.textContent = '아직 기록이 없어요.';
+    box.appendChild(n);
+    return;
+  }
+  items.forEach(e=>{
+    const it = document.createElement('div');
+    it.className = 'cl-item' + (clOpen.has(e.id) ? ' open' : '');
+    const head = document.createElement('button');
+    head.type = 'button';
+    head.className = 'cl-head';
+    head.innerHTML = '<span class="cl-date"></span><span class="cl-title"></span>';
+    head.querySelector('.cl-date').textContent = e.date;
+    head.querySelector('.cl-title').textContent = e.title || '제목 없음';
+    it.appendChild(head);
+    if(e.body){
+      const body = document.createElement('div');
+      body.className = 'cl-body';
+      body.textContent = e.body;
+      it.appendChild(body);
+      head.addEventListener('click', ()=>{
+        if(clOpen.has(e.id)) clOpen.delete(e.id); else clOpen.add(e.id);
+        it.classList.toggle('open', clOpen.has(e.id));
+      });
+    } else {
+      head.classList.add('cl-nobody');
+    }
+    box.appendChild(it);
+  });
+}
+/* ---- 관리 창 (위젯 목록의 ⚙) ----
+   줄마다 날짜 · 제목 · 내용 칸과 ✕. 칸을 떠날 때(change) 저장합니다.
+   새 기록은 오늘 날짜로 맨 위에 생깁니다. */
+function openChangelogOpt(){
+  renderChangelogEdit();
+  openModal('modalChangelog');
+}
+function clCommit(){
+  renderChangelog();
+  if(isLoggedIn) saveChangelog();
+}
+function renderChangelogEdit(){
+  const box = document.getElementById('clEditList');
+  if(!box) return;
+  box.innerHTML = '';
+  clSorted().forEach(e=>{
+    const row = document.createElement('div');
+    row.className = 'cl-edit-row';
+    row.innerHTML =
+        '<div class="cl-edit-top">'
+      +   '<input type="text" class="cl-e-date" inputmode="numeric" maxlength="6" placeholder="261124" />'
+      +   '<input type="text" class="cl-e-title" placeholder="제목" />'
+      +   '<button type="button" class="cl-e-del" title="지우기">✕</button>'
+      + '</div>'
+      + '<textarea class="cl-e-body" rows="3" placeholder="자세한 내용"></textarea>';
+    const date = row.querySelector('.cl-e-date');
+    const title = row.querySelector('.cl-e-title');
+    const body = row.querySelector('.cl-e-body');
+    date.value = e.date; title.value = e.title; body.value = e.body;
+    date.addEventListener('change', ()=>{
+      e.date = date.value.replace(/\D/g, '').slice(0, 6);
+      date.value = e.date;
+      clCommit();
+      renderChangelogEdit();          // 날짜가 바뀌면 자리가 바뀝니다
+    });
+    title.addEventListener('change', ()=>{ e.title = title.value.trim(); clCommit(); });
+    body.addEventListener('change', ()=>{ e.body = body.value.replace(/\s+$/, ''); clCommit(); });
+    row.querySelector('.cl-e-del').addEventListener('click', async ()=>{
+      const ok = await siteConfirm('이 기록을 지울까요?\n' + (e.date || '') + ' ' + (e.title || ''));
+      if(!ok) return;
+      state.changelog = (state.changelog || []).filter(x=> x !== e);
+      clOpen.delete(e.id);
+      clCommit();
+      renderChangelogEdit();
+    });
+    box.appendChild(row);
+  });
+}
+function initChangelog(){
+  const add = document.getElementById('clAddBtn');
+  if(add) add.addEventListener('click', ()=>{
+    const e = { id: 'cl' + Date.now(), date: clToday(), title: '', body: '' };
+    state.changelog = [e].concat(state.changelog || []);
+    clCommit();
+    renderChangelogEdit();
+    const first = document.querySelector('#clEditList .cl-e-title');
+    if(first) first.focus();
+  });
+}
+
 /* 셋을 한꺼번에 — renderAll 과 applyEditMode 가 부릅니다 */
 function renderBuiltinWidgets(){
   safely('디데이', renderDday);
   safely('최신글', renderRecent);
+  safely('변경 기록', renderChangelog);
   safely('단어사전', renderDict);
 }
 initDday();
 initRecent();
 initDict();
+initChangelog();
 
 /* ============================================================
    INIT
