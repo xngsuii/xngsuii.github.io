@@ -2115,7 +2115,12 @@ function setCardPage(idx, animate){
   }
 }
 let cardWheelLock = 0;
+/* LOVE INTEREST 장은 없앴습니다(주인 결정) — HOME 은 엽서 한 장입니다. 카드 데이터
+   (state.cards)는 지우지 않고 그대로 두었고, 장도 CSS 로 감춰만 두었습니다. 그 장으로
+   넘어가는 길(휠·쓸기)만 막습니다. */
+const HOME_CARDS_OFF = true;
 homePagesWrap.addEventListener('wheel', (e)=>{
+  if(HOME_CARDS_OFF) return;
   // 로그인 상자가 열려 있으면 엽서 화면에 머뭅니다
   if(loginSheetOpen()) return;
   const showingCards = homePagesWrap.classList.contains('show-cards');
@@ -10560,7 +10565,8 @@ function openArcWrite(cat){
 document.getElementById('addArchiveBtn').addEventListener('click', ()=> openArcWrite());
 
 /* 취소 — 고치던 글이 있으면 그 글을 읽는 자리로, 새 글이었으면 목록으로 */
-document.getElementById('arcCancelBtn').addEventListener('click', async ()=>{
+/* 취소 단추는 없앴습니다(주인 결정 — ← 가 같은 일을 합니다). 옛 HTML 대비로만 남깁니다. */
+document.getElementById('arcCancelBtn')?.addEventListener('click', async ()=>{
   const id = editingArcId;
   if(!(await leaveArcEdit())) return;
   editingArcId = null;
@@ -12100,7 +12106,7 @@ function renderReviewList(wrap, found, allFolder){
       + '<h4 class="lc-title">' + titleHtml + '</h4>'
       + '<div class="rv-lc-date">' + escapeHtml(rvDateLine(it)) + '</div>'
       + '<div class="rv-lc-rate">' + rvStarsHtml(it.rating) + '</div>';
-    cards += '<article class="log-card rv-card-item' + (checked ? ' selected' : '') + (flipped ? ' flipped' : '') + (lk ? ' locked' : '') + '" data-abs="' + (start + i) + '">'
+    cards += '<article class="log-card rv-card-item' + (checked ? ' selected' : '') + (flipped ? ' flipped rv-flat' : '') + (lk ? ' locked' : '') + '" data-abs="' + (start + i) + '">'
       + ((arcSelectMode && !lk) ? '<div class="gallery-check lc-check' + (checked ? ' checked' : '') + '">' + (checked ? '✓' : '') + '</div>' : '')
       /* 두 면을 한 겹(.rv-flip)에 담아 그 겹을 통째로 돌립니다 — 면을 하나씩 따로
          돌리면 가운데쯤에서 카드가 사라졌다 나타나는 것처럼 보였습니다(주인 지적). */
@@ -12155,9 +12161,8 @@ function renderReviewList(wrap, found, allFolder){
       const sel = window.getSelection && window.getSelection();
       if(sel && !sel.isCollapsed && back && back.contains(sel.anchorNode)) return;
       if(e.target.closest('a')) return;
-      const on = !el.classList.contains('flipped');
-      el.classList.toggle('flipped', on);
-      if(on) rvFlipped.add(it.id); else rvFlipped.delete(it.id);
+      rvFlip(el, !el.classList.contains('flipped'));
+      if(el.classList.contains('flipped')) rvFlipped.add(it.id); else rvFlipped.delete(it.id);
     });
     /* 편집 모드에서는 끌어서 폴더(종류) 단추에 놓으면 그 종류로 옮겨집니다 */
     if(isLoggedIn && !lk){
@@ -12176,6 +12181,35 @@ function renderReviewList(wrap, found, allFolder){
       renderArchive();
     });
   });
+}
+/* 뒤집기. 다 돌고 나면 3D 를 걷어 평평한 글 면만 남깁니다(.rv-flat) — 3D 로 돌아간
+   상자 안의 스크롤은 폰(특히 iOS)에서 손가락을 받지 못해 후기가 내려가지 않았습니다
+   (주인 지적). 되돌릴 때는 전환을 잠깐 끄고 3D 를 되살린 뒤에 돌립니다. */
+const RV_FLIP_MS = 600;       // .rv-flip 의 transition(.6s)과 같아야 합니다
+function rvFlip(el, on){
+  clearTimeout(el._rvFlat);
+  if(on){
+    el.classList.add('flipped');
+    /* 평평하게 만들 때도 전환을 꺼야 합니다 — .rv-flip 의 transform 이 180° → none 으로
+       바뀌는 것이 그대로 애니메이션돼서, 후기 면으로 뒤집을 때만 한 바퀴 더 돌았습니다
+       (주인 지적: '두 번 뒤집힌다'). */
+    el._rvFlat = setTimeout(()=>{
+      if(!el.classList.contains('flipped')) return;
+      el.classList.add('rv-noanim');
+      el.classList.add('rv-flat');
+      void el.offsetWidth;
+      el.classList.remove('rv-noanim');
+    }, RV_FLIP_MS);
+    return;
+  }
+  if(el.classList.contains('rv-flat')){
+    el.classList.add('rv-noanim');
+    el.classList.remove('rv-flat');
+    void el.offsetWidth;
+    el.classList.remove('rv-noanim');
+    void el.offsetWidth;
+  }
+  el.classList.remove('flipped');
 }
 /* 밖(최신글 위젯·#arc= 주소)에서 REVIEW 글을 열면 — REVIEW 목록으로 가서 그 글이
    있는 페이지를 펴고 카드를 뒤집어 둡니다. 비밀 폴더면 목록만 엽니다. */
@@ -12325,7 +12359,7 @@ async function rvDelete(){
     requestCloseReview();
   });
   document.getElementById('rvSaveBtn').addEventListener('click', rvSave);
-  document.getElementById('rvCancelBtn').addEventListener('click', requestCloseReview);
+  document.getElementById('rvCancelBtn')?.addEventListener('click', requestCloseReview);
   document.getElementById('rvDeleteBtn').addEventListener('click', rvDelete);
   document.getElementById('rvPoster').addEventListener('click', async ()=>{
     if(!rvDraft) return;
@@ -12421,6 +12455,7 @@ const WG_MARK_CLOSE = '<svg class="wg-mk" viewBox="0 0 16 16" aria-hidden="true"
    스티커를 쓰지 않기로 한 것은 위젯보다 앞선 결정이고, CSS 도 .sticker-drawer 와
    .sticker-layer 를 통째로 숨깁니다. 그 결정을 위젯 쪽에서도 그대로 따라야
    '폰 보임' 을 켜 두었는데 안 보이는' 거짓말이 생기지 않습니다. */
+const WG_GEAR_SVG = '<svg class="wg-gear" viewBox="0 0 24 24" aria-hidden="true"><mask id="wgGearHole"><rect width="24" height="24" fill="#fff"/><circle cx="12" cy="12" r="3" fill="none" stroke="#000" stroke-width="1.5"/></mask><path mask="url(#wgGearHole)" d="M10.19 5.24L10.55 2.86L13.45 2.86L13.81 5.24L16.95 7.05L19.19 6.18L20.64 8.69L18.76 10.19L18.76 13.81L20.64 15.31L19.19 17.82L16.95 16.95L13.81 18.76L13.45 21.14L10.55 21.14L10.19 18.76L7.05 16.95L4.81 17.82L3.36 15.31L5.24 13.81L5.24 10.19L3.36 8.69L4.81 6.18L7.05 7.05L10.19 5.24Z"/></svg>';
 /* opt: 줄 오른쪽 ⚙ 를 누르면 열리는 설정 창. **예전에는 위젯 안에 들어 있었습니다**
    (배너 위의 ✎, LATEST 옆의 ✎). 그러면 글을 읽는 동안에도 고칠 수 있는 표시가
    사이드바에 떠 있게 되어, 위젯을 손보는 자리로 모았습니다(주인 판단).
@@ -13109,7 +13144,9 @@ function renderWidgetManage(){
         '<button class="wg-c-rename" type="button" title="이름 바꾸기">' + wgIconSvg('pen', 'wg-pen') + '</button>' +
       '</span>' +
       '<span class="wg-row-ctl">' +
-        (wgOptOf(w.id) ? '<button class="wg-chip wg-c-opt" type="button" title="설정">⚙</button>' : '') +
+        /* 톱니는 그림입니다(주인이 준 SVG) — ⚙ 글자는 기기마다 다른 서체로 그려졌습니다.
+           가운데 고리는 mask 로 뚫어서 칩 바탕이 비쳐 보입니다(배경색을 몰라도 됩니다). */
+        (wgOptOf(w.id) ? '<button class="wg-chip wg-c-opt" type="button" title="설정">' + WG_GEAR_SVG + '</button>' : '') +
         '<button class="wg-chip wg-c-where" type="button"></button>' +
         '<button class="wg-chip wg-c-mob" type="button"></button>' +
         (wgIsBuiltin(w.id) ? '' :
@@ -15805,6 +15842,7 @@ function initMobileDrawer(){
    화살표 단추(︾ ︽)는 걷어냈습니다 — 스크롤(위아래 쓸기)만으로 오갈 수 있어
    단추가 없어도 된다는 주인 판단입니다. */
 function initHomeTouchNav(){
+  if(HOME_CARDS_OFF) return;        // LOVE INTEREST 장을 없앴습니다
   const wrap = document.getElementById('homePagesWrap');
   const cards = document.getElementById('home-cards-page');
   if(!wrap || !cards) return;

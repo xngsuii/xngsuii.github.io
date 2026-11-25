@@ -1426,7 +1426,10 @@
   .wg-prev-side{width:256px;max-width:100%;padding:10px 0;
     background:var(--bg);border:1px dashed var(--rule-soft);border-radius:var(--radius-sm);}
   .wg-prev-side > *{margin-left:10px;margin-right:10px;}
-  .wg-pop-demo{position:static;width:236px;max-width:100%;box-shadow:none;}
+  /* z-index:auto — 진짜 팝업의 70 을 물려받으면 안 됩니다. 미리보기는 flex 칸 안에 있어서
+     position:static 이어도 z-index 가 먹고(flex 항목의 규칙), 70 이 폰 서랍(60) 위로
+     올라왔습니다(주인 지적). 패널 안의 다른 내용과 같은 층에 둡니다. */
+  .wg-pop-demo{position:static;z-index:auto;width:236px;max-width:100%;box-shadow:none;}
   .wg-prev [data-place]{pointer-events:none;}
   .wg-prev .wg-pop-btn{pointer-events:none;}
 
@@ -1873,17 +1876,19 @@
        transform 전이를 같이 다시 적어야 확대가 끊기지 않습니다.
      · 잠긴 카드와 '흐리게' 폴더 칸은 빼 둡니다 — 이미 가려진 사진이라 색을 뺄 까닭이
        없고, PROMPT 의 흐림은 같은 filter 를 쓰므로 겹치면 흐림이 풀려 버립니다. */
+  /* 흑백은 어디서나 겁니다 — 예전엔 통째로 (hover:hover) 안에 있어서 폰에서는 켜도
+     컬러로 보였습니다(주인 지적). 마우스를 올려 색을 돌리는 것만 hover 기기 전용입니다. */
+  body.gs-pair #view-pair .post-card:not(.locked) .post-thumb::after,
+  body.gs-oc #view-oc .post-card:not(.locked) .post-thumb::after{filter:grayscale(1);
+    transition:transform .25s cubic-bezier(.2,0,.2,1), filter .5s ease;}
+  body.gs-prompt #view-archive .arc-nai-thumb:not(.blurred) .an-img{filter:grayscale(1);
+    transition:filter .5s ease, transform .35s cubic-bezier(.2,0,.2,1);}
+  body.gs-review #view-archive .rv-card-item .rv-back-poster{filter:grayscale(1);transition:filter .5s ease;}
   @media (hover:hover){
-    body.gs-pair #view-pair .post-card:not(.locked) .post-thumb::after,
-    body.gs-oc #view-oc .post-card:not(.locked) .post-thumb::after{filter:grayscale(1);
-      transition:transform .25s cubic-bezier(.2,0,.2,1), filter .5s ease;}
     body.gs-pair #view-pair .post-card:not(.locked):hover .post-thumb::after,
     body.gs-oc #view-oc .post-card:not(.locked):hover .post-thumb::after{filter:grayscale(0);}
-    body.gs-prompt #view-archive .arc-nai-thumb:not(.blurred) .an-img{filter:grayscale(1);
-      transition:filter .5s ease, transform .35s cubic-bezier(.2,0,.2,1);}
     body.gs-prompt #view-archive .arc-nai-thumb:not(.blurred):hover .an-img{filter:grayscale(0);}
     /* REVIEW 는 카드 뒷면의 포스터만 */
-    body.gs-review #view-archive .rv-card-item .rv-back-poster{filter:grayscale(1);transition:filter .5s ease;}
     body.gs-review #view-archive .rv-card-item:hover .rv-back-poster{filter:grayscale(0);}
   }
   .look-row{flex-wrap:wrap;}
@@ -2645,7 +2650,9 @@
      같은 이름으로 창을 다시 만들 일이 있으면 그때 기준이 됩니다. */
   .modal.wide.arc-modal{max-width:580px;}
   .modal h3{margin:0 0 16px;font-family:var(--mono);font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
-  .modal-close{position:absolute;top:14px;right:14px;background:rgba(255,255,255,.9);border:1px solid var(--border);width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text);z-index:10;}
+  /* ✕ 를 감싸던 네모(테두리·바탕)는 없앴습니다(주인 요청) — 글자만 남고, 올리면 진해집니다 */
+  .modal-close{position:absolute;top:14px;right:14px;background:none;border:none;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text-muted);z-index:10;}
+  .modal-close:hover{color:var(--text);}
   .form-row{margin-bottom:12px;}
   .form-row label{display:block;font-size:11.5px;font-weight:700;color:var(--text-muted);margin-bottom:5px;}
   .form-row input[type=text],.form-row input[type=url],.form-row input[type=date],.form-row input[type=password],.form-row input[type=email],.form-row textarea,.form-row select{
@@ -4413,12 +4420,13 @@
     max-height:min(620px,86vh);display:flex;flex-direction:column;padding:16px 18px 14px;}
   .stack-edit-head{display:flex;align-items:center;gap:10px;flex:none;margin-bottom:12px;}
   .se-title{font-family:var(--mono);font-size:14px;font-weight:700;flex:1;}
-  .se-unstack{border:1px solid var(--border);background:var(--bg);color:var(--text);
-    font-family:var(--mono);font-size:11px;padding:5px 12px;flex:none;}
-  .se-unstack:hover{background:var(--surface-2);}
-  .se-close{border:1px solid var(--border);background:var(--bg);color:var(--text);
+  /* 네모(테두리·바탕)는 없앴습니다 — 닫기 ✕ 와 같이 글자만(주인 요청) */
+  .se-unstack{border:none;background:none;color:var(--text-muted);
+    font-family:var(--mono);font-size:11px;padding:5px 4px;flex:none;cursor:pointer;}
+  .se-unstack:hover{color:var(--text);}
+  .se-close{border:none;background:none;color:var(--text);
     width:26px;height:26px;flex:none;display:flex;align-items:center;justify-content:center;font-size:12px;}
-  .se-close:hover{background:var(--surface-2);}
+  .se-close:hover{color:var(--accent);}
   .stack-edit-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;
     overflow-y:auto;flex:1;min-height:0;align-content:start;}
   .se-cell{position:relative;aspect-ratio:1/1;border:1px solid var(--border);
@@ -4440,8 +4448,8 @@
   /* 갤러리 화살표와 같은 보정 (→ .lb-nav) */
   .arc-lb-nav{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;width:40px;height:40px;font-size:22px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:0 0 3.6px;}
   .arc-lb-nav:hover{background:rgba(255,255,255,.28);}
-  .arc-lb-close{position:absolute;top:20px;right:20px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;width:32px;height:32px;font-size:15px;}
-  .arc-lb-close:hover{background:rgba(255,255,255,.28);}
+  .arc-lb-close{position:absolute;top:20px;right:20px;background:none;border:none;color:rgba(255,255,255,.8);width:32px;height:32px;font-size:15px;}
+  .arc-lb-close:hover{color:#fff;}
   .arc-lb-thumbs{display:flex;flex-direction:column;gap:8px;max-height:82vh;overflow-y:auto;flex:none;}
   .arc-lb-thumb{width:64px;height:64px;flex:none;background-size:cover;background-position:center;border:2px solid rgba(255,255,255,.25);cursor:pointer;}
   .arc-lb-thumb.active{border-color:var(--page-bg);}
@@ -5842,13 +5850,22 @@
 .rv-card-item.locked .rv-front{position:relative;transform:none;}
 .rv-back{position:relative;transform:rotateY(0deg);overflow:hidden;}
 .rv-back-poster{display:block;padding:0;background:var(--surface-2);}
-.rv-back-poster img{display:block;width:100%;height:auto;}
-.rv-back-poster.empty{aspect-ratio:2/3;display:flex;align-items:center;justify-content:center;}
+/* 카드 비율은 한 가지로 통일합니다 — V Ever After 포스터(1273×1800) 기준(주인 요청).
+   포스터마다 비율이 조금씩 달라 카드 높이가 들쭉날쭉했습니다. 다른 비율은 cover 로 잘립니다. */
+.rv-back-poster{aspect-ratio:1273 / 1800;}
+.rv-back-poster img{display:block;width:100%;height:100%;object-fit:cover;}
+.rv-back-poster.empty{display:flex;align-items:center;justify-content:center;}
 .rv-back-title{font-family:var(--mono);font-size:12px;color:var(--text-muted);padding:0 14px;text-align:center;}
 .rv-lc-date{font-family:var(--mono);font-size:9px;color:var(--text-muted);font-variant-numeric:tabular-nums;margin-top:-3px;}
 body:not(.logged-in) .rv-edit-foot{display:none;}
 .rv-edit-foot{justify-content:flex-end;margin-top:2px;}
 .rv-card-item.selected .rv-face{background:var(--accent-soft);}
+/* 다 뒤집힌 뒤 — 3D 를 걷어 평평한 글 면만 남깁니다(main.js rvFlip). 포스터 면은 크기를
+   지키려고 자리에 둔 채 숨깁니다. 3D 로 돌아간 상자 안에서는 폰이 스크롤을 못 했습니다. */
+.rv-card-item.rv-flat .rv-flip{transform:none;}
+.rv-card-item.rv-flat .rv-front{transform:none;}
+.rv-card-item.rv-flat .rv-back{visibility:hidden;}
+.rv-card-item.rv-noanim .rv-flip{transition:none;}
 .rv-card-item .lc-check{z-index:2;}
 @media (hover:hover){
   .log-card.rv-card-item:hover{box-shadow:none;}
@@ -5938,3 +5955,23 @@ body #modalReview .rv-card.rv-editing .rv-c-body:focus{border-color:var(--accent
 #previewBadge .pvb-tag{color:var(--accent);font-size:9.5px;letter-spacing:.14em;font-variation-settings:'wght' 800;font-weight:800;}
 #previewBadge .pvb-act{color:var(--text-muted);}
 @media (hover:hover){ #previewBadge:hover .pvb-act{color:var(--text);} }
+
+
+/* ---- 이번 묶음 (주인 요청) ---- */
+/* LOVE INTEREST 장은 없앴습니다 — 엽서 한 장만 남습니다(main.js HOME_CARDS_OFF) */
+#home-cards-page{display:none;}
+/* 위젯 목록의 설정 톱니(main.js WG_GEAR_SVG) */
+.wg-c-opt .wg-gear{width:14px;height:14px;display:block;fill:currentColor;}
+@media (max-width:768px){
+  /* REVIEW 카드 글씨 — 폰에서 줄여 후기가 몇 줄 더 보이게 */
+  .rv-face{padding:9px 10px 8px;gap:4px;}
+  .rv-face > .lc-title{font-size:11.5px;margin-top:4px;}
+  .rv-lc-kind{font-size:8px;}
+  .rv-lc-date{font-size:8px;}
+  .rv-lc-rate .rv-stars{--rv-w:48px;}
+  .rv-rule{margin-top:10px;}
+  .rv-body{font-size:10px;line-height:1.6;margin-top:8px;}
+  /* LOG 의 선택 · ＋게시글 추가 — 옆 확장 단추와 같은 크기로 */
+  .log-pane-toolbar .add-mini-btn{height:26px;box-sizing:border-box;display:inline-flex;align-items:center;
+    padding:0 9px;font-size:11px;}
+}
