@@ -4991,6 +4991,10 @@
     .wg-grip{width:30px;height:34px;font-size:12px;}
     .wg-row{gap:6px;padding:10px 2px;flex-wrap:wrap;}
     .wg-row-id{flex:1 1 100%;order:-1;}
+    /* WIDGET 목록 줄 — 윗줄은 손잡이 · 아이콘 · 이름, 아랫줄은 단추들을 오른쪽 끝으로
+       (주인 요청). 다른 화면의 .wg-row 는 손잡이가 없어서 :has 로 이 목록만 고릅니다. */
+    .wg-row:has(> .wg-grip) > .wg-row-id{flex:1 1 0;order:0;min-width:0;}
+    .wg-row:has(> .wg-grip) > .wg-row-ctl{flex:1 1 100%;justify-content:flex-end;flex-wrap:wrap;}
     .wg-chip{height:30px;padding:0 9px;}
     /* DISPLAY › 글 본문 — 폰에서는 조절 막대 아래로 미리보기를 내립니다 */
     .disp-text{flex-direction:column;gap:14px;}
@@ -5963,8 +5967,10 @@ body #modalReview .rv-card.rv-editing .rv-c-body:focus{border-color:var(--accent
 /* 위젯 목록의 설정 톱니(main.js WG_GEAR_SVG) */
 .wg-c-opt .wg-gear{width:14px;height:14px;display:block;fill:currentColor;}
 @media (max-width:768px){
-  /* REVIEW 카드 글씨 — 폰에서 줄여 후기가 몇 줄 더 보이게 */
-  .rv-face{padding:9px 10px 8px;gap:4px;}
+  /* REVIEW 카드 글씨 — 폰에서 줄여 후기가 몇 줄 더 보이게.
+     **.rv-front 에만** 겁니다 — .rv-face 에 걸면 포스터 면(.rv-back-poster, padding:0)까지
+     안쪽 여백이 생겨 포스터 둘레에 회색 테가 둘렸습니다(주인 지적). */
+  .rv-front{padding:9px 10px 8px;gap:4px;}
   .rv-face > .lc-title{font-size:11.5px;margin-top:4px;}
   .rv-lc-kind{font-size:8px;}
   .rv-lc-date{font-size:8px;}
