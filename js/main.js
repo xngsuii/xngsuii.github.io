@@ -4070,9 +4070,10 @@ function bindMetaContainer(elId, obj, persist){
   // 라벨(::라벨 값) 전용 컨테이너. 본문과 완전히 독립된 레이어로 동작.
   const el=document.getElementById(elId);
   el.innerHTML = obj.metaHtml || '';
+  repairMetaRows(el);
   el.querySelectorAll('.meta-label,.meta-value').forEach(span=>{ span.contentEditable = isLoggedIn ? 'true' : 'false'; });
   const persistFn = persist || savePair;
-  el._saveMeta = ()=>{ obj.metaHtml=el.innerHTML; persistFn(); };
+  el._saveMeta = ()=>{ obj.metaHtml = cleanMetaHtml(el); persistFn(); };
 
   /* 조작은 이 요소에 딱 한 번만 겁니다.
      창을 열 때마다 다시 걸면 예전 글을 가리키는 저장 함수가 그대로 남아,
@@ -4117,6 +4118,30 @@ function bindMetaContainer(elId, obj, persist){
       delBtn.closest('.meta-row').remove();
       el._saveMeta();
     }
+  });
+}
+/* ---- 라벨 줄에 끌기 흔적이 저장되던 문제 ----
+   라벨은 DOM 을 그대로(innerHTML) 저장합니다. 끌기 엔진은 들어올린 줄을
+   visibility:hidden 으로 감춰 두는데, 놓는 순간의 dragend 에서 저장이 먼저 일어나
+   **감춘 채로 저장**되었습니다 — 다시 열면 그 줄이 안 보이는 빈 칸으로 남고,
+   새 라벨은 그 아래에 붙었습니다(주인 지적: 라벨이 간격을 두고 생김).
+   저장할 때는 줄의 style(감춤·FLIP 의 transition)을 떼고, 불러올 때는 이미 그렇게
+   저장된 줄을 고칩니다: 보이는 줄과 내용이 같은 숨은 줄은 지우고(끌다 생긴
+   중복), 그 밖의 숨은 줄은 다시 보이게 합니다(내용을 잃지 않게). */
+function cleanMetaHtml(el){
+  const c = el.cloneNode(true);
+  c.querySelectorAll('.meta-row').forEach(r=>{ r.removeAttribute('style'); r.classList.remove('dragging-meta'); });
+  return c.innerHTML;
+}
+function repairMetaRows(el){
+  const key = r=> (r.querySelector('.meta-label')?.textContent || '') + '\u0000' + (r.querySelector('.meta-value')?.textContent || '');
+  const rows = [...el.querySelectorAll('.meta-row')];
+  const hidden = r=> /visibility\s*:\s*hidden/.test(r.getAttribute('style') || '');
+  const shown = new Set(rows.filter(r=> !hidden(r)).map(key));
+  rows.forEach(r=>{
+    if(hidden(r) && shown.has(key(r))){ r.remove(); return; }
+    r.removeAttribute('style');
+    r.classList.remove('dragging-meta');
   });
 }
 function bindBodyText(elId, obj, persist){
@@ -16360,6 +16385,9 @@ function initDragEngine(){
     ghost.style.display = 'none';
     const under = document.elementFromPoint(e.clientX, e.clientY);
     if(under) fire(under, 'drop', e.clientX, e.clientY);
+    /* 감춘 원본을 dragend **전에** 되돌립니다 — dragend 에서 DOM 을 그대로 저장하는
+       곳(라벨 줄)이 감춘 상태까지 저장했습니다. */
+    if(visualEl) visualEl.style.visibility = '';
     fire(source, 'dragend', e.clientX, e.clientY);
 
     /* 손을 떼면 브라우저가 click 을 한 번 더 보냅니다.
