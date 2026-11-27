@@ -69,7 +69,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
-<link rel="stylesheet" href="css/style.css?v=295" />
+<link rel="stylesheet" href="css/style.css?v=311" />
 </head>
 <body>
 <!-- 재단선 — 패널 네 모서리의 ㄱ 자 표시(css .trim-marks). 테두리로 그려야 또렷합니다 -->
@@ -1439,6 +1439,23 @@
         </div>
         <!-- 취소·게시는 ⋮ 가 있던 자리에 들어섭니다 -->
         <div class="arcd-actions">
+        <!-- 분류 · 폴더 — 게시 단추 왼쪽의 'ARCHIVE · ETC · 메모 ▾'(처음엔 제목 위였는데 ← 와 겹쳐 보여 옮겼습니다). 누르면 두 칸짜리 창(왼쪽
+             카테고리, 오른쪽 그 카테고리의 폴더)이 뜹니다(main.js initArcCrumb).
+             값은 여전히 숨긴 <select> 둘이 들고 있습니다 — 저장·비교 코드가
+             그것을 읽습니다. -->
+        <div class="arcd-crumb-wrap" id="arcCrumbWrap">
+          <button type="button" class="arcd-crumb" id="arcCrumb" aria-haspopup="true"></button>
+          <div class="arcd-pop" id="arcCrumbPop">
+            <div class="arcd-pop-col arcd-pop-cats" id="arcPopCats"></div>
+            <div class="arcd-pop-col arcd-pop-folders" id="arcPopFolders"></div>
+          </div>
+          <select id="arcFolderInput" class="pick-dd-src"></select>
+          <select id="arcCategoryInput" class="pick-dd-src">
+            <option value="ooc">OOC</option>
+            <option value="nai">PROMPT</option>
+            <option value="etc">ETC</option>
+          </select>
+        </div>
           <button type="button" class="btn-primary" id="saveArcBtn">게시</button>
         </div>
       </div>
@@ -1471,24 +1488,6 @@
           <span class="rt-sep"></span>
           <button type="button" id="arcInsertImageBtn" title="사진 삽입">🖼</button>
           <button type="button" id="arcInsertFileBtn" title="파일 삽입">📎</button>
-        </div>
-        <!-- 폴더 · 카테고리 — 이 둘만 오른쪽 끝에 따로 섭니다.
-             폴더 목록은 카테고리마다 다르므로 JS 가 채웁니다(fillArcFolderSelect). -->
-        <!-- <label> 이 아니라 <div> 인 까닭: 고르개는 이제 숨겨 둔 <select> 를
-             값만 들고 있게 하고 화면에는 우리 드롭다운(.pick-dd)을 그립니다.
-             <label> 로 두면 그 안을 누를 때마다 브라우저가 숨은 <select> 로
-             클릭을 한 번 더 넘겨 드롭다운이 열렸다 닫힙니다. -->
-        <div class="arcd-cat arcd-folder">
-          <span>폴더</span>
-          <select id="arcFolderInput" class="pick-dd-src"></select>
-        </div>
-        <div class="arcd-cat">
-          <span>카테고리</span>
-          <select id="arcCategoryInput" class="pick-dd-src">
-            <option value="ooc">OOC</option>
-            <option value="nai">PROMPT</option>
-            <option value="etc">ETC</option>
-          </select>
         </div>
       </div>
 
@@ -1946,7 +1945,17 @@
 <div class="arc-lightbox" id="arcLightbox">
   <button class="arc-lb-close" id="arcLbClose">✕</button>
   <button class="arc-lb-nav" id="arcLbPrev">‹</button>
-  <div class="arc-lb-main-wrap"><img id="arcLbMain" /></div>
+  <div class="arc-lb-main-wrap"><div class="arc-lb-stage">
+    <img id="arcLbMain" />
+    <!-- 갤러리 크게보기와 같은 두 가지: 왼쪽 위 순서 칩, 오른쪽 위 확대 단추 -->
+    <div class="lb-count" id="arcLbCount"></div>
+    <div class="lb-tools">
+      <button class="lb-zoom" id="arcLbZoom" type="button" title="확대">
+        <svg class="lb-zoom-ico lb-zoom-in" viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 9.5 6.5M6.5 13.5h-4v-4M2.5 13.5l4-4"/></svg>
+        <svg class="lb-zoom-ico lb-zoom-out" viewBox="0 0 16 16" aria-hidden="true"><path d="M13 3 9.5 6.5M9.5 6.5h3.5M9.5 6.5V3M3 13l3.5-3.5M6.5 9.5H3M6.5 9.5V13"/></svg>
+      </button>
+    </div>
+  </div></div>
   <button class="arc-lb-nav" id="arcLbNext">›</button>
   <div class="arc-lb-thumbs" id="arcLbThumbs"></div>
 </div>
@@ -2000,7 +2009,7 @@
        (그 목록을 만드는 것도 JS인데 새 CSS 가 감싸이지 않은 select 를 폭 0 으로
        접습니다), 스티커 서랍이 엉뚱한 자리에 놓였습니다.
        **CSS 와 JS 를 함께 고쳤으면 번호도 함께 올리세요.** -->
-<script src="js/main.js?v=293"></script>
+<script src="js/main.js?v=310"></script>
 <script type="module" src="js/firebase-store.js?v=127"></script>
 </body>
 </html>

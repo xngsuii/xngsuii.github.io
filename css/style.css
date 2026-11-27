@@ -1569,7 +1569,11 @@
      (한때 56px 이었던 것은 스티커 클립이 창 오른쪽 모서리에 걸려 있어서
       ＋ 단추가 그 밑으로 들어갔기 때문입니다. 클립을 사이드바로 옮기면서
       비켜 줄 이유가 없어져 되돌렸습니다.) */
-  .main{flex:1;overflow-y:auto;position:relative;padding:0 22px 0 var(--main-pad-l);}
+  /* 본문을 오른쪽으로 8.5px 옮겨 낫표 사이 가운데에 둡니다(주인 요청 — 낫표는 그대로,
+     본문 폭도 그대로). 46/22 일 때 본문은 왼쪽 낫표에서 23px, 오른쪽 낫표에서 40px 이었고,
+     54.5/13.5 로 두 간격이 31.5px 로 같습니다. 왼쪽 낫표 자리는 --main-pad-l 로 계산되므로
+     그 변수는 건드리지 않고 여기서만 더합니다. */
+  .main{flex:1;overflow-y:auto;position:relative;padding:0 13.5px 0 calc(var(--main-pad-l) + 8.5px);}
   .view{display:none;height:100%;}
   .view.active{display:block;}
   /* 메뉴를 옮기면 새 화면이 아래에서 부드럽게 올라옵니다.
@@ -1604,8 +1608,11 @@
      오렌지는 '지금 여기'와 손이 닿은 곳에만 씁니다. */
   .btn-primary{background:var(--text);color:#fff;border:1px solid var(--text);border-radius:0;padding:7px 13px;font-size:11px;font-weight:500;letter-spacing:0;text-transform:uppercase;line-height:1;}
   .btn-primary:hover{background:var(--accent);border-color:var(--accent);opacity:1;}
-  .btn-ghost{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:0;padding:7px 13px;font-size:11px;font-weight:500;letter-spacing:0;text-transform:uppercase;line-height:1;}
-  .btn-ghost:hover{background:var(--text);color:#fff;}
+  /* 보조 단추는 테두리·바탕 없이 글자만(주인 요청) — 상자가 남는 것은 글쓰기·저장 같은
+     중요한 단추(.btn-primary)뿐입니다. 올리면 주황으로 진해집니다. */
+  .btn-ghost{background:transparent;border:1px solid transparent;color:var(--text);border-radius:0;padding:7px 13px;font-size:11px;font-weight:500;letter-spacing:0;text-transform:uppercase;line-height:1;
+    font-variation-settings:'wght' 500;transition:color .2s ease, font-variation-settings .2s ease;}
+  .btn-ghost:hover{background:transparent;color:var(--accent);font-variation-settings:'wght' 800;}
 
   /* ---------- Adjustable image component ---------- */
   .adjustable-img{position:relative;overflow:hidden;background:var(--surface-2);}
@@ -2165,8 +2172,10 @@
      (여백은 .oc-pages 가 아니라 각 장에 줍니다. 장은 inset:0 이라
       100% 만큼 밀면 정확히 창 밖으로 나가야 하기 때문입니다.) */
   .oc-pages{position:relative;flex:1;min-height:0;overflow:hidden;}
+  /* 오른쪽 안쪽 여백 0 — 4px 를 두었더니 모든 장의 오른쪽 끝이 헤더(배너)보다
+     4px 안으로 들어가 보였습니다(주인 지적). */
   .oc-page{position:absolute;inset:0;display:flex;flex-direction:column;min-height:0;
-    padding:8px 4px 8px 0;box-sizing:border-box;
+    padding:8px 0 8px 0;box-sizing:border-box;
     background:var(--bg);transition:transform .45s cubic-bezier(.4,0,.2,1);}
   /* 프로필 장만 아래를 조금 더 띄웁니다 — 자유 텍스트/세로 이미지의 아래 보더가
      창 보더에 붙어 보이지 않도록 (칸이 flex:1 이라 높이가 그만큼 줄어듭니다) */
@@ -2287,8 +2296,9 @@
   .side-dot.active{background:var(--accent);box-shadow:0 0 0 1.5px rgba(255,255,255,.9);}
   .oc-side-img{height:100%;border:1px solid var(--border);}
   /* 키워드 3등분 칸 — 프로필 바로 위 */
-  .oc-kw-row{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--border);
-    flex:none;margin-bottom:14px;}
+  /* 키워드 세 칸은 없앴습니다(주인 요청) — 자리째 감춰 아래 칸들이 올라옵니다.
+     저장된 키워드 데이터(o.keywords)는 건드리지 않습니다. */
+  .oc-kw-row{display:none !important;}
   .oc-kw{padding:9px 8px;text-align:center;font-size:11.5px;font-weight:700;color:var(--text);
     border-right:1px solid var(--border);outline:none;min-width:0;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -2500,7 +2510,7 @@
      추가/선택 단추가 격자 끝에서 2px 들어와 있으므로 여기도 4+2 로 맞춥니다. */
   /* 누름 자리(좌우 7px)만큼 안쪽으로 당겨, 글자의 오른쪽 끝이 격자 오른쪽
      끝에서 2px 안에 서게 합니다 — 왼쪽 ＋ ✓ 와 대칭입니다. */
-  .gallery-page-nav{position:absolute;bottom:2px;right:-1px;display:flex;align-items:center;gap:6px;z-index:4;}
+  .gallery-page-nav{position:absolute;bottom:2px;right:0;display:flex;align-items:center;gap:6px;z-index:4;}
   /* 16px 인 까닭 - 화살표 상자(22px)가 + / v 단추(26px)보다 4px 낮아서,
      아래를 4px 더 띄워야 둘의 한가운데가 같은 높이에 옵니다. */
   .pd-tab-pane-gallery .gallery-page-nav,
@@ -2611,7 +2621,8 @@
     letter-spacing:.16em;color:var(--text-muted);
     font-variation-settings:'wght' 500;
     transition:color .22s ease,font-variation-settings .22s ease;}
-  .mg-tab:hover{color:var(--text);}
+  /* 사이드바처럼 올리자마자 주황으로 두꺼워집니다(주인 요청) */
+  .mg-tab:hover{color:var(--accent);font-variation-settings:'wght' 800;}
   .mg-tab.active{color:var(--accent);font-variation-settings:'wght' 800;}
   .mg-tab-dot{flex:none;font-family:var(--mono);font-size:10px;color:var(--text-muted);opacity:.45;}
   .mg-body{flex:1;min-height:0;position:relative;padding:0 0 24px;}
@@ -2740,7 +2751,7 @@
      뺀 나머지를 전부 씁니다(패널 672 - 배너 132 = 540). */
   .pd-tab-content{flex:1;min-width:0;min-height:0;position:relative;overflow:hidden;box-sizing:border-box;}
   .pd-tab-pane{position:absolute;inset:0;display:flex;flex-direction:column;min-height:0;
-    padding:8px 4px 8px 0;box-sizing:border-box;
+    padding:8px 0 8px 0;box-sizing:border-box;
     background:var(--bg);transition:transform .45s cubic-bezier(.4,0,.2,1);}
   .pd-tab-content, .log-table-scroll{scrollbar-width:none;-ms-overflow-style:none;}
   .pd-tab-content::-webkit-scrollbar, .log-table-scroll::-webkit-scrollbar{display:none;width:0;height:0;}
@@ -3677,8 +3688,9 @@
      제목 줄에 그냥 얹으면 그 줄만 세로로 늘어납니다. 크기를 줄이고 줄 상자를
      글자 크기에 붙여(line-height:1) 표 줄 높이가 달라지지 않게 합니다.
      inline-block 이라 이 상자 밖으로는 영향을 주지 않습니다. */
+  /* 제목과 한 칸쯤 더 띄웁니다(주인 요청) */
   .arc-pin-tag{color:var(--accent);display:inline-block;font-size:9px;line-height:1;
-    vertical-align:middle;}
+    vertical-align:middle;margin-right:4px;}
   .rt-toolbar[data-editonly]{display:none;}
   body.logged-in .rt-toolbar[data-editonly]{display:flex;}
   /* padding:0 + flex 가운데 정렬이 필요합니다 — 브라우저 기본 버튼 여백(좌우 6px)이
@@ -3957,7 +3969,13 @@
      따로 두는 까닭 — 오렌지는 이 사이트에서 '지금 여기'를 뜻하는 색이라,
      같은 색으로 '삭제'까지 말하면 두 뜻이 겹칩니다. */
   .gf-danger{color:#c0392b;border-color:#c0392b;}
+  .btn-ghost.gf-danger{border-color:transparent;}
+  .btn-ghost.gf-danger:hover{color:#c0392b;}
   .gf-danger:hover{background:#c0392b;border-color:#c0392b;color:#fff;}
+  /* 상자 없는 삭제(.btn-ghost) — 빨간 상자가 덮이면 글자가 사라졌습니다(주인 지적).
+     글자는 칸 왼쪽 끝에 맞추고, 올리면 굵어지기만 합니다. */
+  .btn-ghost.gf-danger:hover{background:transparent;border-color:transparent;color:#c0392b;font-variation-settings:'wght' 800;}
+  .gf-actions .btn-ghost.gf-danger{padding-left:0;}
   .gf-delete-warn{font-size:11px;color:#c0392b;line-height:1.5;margin-bottom:8px;}
 
   /* 비밀 폴더 잠김 화면 */
@@ -5981,3 +5999,186 @@ body #modalReview .rv-card.rv-editing .rv-c-body:focus{border-color:var(--accent
   .log-pane-toolbar .add-mini-btn{height:26px;box-sizing:border-box;display:inline-flex;align-items:center;
     padding:0 9px;font-size:11px;}
 }
+
+/* 상단바 머리글의 가운뎃점(main.js setTopTitle) — '—  ·  ETC' 처럼 넓게 */
+.tb-dot{margin:0 .55em;}
+/* LOG·ARCHIVE 글 속 사진은 누르면 크게 봅니다 */
+.arc-view-content img{cursor:zoom-in;}
+/* SETTING › SIDEBAR — ARCHIVE 안쪽 탭 줄은 한 단 들여 놓습니다 */
+.sb-row.sb-sub > .wg-row-name{padding-left:16px;color:var(--text-muted);}
+.sb-row .sb-home{flex:none;}
+
+/* ---- 폴더 탭 줄 (main.js renderFolderDropdown) ----
+   상단바 아래에 한 줄. 줄 아래 가는 선, 고른 탭은 주황 글자 + 두꺼운 밑줄이 그 선 위에
+   겹칩니다. 탭이 넘치면 줄 안에서만 가로로 밀립니다(막대는 숨김). */
+/* 아래 구분선은 없앴고, 상단바 쪽으로 조금 당겼습니다(주인 요청) */
+.folder-dd.ftab-row{position:relative;display:flex;align-items:stretch;gap:8px;flex:none;
+  margin:-10px 0 12px;}
+.ftab-scroll{position:relative;flex:1;min-width:0;display:flex;align-items:stretch;gap:22px;overflow-x:auto;overflow-y:hidden;
+  scrollbar-width:none;-ms-overflow-style:none;}
+.ftab-scroll::-webkit-scrollbar{display:none;}
+.ftab{flex:none;position:relative;display:inline-flex;align-items:center;gap:4px;height:36px;padding:0;
+  background:none;border:none;cursor:pointer;font-family:var(--mono);font-size:12.5px;white-space:nowrap;
+  color:var(--text-muted);font-variation-settings:'wght' 500;font-weight:500;
+  transition:color .2s ease, font-variation-settings .2s ease;}
+.ftab::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--accent);
+  transform:scaleX(0);transition:transform .2s ease;}
+.ftab.active{color:var(--accent);font-variation-settings:'wght' 800;font-weight:800;}
+/* 밑줄은 탭마다가 아니라 하나(.ftab-ink)가 미끄러집니다 — 위의 ::after 는 끕니다 */
+.ftab::after{display:none;}
+.ftab-ink{position:absolute;bottom:0;left:0;width:0;height:2px;background:var(--accent);pointer-events:none;
+  transition:left .32s cubic-bezier(.22,1,.36,1), width .32s cubic-bezier(.22,1,.36,1);}
+@media (prefers-reduced-motion:reduce){ .ftab-ink{transition:none;} }
+@media (hover:hover){ .ftab:hover{color:var(--text);} .ftab.active:hover{color:var(--accent);} }
+.ftab.drop-target{color:var(--accent);}
+.ftab.dragging{opacity:.4;}
+.ftab-lock{width:10px;height:10px;flex:none;fill:none;stroke:currentColor;stroke-width:1.4;opacity:.7;}
+.ftab .ftab-edit{position:static;margin-left:2px;font-size:10px;color:var(--text-muted);
+  font-family:system-ui,'Segoe UI Symbol',sans-serif;cursor:pointer;opacity:.8;}
+.ftab .ftab-edit:hover{color:var(--accent);}
+.ftab-add{flex:none;width:26px;display:flex;align-items:center;justify-content:center;padding:0;
+  background:none;border:none;cursor:pointer;color:var(--text-muted);}
+.ftab-add svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;}
+.ftab-add:hover{color:var(--accent);}
+@media (max-width:768px){
+  .folder-dd.ftab-row{margin:-6px 0 8px;}
+  .ftab-scroll{gap:18px;}
+  .ftab{height:38px;font-size:12px;}
+  .ftab-add{width:32px;}
+}
+
+/* ---- 글쓰기 분류 · 폴더 (main.js paintArcCrumb / paintArcPop) ----
+   제목 위 한 줄 'ARCHIVE · ETC · 메모 ▾'. 누르면 아래로 두 칸짜리 창. 수정 모드에서만. */
+.arcd-crumb-wrap{display:none;position:relative;margin-right:14px;align-self:center;}
+.arcd-editing .arcd-crumb-wrap{display:block;}
+/* baseline — 앞 두 칸(10px)과 폴더 이름(11px 굵게)의 글자 크기가 달라 center 로는 글자 밑선이
+   어긋났습니다(주인 지적: 앞 두 개가 내려가 보임) */
+.arcd-crumb{display:inline-flex;align-items:baseline;gap:0;padding:2px 0;background:none;border:none;cursor:pointer;
+  font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);
+  transition:color .2s ease;}
+.arcd-crumb .arcd-crumb-f{color:var(--text);text-transform:none;letter-spacing:.02em;font-size:11px;
+  font-variation-settings:'wght' 700;font-weight:700;}
+.arcd-crumb-caret{margin-left:5px;font-size:8px;}
+.arcd-crumb:hover,.arcd-crumb-wrap.open .arcd-crumb{color:var(--accent);}
+.arcd-crumb:hover .arcd-crumb-f,.arcd-crumb-wrap.open .arcd-crumb-f{color:var(--accent);}
+.arcd-pop{display:none;position:absolute;right:0;top:100%;margin-top:8px;z-index:40;
+  grid-template-columns:minmax(110px,auto) minmax(150px,auto);min-width:280px;max-width:min(420px,88vw);
+  background:var(--bg);border:1px solid var(--text);box-shadow:0 8px 22px rgba(0,0,0,.12);}
+.arcd-crumb-wrap.open .arcd-pop{display:grid;}
+.arcd-pop-col{display:flex;flex-direction:column;padding:6px 0;max-height:min(320px,50vh);overflow-y:auto;}
+.arcd-pop-cats{border-right:1px solid var(--rule-soft);}
+.arcd-pop-item{display:flex;align-items:center;gap:5px;text-align:left;padding:8px 14px;background:none;border:none;cursor:pointer;
+  font-family:var(--mono);font-size:12px;color:var(--text-muted);white-space:nowrap;
+  font-variation-settings:'wght' 500;font-weight:500;transition:color .15s ease, font-variation-settings .15s ease;}
+.arcd-pop-item:hover{color:var(--text);}
+.arcd-pop-item.on{color:var(--accent);font-variation-settings:'wght' 800;font-weight:800;}
+.arcd-pop-item .ftab-lock{width:10px;height:10px;}
+@media (max-width:768px){
+  .arcd-pop-item{padding:10px 14px;font-size:12.5px;}
+}
+
+/* PAIR·OC 목록 칸을 위로 10px 늘립니다 — 카드 안쪽 위 여백(10px) 때문에 사진이
+   REVIEW 카드보다 10px 아래에서 시작했습니다(주인 요청: 시작 높이 맞추기). */
+#postGrid,#ocGrid{margin-top:-10px;}
+
+/* OC 첫 장 — 헤더와 내용 사이를 PAIR(프로필 사진까지 18px)와 같게 */
+#view-oc-detail .oc-info-grid{margin-top:10px;}
+/* 상세 LOG 카드 — 스크롤 막대 자리(3px)를 패널 밖으로 내보내 카드 오른쪽 끝을 헤더에 맞춥니다 */
+/* 카드 오른쪽 끝을 헤더(배너)·REVIEW 줄 끝에 맞춥니다. 스크롤 칸은 오른쪽에 안쪽 여백 4px 와
+   막대 자리 3px 를 갖고 있어 카드가 7px 안쪽에서 끝났습니다 — 여기서는 여백을 없애고
+   막대 자리만 칸 밖(.main 의 오른쪽 여백 5px 안)으로 내보냅니다. */
+.pd-tab-pane .log-cards-scroll,.oc-page .log-cards-scroll,.rv-cards .log-cards-scroll{padding-right:0;margin-right:-3px;}
+/* 위 3px 가 장 묶음(overflow:hidden)에 잘리지 않게, 묶음 상자만 오른쪽으로 3px 넓히고
+   장들은 그만큼 들여 놓습니다 — 장의 끝은 그대로 헤더 끝입니다. (clip-path 로 오른쪽만
+   열어 보기도 했는데, 그러면 화면 밖의 장들이 .main 의 높이에 잡혀 세로 막대가 생기고
+   그 3px 만큼 모든 것이 좁아졌습니다.) */
+#view-pair-detail .pd-tab-content,#view-oc-detail .oc-pages{margin-right:-3px;}
+#view-pair-detail .pd-tab-pane,#view-oc-detail .oc-page{right:3px;}
+@media (max-width:768px){
+  .pd-tab-pane .log-cards-scroll,.oc-page .log-cards-scroll,.rv-cards .log-cards-scroll{margin-right:0;}
+  #view-pair-detail .pd-tab-content,#view-oc-detail .oc-pages{margin-right:0;}
+  #view-pair-detail .pd-tab-pane,#view-oc-detail .oc-page{right:0;}
+}
+
+/* ---- 상세 화면(PAIR·OC)의 GALLERY · LOG 폴더 줄 — 바깥 목록의 폴더 탭과 같은 모양 ----
+   상자 없이 글자만, 고른 탭은 주황 굵게 + 밑줄, 자물쇠는 이름 뒤 선 그림, ＋ 는 줄 끝.
+   **차지하는 자리는 예전과 같습니다**(탭 높이 25px, 장 위에서 24px) — 글자를 11.5px 로
+   줄여 그 높이 안에 넣었습니다. ✎ 는 고른 탭에만 보입니다(바깥과 같음). */
+:is(#view-pair-detail,#view-oc-detail) .gallery-folder-bar{gap:16px;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;
+  scrollbar-width:none;-ms-overflow-style:none;align-items:stretch;}
+:is(#view-pair-detail,#view-oc-detail) .gallery-folder-bar::-webkit-scrollbar{display:none;}
+:is(#view-pair-detail,#view-oc-detail) .gallery-folder-tab,
+body.logged-in :is(#view-pair-detail,#view-oc-detail) .gallery-folder-tab{position:relative;flex:none;height:25px;padding:0;gap:4px;
+  border:none;background:none;white-space:nowrap;font-family:var(--mono);font-size:11.5px;
+  color:var(--text-muted);font-variation-settings:'wght' 500;font-weight:500;
+  transition:color .2s ease, font-variation-settings .2s ease;}
+:is(#view-pair-detail,#view-oc-detail) .gallery-folder-tab::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2px;
+  background:var(--accent);transform:scaleX(0);transition:transform .25s cubic-bezier(.22,1,.36,1);}
+:is(#view-pair-detail,#view-oc-detail) .gallery-folder-tab.active,
+:is(#view-pair-detail,#view-oc-detail) .gallery-folder-tab.active:hover{background:none;color:var(--accent);
+  font-variation-settings:'wght' 800;font-weight:800;}
+:is(#view-pair-detail,#view-oc-detail) .gallery-folder-tab.active::after{transform:scaleX(1);}
+:is(#view-pair-detail,#view-oc-detail) .gallery-folder-tab:hover{background:none;color:var(--text);}
+:is(#view-pair-detail,#view-oc-detail) .gallery-folder-tab.drop-target{background:none;color:var(--accent);}
+:is(#view-pair-detail,#view-oc-detail) .gallery-folder-tab:not(.active) .gallery-folder-rename{display:none;}
+:is(#view-pair-detail,#view-oc-detail) .gallery-folder-tab .gallery-folder-rename{font-size:10px;color:var(--text-muted);
+  padding:0 0 0 2px;font-family:system-ui,'Segoe UI Symbol',sans-serif;}
+:is(#view-pair-detail,#view-oc-detail) .gallery-folder-tab .gallery-folder-rename:hover{color:var(--accent);}
+:is(#view-pair-detail,#view-oc-detail) .gallery-folder-add{flex:none;margin-left:auto;width:25px;height:25px;padding:0;
+  display:flex;align-items:center;justify-content:center;border:none;background:none;color:var(--text-muted);}
+/* 26px — 예전 '＋ 폴더' 상자가 26px 이라 편집 모드에서는 줄이 그만큼이었습니다. 같게 둬야
+   갤러리 첫 사진과 LOG 첫 카드의 시작 높이가 예전처럼 맞습니다. */
+:is(#view-pair-detail,#view-oc-detail) .gallery-folder-add{height:26px;}
+:is(#view-pair-detail,#view-oc-detail) .gallery-folder-add svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;}
+:is(#view-pair-detail,#view-oc-detail) .gallery-folder-add:hover{color:var(--accent);background:none;}
+@media (max-width:768px){
+  :is(#view-pair-detail,#view-oc-detail) .gallery-folder-tab,
+  body.logged-in :is(#view-pair-detail,#view-oc-detail) .gallery-folder-tab{padding:0;font-size:11.5px;}
+  :is(#view-pair-detail,#view-oc-detail) .gallery-folder-add{padding:0;}
+}
+
+/* ---- 잠긴·흐린 썸네일도 흑백(SETTING › DISPLAY 의 목록 사진 흑백이 켜져 있을 때) ----
+   흐림이 filter 를 쓰고 있어서 흑백 규칙이 :not(.locked)/:not(.blurred) 로 빠져 있었습니다.
+   흐림과 흑백을 한 filter 에 같이 겁니다. 마우스를 올리면 흐린 채로 색만 돌아옵니다. */
+body.gs-pair #view-pair .post-card.locked .post-thumb::before,
+body.gs-oc #view-oc .post-card.locked .post-thumb::before{filter:blur(10px) grayscale(1);transition:filter .5s ease;}
+body.gs-prompt #view-archive .arc-nai-thumb.blurred .an-img{filter:blur(12px) grayscale(1);transition:filter .5s ease;}
+@media (hover:hover){
+  body.gs-pair #view-pair .post-card.locked:hover .post-thumb::before,
+  body.gs-oc #view-oc .post-card.locked:hover .post-thumb::before{filter:blur(10px) grayscale(0);}
+  body.gs-prompt #view-archive .arc-nai-thumb.blurred:hover .an-img{filter:blur(12px) grayscale(0);}
+}
+
+/* ---- PAIR · OC 상세 배너 외곽선 ----
+   배너는 처음부터 테두리가 없었습니다(주인이 물어봄). 사진 위에 1px 검은 선을 덮습니다 —
+   상자 자체의 border 로 두면 LOG 넓게 보기에서 높이가 0 이 되어도 선 두 줄(2px)이
+   남으므로, 위에 얹는 ::after 로 그립니다(높이 0 이면 함께 사라짐). */
+.dt-banner::after{content:'';position:absolute;inset:0;border:1px solid var(--border);
+  pointer-events:none;z-index:6;}
+
+/* ---- 상세 GALLERY · LOG 폴더 줄 밑줄 — 바깥 목록처럼 하나(.ftab-ink)가 미끄러집니다 ---- */
+:is(#view-pair-detail,#view-oc-detail) .gallery-folder-bar{position:relative;}
+:is(#view-pair-detail,#view-oc-detail) .gallery-folder-tab::after{display:none;}
+
+/* ---- ARCHIVE · LOG 게시글 사진 크게보기 — 순서 칩(왼쪽 위)과 확대(오른쪽 위) ----
+   갤러리 크게보기의 .lb-count / .lb-zoom 을 그대로 씁니다. 사진 상자(.arc-lb-stage)가
+   사진 크기에 맞춰져 있어 두 가지가 사진 모서리에 붙습니다. 확대하면 썸네일 줄이
+   접히고 사진이 화면을 채웁니다(화살표 자리 116px 은 남김). */
+.arc-lb-stage{position:relative;display:flex;}
+.arc-lb-stage img{max-width:60vw;max-height:82vh;object-fit:contain;border-radius:6px;display:block;}
+.arc-lb-main-wrap{max-width:none;max-height:none;}
+.arc-lightbox:hover .lb-count,.arc-lightbox:hover .lb-zoom{opacity:1;}
+.arc-lightbox.zoomed .arc-lb-thumbs{display:none !important;}
+.arc-lightbox.zoomed .arc-lb-stage img{max-width:calc(100vw - 116px);max-height:100vh;border-radius:0;}
+.arc-lightbox.zoomed .lb-zoom-in{display:none;}
+.arc-lightbox.zoomed .lb-zoom-out{display:block;}
+@media (max-width:768px){
+  .arc-lb-stage img{max-width:92vw;max-height:64vh;}
+  .arc-lightbox.zoomed .arc-lb-stage img{max-width:100vw;max-height:100vh;}
+}
+
+/* 배너 외곽선은 사진과 한 몸 — LOG 넓게 보기에서 사진이 걷힐 때 같이 걷히고
+   (같은 .2s, 켤 때 .3s 뒤), 돌아올 때 같이 나타납니다(주인 지적: 선이 남아 있음). */
+.dt-banner::after{transition:opacity .2s ease;transition-delay:0s;}
+.detail-view.log-wide .dt-banner::after{opacity:0;transition-delay:.3s;}
+.detail-view.banner-quick .dt-banner::after{transition-delay:0s;}

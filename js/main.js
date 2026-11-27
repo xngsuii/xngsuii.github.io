@@ -1451,8 +1451,9 @@ navItems.forEach(btn=>{
       renderOcPosts();
     }
     if(btn.dataset.view==='archive'){
-      currentArchiveCategory='review';   // 큰 메뉴로 들어오면 REVIEW 부터(주인 요청)
-      document.querySelectorAll('#archiveSub .nav-sub-item').forEach(b=>b.classList.toggle('active', b.dataset.archivesub==='review'));
+      /* 큰 메뉴로 들어오면 SETTING › SIDEBAR 에서 고른 탭부터(기본 REVIEW) */
+      currentArchiveCategory = archiveHomeCat();
+      document.querySelectorAll('#archiveSub .nav-sub-item').forEach(b=>b.classList.toggle('active', b.dataset.archivesub===currentArchiveCategory));
       arcPage=1;
       arcUnblurred.clear();
       arcSelectedIds.clear();   // 카테고리를 옮기면 골라둔 것도 비웁니다
@@ -1496,7 +1497,7 @@ const PAIR_CAT_NAV = {
   newExtra: ()=> ({ folders: normalizeCatFolders(null, PAIR_DEFAULT_FOLDER) }),   // OC 와 같이 카테고리마다 폴더 목록
   /* 머리글의 앞머리는 **사이드바 이름과 같은 곳(navName)에서** 옵니다 — 글자를
      박아 두면 사이드바만 바뀌고 머리글은 그대로여서 둘이 어긋납니다. */
-  title: (name)=>{ document.getElementById('pairTitle').innerText = navName('pair') + ' · ' + name; },
+  title: (name)=>{ setTopTitle(document.getElementById('pairTitle'), navName('pair'), name); },
   get: ()=> currentPairFilter,
   set: (id)=>{ currentPairFilter = id; pairPage = 1; },
   moveBtns: ()=> document.getElementById('pairMoveBtns'),
@@ -1516,7 +1517,7 @@ const OC_CAT_NAV = {
   savePosts: ()=> saveOc(),
   newId: ()=> 'occ'+Date.now(),
   newExtra: ()=> ({ folders: normalizeCatFolders(null, OC_DEFAULT_FOLDER) }),   // 카테고리마다 자기 폴더 목록을 갖습니다
-  title: (name)=>{ const el=document.getElementById('ocTitle'); if(el) el.innerText = navName('oc') + ' · ' + name; },
+  title: (name)=>{ setTopTitle(document.getElementById('ocTitle'), navName('oc'), name); },
   get: ()=> currentOcFilter,
   set: (id)=>{ currentOcFilter = id; ocPage = 1; },
   moveBtns: ()=> document.getElementById('ocMoveBtns'),
@@ -3309,6 +3310,7 @@ function pairFolderCtx(catId){
 }
 const PAIR_FOLDER_DD = {
   rootId: 'pairFolderDD',
+  bodyId: 'postGrid',        // 폴더를 바꿀 때 옆으로 미끄러지는 칸
   folders: ()=> withAllFolder(pairFoldersOf(currentPairFilter)),
   currentId: ()=> currentPairFolderId,
   ctx: ()=> pairFolderCtx(currentPairFilter),
@@ -6110,7 +6112,11 @@ function layoutLogCards(wrap){
   if(!total) return;                 // 아직 안 보임 — 위 감시자가 다시 부릅니다
   /* REVIEW 목록도 이 배치를 빌려 씁니다. 폰에서는 2열이라 칸 수를 겉 칸에 적어 넘깁니다 */
   const cols = Number(wrap.dataset.cols) || LOG_CARD_COLS;
-  const w = Math.floor((total - LOG_CARD_GAP*(cols-1)) / cols);
+  /* 내림하지 않습니다 — 내림하면 마지막 열이 최대 2px 모자라 카드 오른쪽 끝이 헤더보다
+     안쪽에서 끝났습니다(주인 지적: 오른쪽이 들여져 있음). 소수 px 폭이면 끝이 딱 맞습니다. */
+  /* 1px 을 남깁니다 — 꽉 채우면 마지막 카드의 오른쪽 테두리가 스크롤 칸의 경계에 소수점으로
+     걸려 반쯤 잘려 보였습니다(주인 지적). */
+  const w = (total - 1 - LOG_CARD_GAP*(cols-1)) / cols;
   const colH = new Array(cols).fill(0);
   /* data-order="row" 이면 가장 낮은 칸이 아니라 **차례대로** 왼쪽부터 놓습니다
      (REVIEW — 주인 요청: 넷째 카드는 왼쪽 아래에 와야 순서가 읽힙니다). */
@@ -6317,20 +6323,24 @@ function renderLogFolderBar(p, show){
   folders.forEach(f=>{
     const btn=document.createElement('button');
     btn.type='button'; btn.className='gallery-folder-tab'+(f.id===currentLogFolderId?' active':'');
-    if(f.secret){
-      const lock=document.createElement('span');
-      lock.className='gf-lock'; lock.innerText='🔒'; lock.title='비밀 폴더';
-      btn.appendChild(lock);
-    }
     const nameSpan=document.createElement('span');
     nameSpan.innerText=f.name;
     btn.appendChild(nameSpan);
+    /* 자물쇠는 이름 뒤의 작은 선 그림 — 바깥 목록의 폴더 탭과 같은 모양 */
+    if(f.secret){ btn.insertAdjacentHTML('beforeend', FTAB_LOCK); btn.title = '비밀 폴더'; }
     btn.addEventListener('click', (e)=>{
       if(e.target.closest('.gallery-folder-rename')) return;
+      if(f.id===currentLogFolderId) return;
       const open = ()=>{
+        const from = folders.findIndex(x=>x.id===currentLogFolderId);
+        const dir = folders.indexOf(f) > from ? 1 : -1;
+        const ink0 = bar.querySelector('.ftab-ink');
+        bar._slide = ink0 ? { left: ink0.offsetLeft, width: ink0.offsetWidth } : null;
+        const ghost = slideGhostOf(lq('.log-list'));
         currentLogFolderId=f.id; pdLogPage=1;
         logSelectedIds.clear();   // 폴더를 옮기면 골라둔 것도 비웁니다
         renderLogList(p);
+        slideBodyIn(lq('.log-list'), ghost, dir);
       };
       if(folderLocked(f)) openFolderUnlock(f, open);
       else open();
@@ -6372,11 +6382,13 @@ function renderLogFolderBar(p, show){
   });
   if(isLoggedIn){
     const addBtn=document.createElement('button');
-    addBtn.type='button'; addBtn.className='gallery-folder-add';
-    addBtn.innerText='＋ 폴더';
+    addBtn.type='button'; addBtn.className='gallery-folder-add'; addBtn.title='폴더 추가';
+    addBtn.innerHTML='<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>';
     addBtn.addEventListener('click', ()=> openFolderModal(logFolderCtx(p), null));
     bar.appendChild(addBtn);
   }
+  const slide = bar._slide; bar._slide = null;
+  attachFtabInk(bar, bar.querySelector('.gallery-folder-tab.active'), slide);
 }
 
 /* ---- LOG 조각 하나에 조작을 붙입니다 (PAIR 상세 / OC 상세가 각각 한 번씩) ---- */
@@ -7181,24 +7193,103 @@ function bindFolderTabReorder(btn, folder, ctx, bar){
   });
 }
 
+/* ---- 폴더 탭 밑줄 · 목록 밀어 넘기기 (바깥 목록 · 상세 GALLERY · 상세 LOG 공용) ----
+   attachFtabInk: 밑줄 하나(.ftab-ink)를 고른 탭 아래 둡니다. from 이 있으면 그 자리에서
+   미끄러져 옵니다. **보이지 않는 동안 그려진 줄(게시글을 보고 목록으로 돌아올 때 등)은
+   탭 너비가 0 이라 밑줄도 0 이 됩니다** — 그래서 탭을 ResizeObserver 로 지켜보다가
+   크기가 생기면 그 자리에 다시 놓습니다(주인 지적: 돌아오면 밑줄이 안 보임).
+   이미 놓은 자리와 같으면 건드리지 않아, 미끄러지는 중의 움직임을 끊지 않습니다. */
+function attachFtabInk(container, actTab, from){
+  const ink = document.createElement('span');
+  ink.className = 'ftab-ink';
+  container.appendChild(ink);
+  if(!actTab){ ink.style.width = '0px'; return ink; }
+  let last = null;
+  const place = (anim)=>{
+    if(!actTab.isConnected) return;
+    const w = actTab.offsetWidth, l = actTab.offsetLeft;
+    if(!w) return;
+    if(last && last.w === w && last.l === l) return;
+    if(!anim) ink.style.transition = 'none';
+    ink.style.left = l + 'px'; ink.style.width = w + 'px';
+    if(!anim){ void ink.offsetWidth; ink.style.transition = ''; }
+    last = { l, w };
+  };
+  if(from && from.width && actTab.offsetWidth){
+    ink.style.transition = 'none';
+    ink.style.left = from.left + 'px'; ink.style.width = from.width + 'px';
+    void ink.offsetWidth;
+    ink.style.transition = '';
+    place(true);
+  }else place(false);
+  if(window.ResizeObserver){
+    const ro = new ResizeObserver(()=>{
+      if(!actTab.isConnected || !ink.isConnected){ ro.disconnect(); return; }
+      place(false);
+    });
+    ro.observe(actTab);
+  }
+  return ink;
+}
+/* 지금 목록의 복제본 — 다시 그리기 전에 떠 둡니다 */
+function slideGhostOf(body){
+  if(!body || !body.isConnected || !body.offsetWidth) return null;
+  const g = body.cloneNode(true);
+  g.removeAttribute('id');
+  g.querySelectorAll('[id]').forEach(n=> n.removeAttribute('id'));
+  g._box = { w: body.offsetWidth, h: body.offsetHeight };
+  return g;
+}
+/* 다시 그린 뒤: 옛 목록(복제본)은 반대쪽으로 밀려 나가고 새 목록이 이쪽에서 들어옵니다.
+   흐려지지 않고, 두 장 사이에 SLIDE_GAP 틈을 둡니다(움직이는 동안에만 보임).
+   밀리는 동안만 부모가 넘치는 것을 자릅니다. 자리는 부모 상자 안에서 rect 로 잽니다 —
+   offsetLeft 는 부모가 static 이면 더 바깥을 기준으로 재서 55px 어긋났습니다. */
+function slideBodyIn(body, ghost, dir){
+  if(!ghost || !body || !body.animate || !dir) return;
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const box = body.parentElement;
+  if(!box) return;
+  const keep = { pos: box.style.position, ov: box.style.overflow };
+  if(getComputedStyle(box).position === 'static') box.style.position = 'relative';
+  box.style.overflow = 'hidden';
+  const b = ghost._box;
+  const br = body.getBoundingClientRect(), pr = box.getBoundingClientRect();
+  const gl = br.left - pr.left - box.clientLeft + box.scrollLeft;
+  const gt = br.top - pr.top - box.clientTop + box.scrollTop;
+  ghost.style.cssText += ';position:absolute;margin:0;pointer-events:none;left:' + gl + 'px;top:' + gt + 'px;width:' + b.w + 'px;height:' + b.h + 'px;';
+  box.appendChild(ghost);
+  const opt = { duration:350, easing:'cubic-bezier(.4,0,.2,1)' };
+  const SLIDE_GAP = 28;
+  const sgn = dir > 0 ? '-' : '+', sgn2 = dir > 0 ? '+' : '-';
+  ghost.animate([{ transform:'translateX(0)' }, { transform:'translateX(calc(' + (-dir * 100) + '% ' + sgn + ' ' + SLIDE_GAP + 'px))' }], Object.assign({ fill:'forwards' }, opt));
+  body.animate([{ transform:'translateX(calc(' + (dir * 100) + '% ' + sgn2 + ' ' + SLIDE_GAP + 'px))' }, { transform:'translateX(0)' }], opt);
+  setTimeout(()=>{ ghost.remove(); box.style.position = keep.pos; box.style.overflow = keep.ov; }, 380);
+}
+
 function renderGalleryFolderBar(p){
   const bar=gq('.gallery-folder-bar');
   bar.innerHTML='';
   p.galleryFolders.forEach(f=>{
     const btn=document.createElement('button');
     btn.type='button'; btn.className='gallery-folder-tab'+(f.id===currentGalleryFolderId?' active':'');
-    if(f.secret){
-      const lock=document.createElement('span');
-      lock.className='gf-lock'; lock.innerText='🔒'; lock.title='비밀 폴더';
-      btn.appendChild(lock);
-    }
     const nameSpan=document.createElement('span');
     nameSpan.innerText=f.name;
     btn.appendChild(nameSpan);
+    /* 자물쇠는 이름 뒤의 작은 선 그림 — 바깥 목록의 폴더 탭과 같은 모양 */
+    if(f.secret){ btn.insertAdjacentHTML('beforeend', FTAB_LOCK); btn.title = '비밀 폴더'; }
     btn.addEventListener('click', (e)=>{
       if(e.target.closest('.gallery-folder-rename')) return;
+      if(f.id===currentGalleryFolderId) return;
       const open = ()=>{
+        /* 바깥 목록의 폴더 넘김과 같은 움직임 — 밑줄이 미끄러지고 사진판이 옆으로 밀립니다 */
+        const list = p.galleryFolders, from = list.findIndex(x=>x.id===currentGalleryFolderId);
+        const dir = list.indexOf(f) > from ? 1 : -1;
+        const ink0 = bar.querySelector('.ftab-ink');
+        bar._slide = ink0 ? { left: ink0.offsetLeft, width: ink0.offsetWidth } : null;
+        const body0 = gq('.gallery-grid-wrap');
+        const ghost = slideGhostOf(body0);
         currentGalleryFolderId=f.id; gallerySelectedIdx.clear(); galleryPage=1; renderGallery(p);
+        slideBodyIn(gq('.gallery-grid-wrap'), ghost, dir);
       };
       if(folderLocked(f)) openFolderUnlock(f, open);
       else open();
@@ -7251,11 +7342,13 @@ function renderGalleryFolderBar(p){
   });
   if(isLoggedIn){
     const addBtn=document.createElement('button');
-    addBtn.type='button'; addBtn.className='gallery-folder-add';
-    addBtn.innerText='＋ 폴더';
+    addBtn.type='button'; addBtn.className='gallery-folder-add'; addBtn.title='폴더 추가';
+    addBtn.innerHTML='<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>';
     addBtn.addEventListener('click', ()=> openFolderModal(galleryFolderCtx(p), null));
     bar.appendChild(addBtn);
   }
+  const slide = bar._slide; bar._slide = null;
+  attachFtabInk(bar, bar.querySelector('.gallery-folder-tab.active'), slide);
 }
 
 /* ---- 크게보기가 쓰는 두 가지 셈 ----
@@ -8066,13 +8159,19 @@ function animateGalleryPageChange(direction, applyChange){
   ghost.style.transform  = `translate${axis}(0)`;
   void wrap.offsetWidth;  // 강제 리플로우로 트랜지션 재적용
 
+  /* 넘어가는 두 장 사이에 틈을 둡니다(목록 폴더 넘김과 같은 28px) — 붙어 지나가면 사진이
+     겹쳐 보였습니다. 움직이는 동안에만 드러나고, 멈춘 자리는 그대로입니다. */
+  const GAP = 28;
+  grid.style.transition  = 'none';
+  grid.style.transform   = `translate${axis}(${direction*(dist+GAP)}px)`;
+  void wrap.offsetWidth;
   const tr = `transform ${GALLERY_SLIDE_MS}ms ${GALLERY_EASE}`;
   grid.style.willChange  = 'transform';
   ghost.style.willChange = 'transform';
   grid.style.transition  = tr;
   ghost.style.transition = tr;
   grid.style.transform   = `translate${axis}(0)`;
-  ghost.style.transform  = `translate${axis}(${direction*-dist}px)`;
+  ghost.style.transform  = `translate${axis}(${direction*-(dist+GAP)}px)`;
 
   setTimeout(()=>{
     ghost.remove();
@@ -8986,84 +9085,95 @@ function ocFolderCtx(catId){
    글 목록에 돌려주려고 상단바 오른쪽 끝의 드롭다운으로 옮겼습니다(갤러리는
    창 안이라 예전 탭 그대로입니다). 두 곳이 다른 점은 host 로만 받습니다 —
    갤러리·LOG 를 host 로 공유하는 것과 같은 방식입니다. */
+/* 폴더 줄 — 상단바 **아래**에 탭으로 한 줄 늘어놓습니다(주인 요청). 예전에는 상단바
+   오른쪽 끝의 드롭다운이었습니다. 이름(renderFolderDropdown)과 host 모양은 그대로 둬서
+   부르는 쪽은 바뀐 것이 없습니다.
+   · 상자(#…FolderDD)는 처음 그릴 때 상단바 안에서 꺼내 상단바 바로 뒤로 옮깁니다 —
+     '전체' 카테고리에서 상자째 감추는 코드(style.display)가 그대로 먹게.
+   · 탭이 넘치면 줄 안에서 가로로 밀어 넘깁니다(폰). 맨 오른쪽 ＋ 는 편집 모드에서만.
+   · 글을 탭에 끌어다 놓으면 그 폴더로, 탭끼리 끌면 순서가 바뀝니다(예전과 같음).
+   · 폴더 설정(✎)은 **지금 고른 탭에만** 붙습니다 — 모든 탭에 달면 줄이 지저분합니다. */
+const FTAB_LOCK = '<svg class="ftab-lock" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1"/><path d="M5.5 7V5.2a2.5 2.5 0 0 1 5 0V7"/></svg>';
 function renderFolderDropdown(host){
   const root = document.getElementById(host.rootId);
   if(!root) return;
+  const bar = root.closest('.topbar');
+  if(bar){ bar.after(root); }
+  root.classList.add('ftab-row');
   const folders = host.folders();
   const cur = folders.find(f=>f.id===host.currentId()) || folders[0];
   if(!cur) return;
+  const keep = root.querySelector('.ftab-scroll');
+  const keepX = keep ? keep.scrollLeft : 0;
   root.innerHTML = '';
-  root.classList.remove('open');
-  const close = ()=> root.classList.remove('open');
-
-  const btn = document.createElement('button');
-  btn.type='button'; btn.className='folder-dd-btn'; btn.title='폴더';
-  if(cur.secret){
-    const lock=document.createElement('span');
-    lock.className='gf-lock'; lock.innerText='🔒'; lock.title='비밀 폴더';
-    btn.appendChild(lock);
-  }
-  const nameEl=document.createElement('span'); nameEl.className='fdd-name'; nameEl.innerText=cur.name;
-  const caret=document.createElement('span'); caret.className='fdd-caret'; caret.innerText='▾';
-  btn.appendChild(nameEl); btn.appendChild(caret);
-  btn.addEventListener('click', (e)=>{ e.stopPropagation(); root.classList.toggle('open'); });
-  /* 글을 끌고 단추 위로 오면 저절로 펼쳐집니다 — 예전 탭처럼 끌어다 놓아
-     폴더를 옮길 수 있어야 하는데, 닫혀 있으면 놓을 자리가 없기 때문입니다. */
-  btn.addEventListener('dragover', (e)=>{
-    if(host.draggedId()==null) return;
-    e.preventDefault(); root.classList.add('open');
-  });
-  root.appendChild(btn);
-
-  const menu = document.createElement('div');
-  menu.className='folder-dd-menu';
-  root.appendChild(menu);
+  const strip = document.createElement('div');
+  strip.className = 'ftab-scroll';
+  root.appendChild(strip);
 
   folders.forEach(f=>{
-    const item=document.createElement('button');
-    item.type='button'; item.className='folder-dd-item'+(f.id===cur.id?' active':'');
-    if(f.secret){
-      const lock=document.createElement('span');
-      lock.className='gf-lock'; lock.innerText='🔒'; lock.title='비밀 폴더';
-      item.appendChild(lock);
-    }
-    const label=document.createElement('span'); label.className='fdd-label'; label.innerText=f.name;
-    item.appendChild(label);
-    item.addEventListener('click', (e)=>{
+    const tab = document.createElement('button');
+    tab.type = 'button';
+    tab.className = 'ftab' + (f.id===cur.id ? ' active' : '');
+    const label = document.createElement('span'); label.className = 'ftab-name'; label.innerText = f.name;
+    tab.appendChild(label);
+    if(f.secret){ tab.insertAdjacentHTML('beforeend', FTAB_LOCK); tab.title = '비밀 폴더'; }
+    tab.addEventListener('click', (e)=>{
       if(e.target.closest('.gallery-folder-rename')) return;
-      const open = ()=>{ close(); host.select(f); };
+      if(f.id === cur.id) return;
+      const open = ()=>{
+        /* 옮겨 가는 방향(오른쪽 탭이면 +1)과 지금 밑줄 자리를 남겨 두면, 다시 그린 뒤
+           밑줄은 그 자리에서 새 탭으로 미끄러지고 아래 목록은 같은 방향에서 들어옵니다. */
+        const ink = strip.querySelector('.ftab-ink');
+        /* 지금 목록을 복제해 두면, 다시 그린 뒤 옛 목록이 밀려 나가고 새 목록이 밀려
+           들어옵니다 — 상세 화면 옆 칸(사진·타임라인…)이 넘어가는 것과 같은 움직임. */
+        const ghost = slideGhostOf(host.bodyId && document.getElementById(host.bodyId));
+        root._slide = { dir: folders.indexOf(f) > folders.indexOf(cur) ? 1 : -1,
+                        left: ink ? ink.offsetLeft : null, width: ink ? ink.offsetWidth : null, ghost };
+        host.select(f);
+      };
       if(folderLocked(f)) openFolderUnlock(f, open); else open();
     });
-    /* '전체'는 진짜 폴더가 아니므로 설정·드롭·순서 바꾸기를 달지 않습니다 */
     if(isLoggedIn && !f.all){
-      const renameBtn=document.createElement('button');
-      renameBtn.type='button'; renameBtn.className='gallery-folder-rename';
-      renameBtn.innerText='✎'; renameBtn.title='폴더 설정';
-      renameBtn.addEventListener('click', (e)=>{ e.stopPropagation(); close(); openFolderModal(host.ctx(), f); });
-      item.appendChild(renameBtn);
-
-      item.addEventListener('dragover', (e)=>{
+      if(f.id===cur.id){
+        const renameBtn = document.createElement('span');
+        renameBtn.className = 'gallery-folder-rename ftab-edit';
+        renameBtn.setAttribute('role', 'button');
+        renameBtn.innerText = '✎'; renameBtn.title = '폴더 설정';
+        renameBtn.addEventListener('click', (e)=>{ e.stopPropagation(); openFolderModal(host.ctx(), f); });
+        tab.appendChild(renameBtn);
+      }
+      tab.addEventListener('dragover', (e)=>{
         if(host.draggedId()==null) return;
-        e.preventDefault(); item.classList.add('drop-target');
+        e.preventDefault(); tab.classList.add('drop-target');
       });
-      item.addEventListener('dragleave', ()=> item.classList.remove('drop-target'));
-      item.addEventListener('drop', async (e)=>{
+      tab.addEventListener('dragleave', ()=> tab.classList.remove('drop-target'));
+      tab.addEventListener('drop', async (e)=>{
         if(host.draggedId()==null) return;
-        e.preventDefault(); item.classList.remove('drop-target'); close();
+        e.preventDefault(); tab.classList.remove('drop-target');
         await host.onDrop(f);
       });
-      // 폴더끼리 끌어 순서 바꾸기 — 예전 탭에서 쓰던 것을 그대로 씁니다
-      bindFolderTabReorder(item, f, host.ctx(), menu);
+      bindFolderTabReorder(tab, f, host.ctx(), strip);
     }
-    menu.appendChild(item);
+    strip.appendChild(tab);
   });
+  strip.scrollLeft = keepX;
+  /* 밑줄 — 탭마다 그리지 않고 하나를 두어, 폴더를 바꾸면 옆으로 미끄러지게 합니다 */
+  const slide = root._slide; root._slide = null;
+  attachFtabInk(strip, strip.querySelector('.ftab.active'), slide);
+  /* 아래 목록 — 옛 목록은 밀려 나가고 새 목록이 이쪽에서 들어옵니다(slideBodyIn) */
+  if(slide) slideBodyIn(host.bodyId && document.getElementById(host.bodyId), slide.ghost, slide.dir);
+  /* 고른 탭이 줄 밖에 있으면 보이는 곳까지 밀어 줍니다(폰에서 폴더가 많을 때) */
+  const act = strip.querySelector('.ftab.active');
+  if(act && (act.offsetLeft < strip.scrollLeft || act.offsetLeft + act.offsetWidth > strip.scrollLeft + strip.clientWidth)){
+    strip.scrollLeft = Math.max(0, act.offsetLeft - 16);
+  }
 
   if(isLoggedIn){
-    const sep=document.createElement('div'); sep.className='folder-dd-sep'; menu.appendChild(sep);
-    const addBtn=document.createElement('button');
-    addBtn.type='button'; addBtn.className='folder-dd-add'; addBtn.innerText='＋ 폴더';
-    addBtn.addEventListener('click', (e)=>{ e.stopPropagation(); close(); openFolderModal(host.ctx(), null); });
-    menu.appendChild(addBtn);
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button'; addBtn.className = 'ftab-add'; addBtn.title = '폴더 추가';
+    addBtn.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>';
+    addBtn.addEventListener('click', (e)=>{ e.stopPropagation(); openFolderModal(host.ctx(), null); });
+    root.appendChild(addBtn);
   }
 }
 /* 바깥을 누르면 닫습니다 */
@@ -9078,6 +9188,7 @@ document.addEventListener('keydown', (e)=>{
 
 const OC_FOLDER_DD = {
   rootId: 'ocFolderDD',
+  bodyId: 'ocGrid',
   folders: ()=> withAllFolder(ocFoldersOf(currentOcFilter)),
   currentId: ()=> currentOcFolderId,
   ctx: ()=> ocFolderCtx(currentOcFilter),
@@ -9314,9 +9425,10 @@ function makeSidePager(pagesEl, dotsEl){
     idx = clamp(i, 0, pages.length-1);
     pages.forEach((el,n)=>{
       el.style.transition = (animate===false) ? 'none' : '';
-      /* 장끼리 16px 씩 띄웁니다 — 딱 붙여두면 옆 장의 가장자리(버튼 등)가
-         1px 씩 삐져나와 보입니다. */
-      el.style.transform = `translateX(calc(${(n-idx)*100}% + ${(n-idx)*16}px))`;
+      /* 장끼리 28px 씩 띄웁니다 — 딱 붙여두면 옆 장의 가장자리(버튼 등)가
+         1px 씩 삐져나와 보이고, 넘어가는 동안 두 장이 겹쳐 보입니다(목록 폴더
+         넘김·갤러리와 같은 28px). */
+      el.style.transform = `translateX(calc(${(n-idx)*100}% + ${(n-idx)*28}px))`;
       el.classList.toggle('active', n===idx);
     });
     if(animate===false){
@@ -10429,6 +10541,7 @@ function fillArcFolderSelect(wantId){
     `<option value="${escapeHtml(f.id)}">${escapeHtml(f.name)}${f.secret?' 🔒':''}</option>`).join('');
   sel.value = folders.some(f=>f.id===wantId) ? wantId : folders[0].id;
   syncPickDDs();   // 화면에 보이는 드롭다운도 새 목록으로 맞춥니다
+  if(typeof paintArcCrumb === 'function') paintArcCrumb();
 }
 document.getElementById('arcCategoryInput')?.addEventListener('change', ()=> fillArcFolderSelect(''));
 
@@ -10505,8 +10618,73 @@ document.addEventListener('click', ()=>{
 document.addEventListener('keydown', (e)=>{
   if(e.key === 'Escape') document.querySelectorAll('.pick-dd.open').forEach(o=> o.classList.remove('open'));
 });
-bindPickDD(document.getElementById('arcFolderInput'));
-bindPickDD(document.getElementById('arcCategoryInput'));
+/* 글쓰기 분류 · 폴더 고르개 — 제목 위 한 줄(arcCrumb)과 두 칸짜리 창(주인 요청).
+   예전의 두 드롭다운(bindPickDD)을 대신합니다. 값은 숨긴 select 가 그대로 들고,
+   고르면 change 를 직접 울려 카테고리 → 폴더 다시 채우기가 예전처럼 돕니다. */
+let arcPopCat = null;     // 창 왼쪽에서 보고 있는 카테고리(아직 고르기 전)
+function paintArcCrumb(){
+  const btn = document.getElementById('arcCrumb');
+  const cat = document.getElementById('arcCategoryInput');
+  const fol = document.getElementById('arcFolderInput');
+  if(!btn || !cat || !fol) return;
+  const f = arcFoldersOf(cat.value).find(x=> x.id === fol.value);
+  btn.innerHTML = '<span class="arcd-crumb-a">' + escapeHtml(navName('archive')) + '</span>'
+    + '<span class="tb-dot">·</span><span class="arcd-crumb-a">' + escapeHtml(arcCatLabel(cat.value)) + '</span>'
+    + '<span class="tb-dot">·</span><span class="arcd-crumb-f">' + escapeHtml(f ? f.name : '') + '</span>'
+    + '<span class="arcd-crumb-caret" aria-hidden="true">▾</span>';
+}
+function paintArcPop(){
+  const cat = document.getElementById('arcCategoryInput');
+  const fol = document.getElementById('arcFolderInput');
+  const cats = document.getElementById('arcPopCats');
+  const folders = document.getElementById('arcPopFolders');
+  if(!cat || !cats || !folders) return;
+  const view = arcPopCat || cat.value;
+  cats.innerHTML = '';
+  Array.from(cat.options).forEach(op=>{
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'arcd-pop-item' + (op.value === view ? ' on' : '');
+    b.textContent = arcCatLabel(op.value);
+    const show = ()=>{ if(arcPopCat !== op.value){ arcPopCat = op.value; paintArcPop(); } };
+    b.addEventListener('mouseenter', show);
+    b.addEventListener('click', (e)=>{ e.stopPropagation(); show(); });
+    cats.appendChild(b);
+  });
+  folders.innerHTML = '';
+  arcFoldersOf(view).forEach(f=>{
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'arcd-pop-item' + ((view === cat.value && f.id === fol.value) ? ' on' : '');
+    b.innerHTML = escapeHtml(f.name) + (f.secret ? FTAB_LOCK : '');
+    b.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      if(cat.value !== view){
+        cat.value = view;
+        cat.dispatchEvent(new Event('change', { bubbles:true }));   // 폴더 목록을 다시 채웁니다
+      }
+      fol.value = f.id;
+      fol.dispatchEvent(new Event('change', { bubbles:true }));
+      paintArcCrumb();
+      setArcPop(false);
+    });
+    folders.appendChild(b);
+  });
+}
+function setArcPop(open){
+  const wrap = document.getElementById('arcCrumbWrap');
+  if(!wrap) return;
+  if(open){ arcPopCat = null; paintArcPop(); }   // 열 때는 지금 고른 카테고리부터
+  wrap.classList.toggle('open', !!open);
+}
+(function initArcCrumb(){
+  const btn = document.getElementById('arcCrumb');
+  const wrap = document.getElementById('arcCrumbWrap');
+  if(!btn || !wrap) return;
+  btn.addEventListener('click', (e)=>{ e.stopPropagation(); setArcPop(!wrap.classList.contains('open')); });
+  document.addEventListener('click', (e)=>{ if(!wrap.contains(e.target)) setArcPop(false); });
+  document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && wrap.classList.contains('open')){ e.stopPropagation(); setArcPop(false); } }, true);
+})();
 
 /* enterLogEdit 과 같은 이유로, 사진·첨부가 다 온 뒤에 채웁니다 */
 async function enterArcEdit(existingItem){
@@ -11026,6 +11204,11 @@ document.getElementById('arcViewContent').addEventListener('click', (e)=>{
   const img = e.target.closest('img');
   if(img) openArcLightbox(document.getElementById('arcViewContent'), img);
 });
+/* LOG 글을 읽을 때도 사진을 누르면 크게 봅니다(주인 요청) — ARCHIVE 와 같은 창입니다 */
+document.getElementById('logViewContent')?.addEventListener('click', (e)=>{
+  const img = e.target.closest('img');
+  if(img) openArcLightbox(document.getElementById('logViewContent'), img);
+});
 
 /* --- Archive 이미지 라이트박스 (화살표 이동 + 우측 썸네일) --- */
 let arcLbImages=[]; let arcLbIndex=0;
@@ -11038,6 +11221,7 @@ function openArcLightbox(containerEl, clickedImg){
   arcLbImages = imgs.map(im=>im.src);
   arcLbIndex = Math.max(0, imgs.indexOf(clickedImg));
   arcLbAnimating = false;   // 넘기는 중에 닫았다 다시 열어도 막히지 않게
+  document.getElementById('arcLightbox').classList.remove('zoomed');   // 확대는 매번 꺼진 채로 엽니다
   renderArcLightbox();
   document.getElementById('arcLightbox').classList.add('open');
 }
@@ -11045,6 +11229,9 @@ function openArcLightbox(containerEl, clickedImg){
    넘어가는 동안 줄이 통째로 깜빡입니다. */
 function paintArcLightbox(){
   document.getElementById('arcLbMain').src = arcLbImages[arcLbIndex];
+  /* 왼쪽 위 순서 칩 — 갤러리 크게보기와 같은 'n / 전체' */
+  const cnt = document.getElementById('arcLbCount');
+  if(cnt){ cnt.textContent = (arcLbIndex + 1) + ' / ' + arcLbImages.length; cnt.style.display = arcLbImages.length > 1 ? '' : 'none'; }
   document.getElementById('arcLbThumbs').querySelectorAll('.arc-lb-thumb')
     .forEach((t,i)=> t.classList.toggle('active', i===arcLbIndex));
 }
@@ -11104,6 +11291,13 @@ function jumpArcLightbox(i){
   slideArcLightbox(i>arcLbIndex ? 1 : -1, ()=>{ arcLbIndex = i; });
 }
 document.getElementById('arcLbPrev').addEventListener('click', ()=> stepArcLightbox(-1));
+/* 오른쪽 위 확대 — 썸네일 줄을 접고 사진을 화면 가득(갤러리 크게보기의 .zoomed 와 같은 뜻) */
+document.getElementById('arcLbZoom')?.addEventListener('click', (e)=>{
+  e.stopPropagation();
+  const lb = document.getElementById('arcLightbox');
+  const on = lb.classList.toggle('zoomed');
+  e.currentTarget.title = on ? '원래 크기' : '확대';
+});
 document.getElementById('arcLbNext').addEventListener('click', ()=> stepArcLightbox(1));
 document.getElementById('arcLbClose').addEventListener('click', ()=> document.getElementById('arcLightbox').classList.remove('open'));
 document.getElementById('arcLightbox').addEventListener('click', (e)=>{
@@ -11663,6 +11857,7 @@ const CP_ICON_HL = '<span class="cp-hl-ico" aria-hidden="true">✎</span>';
    세부 카테고리(OOC·PROMPT·ETC)마다 목록이 다르므로 지금 보고 있는 것을 따라갑니다. */
 const ARC_FOLDER_DD = {
   rootId: 'arcFolderDD',
+  bodyId: 'archiveBody',
   folders: ()=> withAllFolder(arcFoldersOf(currentArchiveCategory)),
   currentId: ()=> curArcFolderId(),
   ctx: ()=> archiveFolderCtx(),
@@ -11710,7 +11905,8 @@ function arcFillPhone(scroll, row, headH){
   const natural = row.getBoundingClientRect().height;
   const td = row.querySelector('td:not(.arc-td-check)');
   const pad0 = td ? parseFloat(getComputedStyle(td).paddingTop) || 0 : 0;
-  const avail = scroll.clientHeight - headH - 0.5;
+  /* 1.5px 를 남깁니다 — 0.5 로는 소수점 줄 높이가 정수로 반올림되며 1px 넘쳐 표에 스크롤이 생겼습니다 */
+  const avail = scroll.clientHeight - headH - 1.5;
   if(natural <= 0 || avail <= 0) return 0;
   let n = Math.max(1, Math.floor(avail / natural));
   if(avail / (n + 1) >= natural * ARC_FILL_SHRINK) n += 1;
@@ -11744,7 +11940,7 @@ function renderArchive(){
   const wrap=document.getElementById('archiveBody');
   // PAIR 처럼 상단에 현재 카테고리를 함께 표기
   const titleEl=document.getElementById('archiveTitle');
-  if(titleEl) titleEl.innerText = navName('archive') + ' · ' + (ARCHIVE_CAT_LABEL[currentArchiveCategory] || currentArchiveCategory);
+  setTopTitle(titleEl, navName('archive'), arcCatLabel(currentArchiveCategory));
   const isGallery = currentArchiveCategory==='nai';
 
   /* 선택 / 일괄 삭제는 세 카테고리 모두에서 씁니다.
@@ -14155,17 +14351,39 @@ const NAV_NAME_SLOTS = [
   { key:'pair',    def:'Pair'    },
   { key:'oc',      def:'OC'      },
   { key:'archive', def:'Archive' },
+  /* ARCHIVE 안쪽 탭 이름 — 사이드바 이름과 같은 자리(SETTING › SIDEBAR)에서 고칩니다
+     (주인 결정: 추가는 필요 없고 이름만). sub 는 그 탭의 카테고리 id 입니다.
+     목록에서 Archive 바로 아래에 한 단 들여 놓이도록 이 자리에 둡니다. */
+  { key:'arc_review', def:'REVIEW', sub:'review' },
+  { key:'arc_nai',    def:'PROMPT', sub:'nai' },
+  { key:'arc_ooc',    def:'OOC',    sub:'ooc' },
+  { key:'arc_etc',    def:'ETC',    sub:'etc' },
   { key:'portal',  def:'Portal'  }
 ];
+const ARC_CAT_IDS = ['review', 'nai', 'ooc', 'etc'];
 function normalizeNavNames(v){
   const out = {};
   NAV_NAME_SLOTS.forEach(sl=>{
     const t = String((v && v[sl.key]) || '').trim().slice(0, 16);
     out[sl.key] = t;          // 빈 글자 = 원래 이름을 씁니다
   });
+  /* ARCHIVE 를 누르면 처음 보이는 탭 — 비어 있으면 REVIEW */
+  out.archiveHome = (v && ARC_CAT_IDS.includes(v.archiveHome)) ? v.archiveHome : '';
   return out;
 }
+/* ARCHIVE 탭의 보이는 이름 — 바꾼 이름이 있으면 그것, 없으면 원래 이름 */
+function arcCatLabel(cat){
+  if(ARC_CAT_IDS.includes(cat)) return navName('arc_' + cat);
+  return cat;   // (ARCHIVE_CAT_LABEL 은 더 아래 const 라 여기서 읽으면 TDZ 로 터질 수 있습니다)
+}
+function archiveHomeCat(){ return ((state.navNames || {}).archiveHome) || 'review'; }
 function saveNavNames(){ return storageSet('navNames', state.navNames); }
+/* 상단바 머리글 '메뉴 · 분류' — 가운뎃점 양옆을 넓게 띄웁니다(주인 요청: '—  ·  ETC').
+   글자 사이의 빈칸으로는 폭을 고를 수 없어 점을 span 으로 두고 여백으로 띄웁니다. */
+function setTopTitle(el, a, b){
+  if(!el) return;
+  el.innerHTML = escapeHtml(a) + '<span class="tb-dot">·</span>' + escapeHtml(b);
+}
 function navName(key){
   const sl = NAV_NAME_SLOTS.find(x=> x.key === key);
   if(!sl) return '';
@@ -14179,10 +14397,16 @@ function applyNavNames(){
   set('.nav-item[data-view="oc"]', navName('oc'));
   set('.nav-item[data-view="archive"]', navName('archive'));
   set('#portalBtn', navName('portal'));
+  ARC_CAT_IDS.forEach(c=>{
+    set('#archiveSub .nav-sub-item[data-archivesub="' + c + '"]', arcCatLabel(c));
+    const op = document.querySelector('#arcCategoryInput option[value="' + c + '"]');
+    if(op) op.textContent = arcCatLabel(c);
+  });
+  if(typeof paintArcCrumb === 'function') safely('글쓰기 분류', paintArcCrumb);
   safely('PAIR 머리글', ()=> PAIR_CAT_NAV.title(catTitle(PAIR_CAT_NAV, currentPairFilter)));
   safely('OC 머리글', ()=> OC_CAT_NAV.title(catTitle(OC_CAT_NAV, currentOcFilter)));
   const at = document.getElementById('archiveTitle');
-  if(at) at.innerText = navName('archive') + ' · ' + (ARCHIVE_CAT_LABEL[currentArchiveCategory] || currentArchiveCategory);
+  setTopTitle(at, navName('archive'), arcCatLabel(currentArchiveCategory));
 }
 function renderSidebarPane(){
   const box = document.getElementById('navNameList');
@@ -14190,10 +14414,24 @@ function renderSidebarPane(){
   box.innerHTML = '';
   NAV_NAME_SLOTS.forEach(sl=>{
     const row = document.createElement('div');
-    row.className = 'wg-row sb-row';
+    /* ARCHIVE 안쪽 탭은 Archive 줄 아래 한 단 들여서 놓고, '처음' 단추로 ARCHIVE 를
+       눌렀을 때 먼저 보일 탭을 고릅니다(주인 요청). */
+    row.className = 'wg-row sb-row' + (sl.sub ? ' sb-sub' : '');
     row.innerHTML =
       '<span class="wg-row-name"></span>' +
-      '<span class="wg-row-ctl"><input type="text" class="wg-name-input sb-name" maxlength="16" /></span>';
+      '<span class="wg-row-ctl">' +
+        (sl.sub ? '<button type="button" class="wg-chip sb-home" title="ARCHIVE 를 누르면 이 탭부터">처음</button>' : '') +
+        '<input type="text" class="wg-name-input sb-name" maxlength="16" /></span>';
+    if(sl.sub){
+      const home = row.querySelector('.sb-home');
+      home.classList.toggle('wg-chip-on', archiveHomeCat() === sl.sub);
+      home.addEventListener('click', ()=>{
+        if(!state.navNames) state.navNames = normalizeNavNames(null);
+        state.navNames.archiveHome = sl.sub;
+        renderSidebarPane();
+        if(isLoggedIn) saveNavNames();
+      });
+    }
     row.querySelector('.wg-row-name').textContent = sl.def;
     const inp = row.querySelector('.sb-name');
     inp.value = (state.navNames || {})[sl.key] || '';
@@ -14900,7 +15138,7 @@ function recentItems(){
       kind:'archive', id:a.id, title:(a.title || '').trim() || '제목 없음',
       /* 하위 분류까지 적습니다 — ARCHIVE 한 덩어리로만 보이면 어느 쪽 글인지
          알 수 없습니다(주인 지적). 폴더까지는 내려가지 않습니다. */
-      sub: navName('archive') + ' · ' + (ARCHIVE_CAT_LABEL[a.category] || a.category || ''),
+      sub: navName('archive') + ' · ' + arcCatLabel(a.category || ''),
       when:Number(a.id) || 0
     }));
   }
@@ -16197,12 +16435,14 @@ function placeArcSearch(){
   const bar = document.getElementById('arcSearchBar');
   const view = document.getElementById('view-archive');
   const body = document.getElementById('archiveBody');
-  const folderDD = document.getElementById('arcFolderDD');
-  if(!bar || !view || !body || !folderDD) return;
+  /* 폴더 고르개가 상단바 아래 탭 줄로 나가면서, PC 에서는 검색줄을 상단바의 단추
+     묶음 안으로 돌려놓습니다(예전엔 폴더 단추 앞이 자리였습니다). */
+  const actions = view.querySelector('.topbar .topbar-actions');
+  if(!bar || !view || !body || !actions) return;
   if(isMobileWidth()){
     if(bar.previousElementSibling !== body) body.after(bar);
-  }else if(bar.nextElementSibling !== folderDD){
-    folderDD.before(bar);
+  }else if(bar.parentElement !== actions){
+    actions.insertBefore(bar, actions.firstChild);
   }
 }
 placeArcSearch();
